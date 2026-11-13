@@ -8,8 +8,10 @@
   import Icon from './Icon.svelte';
 
   // `tone`: ghost (on the green head block), plain (in a form), icon (a round button on the picture itself). `take`: offer the camera button too.
-  let { has = false, busy = false, onpick, tone = 'ghost', take = false }:
-    { has?: boolean; busy?: boolean; onpick: (image: Blob) => void | Promise<void>; tone?: 'ghost' | 'plain' | 'icon'; take?: boolean } = $props();
+  // For a photo that goes to the image model: `maxSide`/`maxBytes` (see shrink), `primary` (a filled main button) and own labels.
+  let { has = false, busy = false, onpick, tone = 'ghost', take = false, maxSide, maxBytes, chooseLabel, takeLabel }:
+    { has?: boolean; busy?: boolean; onpick: (image: Blob) => void | Promise<void>; tone?: 'ghost' | 'plain' | 'icon' | 'primary'; take?: boolean;
+      maxSide?: number; maxBytes?: number; chooseLabel?: string; takeLabel?: string } = $props();
   const touch = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
   const coarse = $derived(take && touch);
   let choose: HTMLInputElement;
@@ -21,7 +23,7 @@
     input.value = ''; // the same file can be chosen again
     if (!file) return;
     let blob: Blob;
-    try { blob = await shrink(file); } catch { toast(t('imgUnreadable')); return; }
+    try { blob = await shrink(file, { maxSide, maxBytes }); } catch { toast(t('imgUnreadable')); return; }
     await onpick(blob);
   }
 </script>
@@ -32,11 +34,11 @@
   </button>
 {:else}
   <button type="button" class="b {tone}" disabled={busy} onclick={() => choose.click()}>
-    <Icon name="camera" size={18} />{busy ? t('imgBusy') : has ? t('imgChange') : t('imgAdd')}
+    <Icon name="camera" size={18} />{busy ? t('imgBusy') : (chooseLabel ?? (has ? t('imgChange') : t('imgAdd')))}
   </button>
 {/if}
 {#if coarse}
-  <button type="button" class="b {tone}" disabled={busy} onclick={() => shoot.click()}><Icon name="camera" size={18} />{t('imgTake')}</button>
+  <button type="button" class="b {tone}" disabled={busy} onclick={() => shoot.click()}><Icon name="camera" size={18} />{takeLabel ?? t('imgTake')}</button>
 {/if}
 <input bind:this={choose} type="file" accept="image/*" hidden onchange={picked} data-testid="photo-choose" />
 <input bind:this={shoot} type="file" accept="image/*" capture="environment" hidden onchange={picked} data-testid="photo-take" />
@@ -47,5 +49,6 @@
   .b.ghost { background: transparent; color: #fff; box-shadow: inset 0 0 0 2px var(--green-tick); }
   .ic { width: 44px; height: 44px; border-radius: 16px 16px 16px 6px; background: var(--paper); color: var(--text); display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(23, 33, 28, 0.18); }
   .ic:disabled { opacity: 0.6; }
+  .b.primary { background: var(--primary); color: #fff; }
   .b.plain { background: var(--stone); color: var(--text); box-shadow: inset 0 0 0 2px var(--hairline); }
 </style>

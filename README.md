@@ -110,7 +110,9 @@ proxy with a valid certificate. Append `?engine=wasm` to the URL to force the bu
   link. No texts are kept; the page's picture only when an admin switches "Store recipe pictures" on. Off by default, see [Recipes from web pages](docs/integrations.md#recipes-from-web-pages).
 - **Photo recognition (optional).** A photo of a meal becomes a list of parts with estimated amounts and values, a photo of a recipe
   becomes name, portions and ingredient lines, through an image model you configure (a local one such as Ollama, or any OpenAI-compatible
-  provider). Photos are shrunk and stripped of location data first, nothing is stored, the results are estimates to check. Off by default,
+  provider). In the interface: "Photo of the meal" in the add sheet of the day view and "Photograph a recipe" on the Recipes page; each
+  part is matched to a food of the database and checked by you before anything is booked or saved. Photos are shrunk in the browser
+  and stripped of location data on the server, nothing is stored, the results are estimates to check. Off by default,
   see [Photo recognition](docs/integrations.md#photo-recognition).
 - **What still fits today.** Recipes (own, Cookidoo, web) that suit the rest of the day: from your goal, what you ate and when
   you last ate each recipe, with an amount and a reason in words. A quiet card on the day view (switchable) and a section on the

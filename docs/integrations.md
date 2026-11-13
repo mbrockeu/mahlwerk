@@ -368,7 +368,7 @@ Two functions on one connector: a photo of a **meal** becomes a list of recognis
 values, and a photo of a **recipe** (book page, print-out, screen) becomes a name, a number of portions and ingredient lines.
 It uses an image model that **you** configure. Off by default: an admin switches it on in the admin area (card "Photo
 recognition") or with `MAHLWERK_VISION=on`, and it works only once the model is configured. This page describes the server side
-(routes, card, settings); the capture screens of the web interface are separate.
+(routes, card, settings); [How to use it](#using-photo-recognition-in-the-interface) below describes the capture screens.
 
 **Protocol.** One general one, the widely implemented OpenAI-compatible `POST {base}/chat/completions` with one user message made
 of a text and an `image_url` (`data:image/jpeg;base64,...`). It covers local servers (Ollama, LM Studio, llama.cpp) and hosted
@@ -429,6 +429,27 @@ curl -s -H 'X-Mahlwerk-Request: 1' -H 'Authorization: ...' --data-binary @meal.j
 ```
 
 (The session cookie of a browser sign-in is used the same way; an access key is refused with 403.)
+
+### Using photo recognition in the interface
+
+The entries appear only while the connector is on **and** configured (and not in the admin's demo-account view, which is read-only). The
+first time on a device a short notice says that the photo goes to the image model set up by the operator and is not stored.
+
+- **Photo of the meal.** Day view, "+" of a meal, then "Photo of the meal" (above the search field, and on the scan tab). Take a
+  photo or choose one (it is shrunk in the browser to 1600 px, JPEG). The waiting state can be cancelled; the model needs a few
+  seconds, up to 90. The result is a check step with one row per recognised part: name, grams (change them), the food of the
+  database it was matched to (the same matcher as "Paste ingredient list"), and "leave out". Nutrition comes from the matched food. Where no
+  food fits, search one, or "Use estimate": an own food is made from the model's values (per 100 g, calculated from its amount;
+  only when it gave energy and an amount). The sum (energy, protein) is shown before "Add to the diary" books all remaining rows into
+  the chosen meal and day; a toast offers "Undo". All amounts are estimates, and the note of the model is shown as plain text.
+- **Photograph a recipe.** Recipes page, "+" menu (phone) or "Take over" menu (wide), then "Photograph a recipe". The new recipe
+  opens with name and portions filled in and the ingredient check step open (lines already matched). If the photo shows nutrition per
+  portion, the check step shows it next to the calculated energy per portion ("on the photo"). "Add another photo" appends the lines of a
+  second page. The method is never taken over.
+- Failures are explained in plain words with "Try again": a busy model or the hourly limit (429, with the wait from `Retry-After`), an
+  unusable answer or an unreachable model (502), a timeout (504), a file that is too large (413), no connection. An empty answer ("nothing
+  recognised") offers another photo.
+- In the demo build the screens run on made-up answers (`?vision=busy|error|big|empty` in the address shows the failure cases).
 
 ## Recipe pictures
 

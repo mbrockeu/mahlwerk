@@ -33,7 +33,8 @@
   let lost = $state(0);
   let picking = $state(false);
   // the ingredient list that is pasted (or taken from a web page, `auto`): checked in its own sheet, then added as lines
-  let pasting = $state<{ text: string; auto: boolean } | null>(null);
+  // svelte-ignore state_referenced_locally
+  let pasting = $state<{ text: string; auto: boolean } | null>(draft?.photo && draft.ingredients.length ? { text: draft.ingredients.join('\n'), auto: true } : null);
   let status = $state('');
   let saving = $state(false);
   let confirming = $state(false);
@@ -196,7 +197,7 @@
     {#if draft && draft.ingredients.length}
       <!-- the ingredient lines of the web page: a reminder for this sitting only, never saved (the person picks the foods themself) -->
       <details class="memo">
-        <summary>{t('wrDraft', { host: draft.host })} <small>({draft.ingredients.length})</small></summary>
+        <summary>{draft.photo ? t('visDraft') : t('wrDraft', { host: draft.host })} <small>({draft.ingredients.length})</small></summary>
         <ul>{#each draft.ingredients as line}<li>{line}</li>{/each}</ul>
         <button type="button" class="btn lime" onclick={() => (pasting = { text: draft.ingredients.join('\n'), auto: true })}>{t('wrCalc')}</button>
       </details>
@@ -264,7 +265,10 @@
 </Sheet>
 
 {#if picking}<IngredientPicker onpick={addFood} onclose={() => (picking = false)} />{/if}
-{#if pasting}<IngredientPaste initial={pasting.text} auto={pasting.auto} onapply={addPasted} onclose={() => (pasting = null)} />{/if}
+{#if pasting}
+  <IngredientPaste initial={pasting.text} auto={pasting.auto} onapply={addPasted} onclose={() => (pasting = null)}
+    compare={draft?.photo?.nutrition ?? null} portions={portionsN != null && !Number.isNaN(portionsN) ? portionsN : null} more={!!draft?.photo} />
+{/if}
 
 <style>
   form { display: flex; flex-direction: column; gap: 12px; }

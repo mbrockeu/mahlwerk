@@ -3,7 +3,7 @@ import { api, hooks, view } from './api';
 import { t } from './i18n';
 import { today } from './date';
 import { DEMO } from './demo';
-import type { Account, BadgeCode, SignInMode, Food, Entry, Me, Meal, Recipe, Workout } from './types';
+import type { Account, BadgeCode, SignInMode, Food, Entry, Me, Meal, Recipe, VisionState, Workout } from './types';
 
 export type AddTab = 'scan' | 'search' | 'recent' | 'templates' | 'cookidoo';
 
@@ -28,7 +28,11 @@ export interface RecipeRequest {
   /** The recipe to edit, or null for a new one. */
   recipe: Recipe | null;
   /** A new recipe that starts from a web page without nutrition values: its name, portions and (for this sitting only) its ingredient lines. */
-  draft?: { name: string; portions: number | null; ingredients: string[]; host: string };
+  draft?: {
+    name: string; portions: number | null; ingredients: string[]; host: string;
+    /** The draft comes from a photo of a recipe (not a web page): the review of the lines opens at once, with the values printed on the photo for comparison. */
+    photo?: { nutrition: { kcal: number | null; protein_g: number | null; fat_g: number | null; carbs_g: number | null } | null };
+  };
 }
 
 export interface WorkoutRequest {
@@ -55,6 +59,8 @@ export const ui = $state({
   toast: '',
   toastAction: null as null | ToastAction,
   me: null as Me | null,
+  /** Photo recognition: null until asked (`loadVision`). */
+  vision: null as VisionState | null,
   /** Newly reached badges being celebrated right now. */
   moment: null as null | BadgeCode[],
 });
@@ -75,6 +81,12 @@ export const viewingDemo = () => ui.me?.demo_account?.viewing === true;
 export const openEditor = (req: EditorRequest) => { if (viewingDemo()) { toast(t('demoAcctBlocked')); return; } ui.editor = req; };
 export const openRecipe = (req: RecipeRequest) => { if (viewingDemo()) { toast(t('demoAcctBlocked')); return; } ui.recipe = req; };
 export const openWorkout = (req: WorkoutRequest) => { ui.workout = req; };
+/** Photo recognition can be offered: the connector is on and configured, and this is not the demo account (it has no write access). The demo SITE has the mock. */
+export const visionReady = () => ui.vision?.ready === true && !viewingDemo();
+/** Asks the server whether photo recognition is ready (a failure means: not offered). */
+export async function loadVision(): Promise<void> {
+  try { ui.vision = await api.visionStatus(); } catch { ui.vision = { enabled: false, configured: false, ready: false, per_hour: 0 }; }
+}
 export const changed = () => { ui.version += 1; checkBadges(); };
 export const pulseScan = () => { ui.pulse += 1; };
 

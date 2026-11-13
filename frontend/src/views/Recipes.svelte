@@ -18,7 +18,10 @@
   import { media, wide } from '../lib/media.svelte';
   import { portionsText, sourceLabel } from '../lib/portion';
   import { router, setQuery } from '../lib/router.svelte';
-  import { mealByTime, openAmount, openRecipe, toast, ui } from '../lib/store.svelte';
+  import { loadVision, mealByTime, openAmount, openRecipe, toast, ui, visionReady } from '../lib/store.svelte';
+  import { photoNutrition, recipeLines } from '../lib/vision';
+  import PhotoCapture from '../components/PhotoCapture.svelte';
+  import type { VisionRecipe } from '../lib/types';
   import type { Food, Recipe, RecipeGroup } from '../lib/types';
 
   // Recipes have their own page (they used to be a tab of Products). The list is shared by the household and mixes the household's own
@@ -139,6 +142,7 @@
   let sheet = $state<Food | null>(null); // narrow windows: the values of a Cookidoo recipe
   let taking = $state(false); // the "take over from Cookidoo" sheet
   let linking = $state(false); // the "take over from a link" sheet
+  let photographing = $state(false); // the "photograph a recipe" sheet
   const current = $derived(shown?.find((i) => i.key === selected) ?? shown?.[0] ?? null);
   const pick = (i: Item) => {
     if (wide.on) selected = i.key;
@@ -153,7 +157,9 @@
   const ways = $derived([
     ...(cookidoo ? [{ key: 'cookidoo', label: t('fromCookidoo'), icon: 'pot' as const, onselect: () => (taking = true) }] : []),
     ...(webRecipes ? [{ key: 'web', label: t('fromWeb'), icon: 'bookmark' as const, onselect: () => (linking = true) }] : []),
+    ...(visionReady() ? [{ key: 'photo', label: t('fromPhoto'), icon: 'camera' as const, onselect: () => (photographing = true) }] : []),
   ]);
+  void loadVision();
   const pickFood = (food: Food) => { const i = items?.find((x) => x.food.id === food.id); if (i) pick(i); };
 
   const why = (err: unknown) => (err instanceof ApiError && typeof err.detail === 'string' ? err.detail : err instanceof ApiError ? String(err.status || err.message) : 'error');
@@ -180,6 +186,12 @@
     void refreshRun();
     return onRunFinished(() => { void load(); });
   });
+  // a photo of a recipe: name, portions and the ingredient lines go to a new recipe, whose check step opens at once (the method is not taken over)
+  const fromPhoto = (result: unknown) => {
+    const r = result as VisionRecipe;
+    photographing = false;
+    openRecipe({ recipe: null, draft: { name: r.name ?? '', portions: r.portions, ingredients: recipeLines(r), host: '', photo: { nutrition: photoNutrition(r) } } });
+  };
   const ownFromLink = (draft: { name: string; portions: number | null; ingredients: string[]; host: string }) => { linking = false; openRecipe({ recipe: null, draft }); };
   const runBanner = $derived(cookRun.run?.state === 'running' && !taking ? cookRun.run : null);
 
@@ -327,6 +339,11 @@
 {#if linking}
   <Sheet title={t('wrTitle')} tall onclose={() => (linking = false)}>
     <WebRecipePane onadopt={(food) => adopted(food)} onown={ownFromLink} group={activeGroup?.id ?? null} />
+  </Sheet>
+{/if}
+{#if photographing}
+  <Sheet title={t('visRecipeTitle')} onclose={() => (photographing = false)}>
+    <PhotoCapture kind="recipe" onresult={fromPhoto} />
   </Sheet>
 {/if}
 {#if managing}

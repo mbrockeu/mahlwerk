@@ -57,6 +57,13 @@ Fonts must be self-hosted (no request to Google at runtime): download the woff2 
 - Cookidoo recipes stand in the Recipes list beside the own ones, with a small mono "Cookidoo" label; their detail shows values per
   portion (never "per 100 g"), a note that ingredients and steps are at Cookidoo with a link, "Reload from Cookidoo" and "Remove"
   (no editor); amounts are portions (½, 1, 2). Screen: `screens/158-recipes-cookidoo.png`.
+- Photo recognition (only while the connector is ready): "Photo of the meal" is a full-width paper button in the add sheet (on the
+  Search and Scan tabs); it replaces the tabs with the capture step: a `paper` card with the one-time privacy notice, then the
+  main button (primary green, camera icon), then a waiting card (photo, thin moving bar, cancel) or a problem card (plain sentence,
+  "Try again", "Take another photo"). The check step is the ingredient check list: rows with the recognised name in mono, the food, the
+  amount field and a round "leave out" button; a row without a match has a `warn` outline and two small buttons ("Search another food",
+  "Use estimate", the latter marks the row with a lime "estimate" tag); a lime note says amounts are estimates; the `ink` sum block shows
+  rows ready, energy and protein. "Photograph a recipe" is an entry of the "+" / "Take over" menu and ends in the recipe editor.
 - Recipes from a web page stand in the same list, labelled with their host (mono, small); their detail is the Cookidoo detail with
   "Open at <host>", "Reload from <host>" and "Remove". "Take over from a link" opens a sheet: address field, then a preview card
   (host, name, portions, switch "the values are for the whole recipe", kcal and the three macro tiles, warnings as a "Check" tag

@@ -4,7 +4,7 @@
   import { tick } from 'svelte';
   import Icon from './Icon.svelte';
 
-  type Item = { key: string; label: string; icon?: 'plus' | 'pot' | 'search' | 'down' | 'repeat' | 'bookmark'; onselect: () => void };
+  type Item = { key: string; label: string; icon?: 'plus' | 'pot' | 'search' | 'down' | 'repeat' | 'bookmark' | 'camera'; onselect: () => void };
   let { items, label = '', aria, icon, tone = 'plain', testid }: { items: Item[]; label?: string; aria: string; icon?: 'plus' | 'down'; tone?: 'lime' | 'plain'; testid?: string } = $props();
 
   let open = $state(false);

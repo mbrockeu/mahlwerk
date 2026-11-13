@@ -1114,6 +1114,7 @@ function mockDemoMe<T extends { username: string; display_name: string | null; i
   };
 }
 
+let recipePhotos = 0; // photo recognition: the 1st, 3rd … photo is page one, the 2nd, 4th … page two of a recipe
 export async function mockRequest(method: string, path: string, body?: unknown, raw?: Blob): Promise<unknown> {
   await wait();
   const url = new URL(path, 'http://x/');
@@ -1480,15 +1481,30 @@ export async function mockRequest(method: string, path: string, body?: unknown, 
     if (v.info.model === null) throw new ApiError(409, 'photo recognition is not configured (MAHLWERK_VISION_URL and MAHLWERK_VISION_MODEL)');
     await wait(1400); // a model takes a moment
     void raw;
+    // ?vision=busy (429 with a wait), error (502), big (413), empty (nothing recognised): the failure cases of the capture screens
+    const trouble = new URLSearchParams(location.search).get('vision');
+    if (trouble === 'busy') throw new ApiError(429, 'too many photos lately, try again later', 8);
+    if (trouble === 'error') throw new ApiError(502, 'the image model gave no usable answer');
+    if (trouble === 'big') throw new ApiError(413, 'image too large');
     const de = url.searchParams.get('lang') === 'de';
     if (p === 'vision/meal') {
+      if (trouble === 'empty') return { items: [], note: null };
       return {
         items: [
           { name: de ? 'Gekochte Kartoffeln' : 'Boiled potatoes', grams: 250, kcal: 190, protein_g: 5, fat_g: 0.3, carbs_g: 40, confidence: 0.82 },
           { name: de ? 'Grüne Bohnen' : 'Green beans', grams: 120, kcal: 38, protein_g: 2.2, fat_g: 0.2, carbs_g: 6.5, confidence: 0.64 },
           { name: de ? 'Gebratenes Hähnchenfilet' : 'Pan-fried chicken breast', grams: 140, kcal: 230, protein_g: 43, fat_g: 5.5, carbs_g: 0, confidence: 0.47 },
+          { name: de ? 'Dunkle Soße' : 'Dark sauce', grams: null, kcal: null, protein_g: null, fat_g: null, carbs_g: null, confidence: 0.2 },
         ],
         note: de ? 'Mengen nach dem Augenmaß geschätzt.' : 'Amounts estimated by eye.',
+      };
+    }
+    if (trouble === 'empty') return { name: null, portions: null, ingredients: [], nutrition_per_portion: null, note: null };
+    recipePhotos += 1;
+    if (recipePhotos % 2 === 0) { // the second photo of a recipe on two pages
+      return {
+        name: null, portions: null, nutrition_per_portion: null, note: null,
+        ingredients: de ? ['1 EL Tomatenmark', '200 g Kürbis', '1 Prise Pfeffer'] : ['1 tbsp tomato paste', '200 g pumpkin', '1 pinch pepper'],
       };
     }
     return {

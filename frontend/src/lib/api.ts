@@ -153,9 +153,9 @@ export const api = {
   labelScan: (image: Blob) => request<LabelScan>('POST', 'label-scans', undefined, image),
   visionStatus: () => request<VisionState>('GET', 'vision/status'),
   /** Photo of a meal -> recognised parts with estimated amounts (the image as the body; `lang`: language of the names). Nothing is stored. */
-  visionMeal: (image: Blob, lang: 'de' | 'en') => request<VisionMeal>('POST', `vision/meal?lang=${lang}`, undefined, image),
+  visionMeal: (image: Blob, lang: 'de' | 'en', signal?: AbortSignal) => request<VisionMeal>('POST', `vision/meal?lang=${lang}`, undefined, image, signal),
   /** Photo of a recipe -> name, portions and ingredient lines. Nothing is stored. */
-  visionRecipe: (image: Blob, lang: 'de' | 'en') => request<VisionRecipe>('POST', `vision/recipe?lang=${lang}`, undefined, image),
+  visionRecipe: (image: Blob, lang: 'de' | 'en', signal?: AbortSignal) => request<VisionRecipe>('POST', `vision/recipe?lang=${lang}`, undefined, image, signal),
 
   day: (day: string) => request<Day>('GET', `diary/${day}`),
   addEntry: (day: string, entry: { food_id: number; meal: Meal; amount: number }) =>

@@ -2,12 +2,13 @@
   import { api, ApiError } from '../lib/api';
   import { fmt, t } from '../lib/i18n';
   import { isPortionFood, PORTION_GRAMS, portionsText } from '../lib/portion';
-  import { changed, closeAdd, loadMe, openAmount, openEditor, toast, ui, type AddTab } from '../lib/store.svelte';
+  import { changed, closeAdd, loadMe, loadVision, openAmount, openEditor, toast, ui, visionReady, type AddTab } from '../lib/store.svelte';
   import { MEALS, type Food, type Meal, type RecentFood, type Template } from '../lib/types';
   import FoodRow from './FoodRow.svelte';
   import FoodSearch from './FoodSearch.svelte';
   import Icon from './Icon.svelte';
   import CookidooPane from './CookidooPane.svelte';
+  import MealPhoto from './MealPhoto.svelte';
   import ScanPane from './ScanPane.svelte';
   import Sheet from './Sheet.svelte';
 
@@ -19,6 +20,9 @@
   let tab = $state<AddTab>(initialTab);
 
   if (!ui.me) void loadMe();
+  void loadVision();
+  // "Photo of the meal" (only where photo recognition is on and ready): it takes over the sheet below the meal chips until the person goes back
+  let photo = $state(false);
 
   // recent
   let recent = $state<RecentFood[] | null>(null);
@@ -134,6 +138,9 @@
     {/each}
   </div>
 
+  {#if photo}
+    <MealPhoto {meal} {day} onback={() => (photo = false)} />
+  {:else}
   <div class="tabs" class:five={tabs.length > 4} role="tablist">
     {#each tabs as item, i}
       <button role="tab" id="tab-{item.id}" aria-selected={tab === item.id} aria-controls="panel-{item.id}" tabindex={tab === item.id ? 0 : -1}
@@ -144,10 +151,12 @@
   <div role="tabpanel" id="panel-{tab}" aria-labelledby="tab-{tab}" class="panel">
     {#if tab === 'scan'}
       <ScanPane {meal} {day} />
+      {@render photoButton()}
     {:else if tab === 'cookidoo'}
       <CookidooPane {meal} {day} />
     {/if}
     <!-- the search stays mounted while another tab is shown, so the typed text survives a look at "Recent" -->
+    {#if tab === 'search'}{@render photoButton()}{/if}
     <div class="pane" hidden={tab !== 'search'}><FoodSearch onpick={(f) => pick(f)} onnew={newProduct} active={tab === 'search'} /></div>
     {#if tab === 'recent'}
       {#if recent === null}
@@ -199,7 +208,14 @@
       {/if}
     {/if}
   </div>
+  {/if}
 </Sheet>
+
+{#snippet photoButton()}
+  {#if visionReady()}
+    <button type="button" class="btn photo" data-testid="meal-photo" onclick={() => (photo = true)}><Icon name="camera" size={18} />{t('visMealButton')}</button>
+  {/if}
+{/snippet}
 
 <style>
   .meals { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; flex-shrink: 0; }
@@ -210,6 +226,7 @@
   .tabs button.on { background: var(--sel-bg); color: var(--sel-fg); }
   .panel { display: flex; flex-direction: column; gap: 12px; }
   .pane[hidden] { display: none; }
+  .photo { align-self: stretch; }
   .empty { background: var(--paper); border-radius: 28px 28px 28px 8px; padding: 22px 20px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; color: var(--green-text); }
   .empty p { color: var(--quiet); font-size: 14px; line-height: 1.45; }
   .tpl li { background: var(--paper); border-radius: 20px; overflow: hidden; }
