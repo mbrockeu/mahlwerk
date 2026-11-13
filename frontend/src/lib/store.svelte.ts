@@ -116,7 +116,7 @@ export function toast(text: string, action?: ToastAction) {
   toastTimer = window.setTimeout(() => { ui.toast = ''; ui.toastAction = null; }, action ? 7000 : 2600);
 }
 
-export function dismissToast() {
+function dismissToast() {
   clearTimeout(toastTimer);
   ui.toast = '';
   ui.toastAction = null;
@@ -179,7 +179,7 @@ export async function loadMe() {
 // switched off, the admin right went). The server names the real one in every answer; on a difference, or when it refused a write
 // for that reason, the profile is read again, the page is rebuilt for the account that is real now, and a short note says so.
 let resyncing = false;
-export async function resyncView(announce: boolean) {
+async function resyncView(announce: boolean) {
   if (resyncing) return;
   resyncing = true;
   try {
@@ -249,7 +249,7 @@ document.addEventListener('visibilitychange', () => {
 // accounts, so there it is remembered per browser.
 const TOUR_KEY = 'mahlwerk.tour';
 const readTourLocal = () => { try { return localStorage.getItem(TOUR_KEY) === '1'; } catch { return false; } };
-export const tour = $state({ localSeen: readTourLocal() });
+const tour = $state({ localSeen: readTourLocal() });
 export const tourSeen = () => (DEMO ? tour.localSeen : ui.me?.settings?.tour_seen === true);
 
 async function setTourSeen(seen: boolean) {

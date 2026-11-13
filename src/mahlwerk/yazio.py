@@ -242,11 +242,6 @@ def load_folder(directory: str | Path) -> dict[str, dict | None]:
     return {name: _read(folder, name) for name in FILES}
 
 
-def build_plan(directory: str | Path, all_products: bool, summary: Summary) -> dict:
-    """Read the export and prepare everything `Store.import_yazio` writes. Touches no database."""
-    return build_plan_from(load_folder(directory), all_products, summary, str(directory))
-
-
 def build_plan_from(loaded: dict[str, dict | None], all_products: bool, summary: Summary, where: str = "the export") -> dict:
     """Prepare everything `Store.import_yazio` writes from the parsed files (`FILES` -> object or None). The one core
     behind the command line, the file upload and the direct sign-in: all three hand over the same structure."""

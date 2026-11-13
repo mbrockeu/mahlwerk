@@ -1,22 +1,15 @@
-import type { Food, Per100 } from './types';
+import type { Per100 } from './types';
 
 export const ROWS: [keyof Per100, string, boolean][] = [
   ['kcal', 'kcal', false], ['fat', 'g', false], ['saturated_fat', 'g', true], ['carbs', 'g', false],
   ['sugars', 'g', true], ['fiber', 'g', false], ['protein', 'g', false], ['salt', 'g', false],
 ];
-export const CORE: (keyof Per100)[] = ['kcal', 'fat', 'carbs', 'protein'];
-
-/** Nutrient amount in a given quantity; null when the value is unknown. */
-export const scaled = (per100: number | null | undefined, amount: number) =>
-  per100 == null ? null : (per100 * amount) / 100;
-
-export const foodTitle = (food: Pick<Food, 'name' | 'code'>, fallback: string) => food.name || fallback;
 
 export interface Ingredient {
   per_100: Partial<Per100>;
   amount: number;
 }
-export interface Macros { kcal: number | null; protein: number | null; carbs: number | null; fat: number | null }
+interface Macros { kcal: number | null; protein: number | null; carbs: number | null; fat: number | null }
 
 /**
  * Live preview of a recipe, the same calculation as the server: a value is only known when at least one ingredient

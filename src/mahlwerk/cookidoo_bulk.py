@@ -35,7 +35,6 @@ Rules this module keeps:
 
 import asyncio
 import logging
-import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 

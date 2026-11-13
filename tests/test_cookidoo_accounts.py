@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from mahlwerk import cookidoo
 from mahlwerk.cookidoo import CookidooError, Collection, PlanDay, PlannedRecipe, RecipeDetails, Settings
 from mahlwerk.main import create_app
-from test_cookidoo import LENTILS, entry
+from test_cookidoo import entry
 
 ADMIN_MAIL, ANN_MAIL, BEN_MAIL = "household@example.invalid", "ann.private@example.invalid", "ben.private@example.invalid"
 ADMIN_PW, ANN_PW, BEN_PW = "household-pw-0001", "ann-private-pw-0002", "ben-private-pw-0003"

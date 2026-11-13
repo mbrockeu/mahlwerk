@@ -1333,10 +1333,6 @@ class Store:
             ).fetchall()
         return {r["day"]: dict(r) for r in rows}
 
-    def activity_bonus_rows(self, user_id: int) -> dict[str, dict]:
-        """Every activity row of the user (for the badges, which look at all days)."""
-        return self.activity_between(user_id, "0000-01-01", "9999-12-31")
-
     def put_activity(self, user_id: int, day: str, changes: dict) -> dict | None:
         """Set the given values of a day (None clears one), by hand: the row becomes `manual` and loses its import.
         A row that ends up without any value is deleted. Returns the row, or None when nothing is left."""

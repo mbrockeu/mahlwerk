@@ -12,6 +12,7 @@ Choice of the improvement: also in a fixed order, the first match wins; at most 
 from datetime import date, timedelta
 
 from .activity import day_goal_kcal
+from .analysis import _mean
 from .insights import EPS, adherence_class
 from .nutrition import scale
 
@@ -46,10 +47,6 @@ def _totals(rows: list[dict], first: date) -> dict[str, dict]:
         for key in day:
             day[key] += values[key] or 0.0
     return out
-
-
-def _mean(values: list[float]) -> float:
-    return sum(values) / len(values) if values else 0.0
 
 
 def compute(monday: date, rows: list[dict], goal: dict | None, badge_codes: list[str], bonus: dict[str, int] | None = None) -> dict:

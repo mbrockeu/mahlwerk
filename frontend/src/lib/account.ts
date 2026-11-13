@@ -1,6 +1,6 @@
 // Rules for names and passwords of the local sign-in mode; the server checks the same limits.
-export const PASSWORD_MIN = 10;
-export const PASSWORD_MAX = 256;
+const PASSWORD_MIN = 10;
+const PASSWORD_MAX = 256;
 const NAME = /^[a-z0-9][a-z0-9._-]{0,39}$/;
 
 export type PasswordProblem = 'short' | 'long' | null;

@@ -4,7 +4,7 @@
 import type { Per100 } from './types';
 
 export interface MockCookidooRecipe { id: string; name: string; portions: number; per: Per100 | null; fails: boolean }
-export interface MockCookidooCollection { id: string; name: string; managed: boolean; recipes: { id: string; name: string }[] }
+interface MockCookidooCollection { id: string; name: string; managed: boolean; recipes: { id: string; name: string }[] }
 
 type Names = [string, string][]; // [German, English]
 const QUICK: Names = [

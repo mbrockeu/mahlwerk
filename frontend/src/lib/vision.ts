@@ -17,7 +17,7 @@ export function perPortion(total: number | null, portions: number | null | undef
   return total == null || portions == null || !Number.isFinite(portions) || portions <= 0 ? null : total / portions;
 }
 
-export type VisionErrorCode = 'busy' | 'toolarge' | 'unreadable' | 'timeout' | 'failed' | 'offline' | 'blocked' | 'off' | 'other';
+type VisionErrorCode = 'busy' | 'toolarge' | 'unreadable' | 'timeout' | 'failed' | 'offline' | 'blocked' | 'off' | 'other';
 export interface VisionFailure { code: VisionErrorCode; /** seconds until a new try makes sense (429), else 0 */ wait: number }
 
 /** Which text a failed request gets; `status` 0 is "no answer at all" (offline). Neutral: the model's own text is never shown. */

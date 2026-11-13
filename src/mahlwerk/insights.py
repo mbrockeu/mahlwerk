@@ -27,9 +27,7 @@ def _r(value: float, digits: int = 1) -> float:
     return round(value + 0.0, digits)  # "+ 0.0" turns -0.0 into 0.0
 
 
-def _mean(values: list[float]) -> float:
-    return sum(values) / len(values) if values else 0.0
-
+_mean = analysis._mean
 
 adherence_class = analysis.adherence_class  # 'in', 'over' or 'under' for one logged day (90-110 % of the goal)
 

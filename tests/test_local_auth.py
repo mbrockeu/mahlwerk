@@ -11,7 +11,7 @@ from mahlwerk import passwords
 from mahlwerk.db import NameTaken, SetupDone, Store
 from mahlwerk.main import create_app
 
-from conftest import COST, CSRF, PW, PW2, Clock  # noqa: E402
+from conftest import COST, CSRF, PW, PW2  # noqa: E402
 
 
 def nocsrf(app, **kwargs) -> TestClient:

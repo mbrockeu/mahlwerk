@@ -7,13 +7,13 @@ export const WATER_LIMITS = { min: 500, max: 6000 } as const;
 export const STEPS_LIMITS = { min: 1000, max: 50000, step: 500 } as const;
 /** The part of the calorie range the scale shows; typing reaches the rest. */
 export const SCALE = { min: 1200, max: 4000, step: 50 } as const;
-export const KCAL_PER_G = { protein: 4, carbs: 4, fat: 9 } as const;
+const KCAL_PER_G = { protein: 4, carbs: 4, fat: 9 } as const;
 
 export type MacroKey = 'protein' | 'carbs' | 'fat';
 export interface Macros { protein: number; carbs: number; fat: number }
 
 export const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
-export const snap = (v: number, step: number) => Math.round(v / step) * step;
+const snap = (v: number, step: number) => Math.round(v / step) * step;
 
 export const macroKcal = (m: Macros) => m.protein * KCAL_PER_G.protein + m.carbs * KCAL_PER_G.carbs + m.fat * KCAL_PER_G.fat;
 
@@ -71,8 +71,8 @@ export function matchingPreset(kcal: number, m: Macros): PresetId | null {
 export type Sex = 'f' | 'm' | 'x';
 export type Intent = 'keep' | 'lose' | 'gain';
 export const ACTIVITY = [1.2, 1.375, 1.55, 1.725, 1.9] as const;
-export const INTENT_DELTA: Record<Intent, number> = { keep: 0, lose: -300, gain: 300 };
-export const MIN_SUGGESTION = 1200;
+const INTENT_DELTA: Record<Intent, number> = { keep: 0, lose: -300, gain: 300 };
+const MIN_SUGGESTION = 1200;
 export const CALC_LIMITS = { age: [14, 110], height: [100, 230], weight: [30, 300] } as const;
 
 export interface CalcInput { sex: Sex; age: number; height: number; weight: number; activity: number; intent: Intent }

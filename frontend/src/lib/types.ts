@@ -13,7 +13,6 @@ export interface Per100 {
   protein: number | null;
   salt: number | null;
 }
-export type NutrientKey = keyof Per100;
 
 /** Additional nutrients per 100 g/ml by directory key; a missing key means unknown. */
 export type Extra = Record<string, number>;
@@ -105,7 +104,7 @@ export interface Goal {
   steps: number;
 }
 
-export const WORKOUT_KINDS = [
+const WORKOUT_KINDS = [
   'walking', 'running', 'cycling', 'hiking', 'swimming', 'strength', 'yoga', 'pilates', 'crosstrainer', 'stairs', 'circuit',
   'squash', 'bowling', 'dancing', 'football', 'tennis', 'skiing', 'rowing', 'other',
 ] as const;
@@ -186,13 +185,13 @@ export interface Day {
   yesterday: Partial<Record<Meal, { kcal: number; names: string[] }>>;
 }
 
-export interface FastingSettings {
+interface FastingSettings {
   enabled: boolean;
   /** Target in hours, 8–72. */
   target_hours: number;
 }
 
-export interface ActivitySettings {
+interface ActivitySettings {
   /** Add the day's active energy to its calorie goal. */
   add_to_goal: boolean;
 }
@@ -369,9 +368,9 @@ export interface InsightMicro {
 }
 
 export type Granularity = 'day' | 'week' | 'month';
-export type Averages = Record<'kcal' | 'protein' | 'carbs' | 'fat' | 'sugars' | 'fiber' | 'salt' | 'saturated_fat' | 'water_ml' | 'steps' | 'active_kcal' | 'workout_minutes', number>;
-export type Adherence = { in_range_days: number; over_days: number; under_days: number };
-export type InsightWeight = { first: number; last: number; change: number; trend: { day: string; kg: number }[]; raw?: { day: string; kg: number }[] };
+type Averages = Record<'kcal' | 'protein' | 'carbs' | 'fat' | 'sugars' | 'fiber' | 'salt' | 'saturated_fat' | 'water_ml' | 'steps' | 'active_kcal' | 'workout_minutes', number>;
+type Adherence = { in_range_days: number; over_days: number; under_days: number };
+type InsightWeight = { first: number; last: number; change: number; trend: { day: string; kg: number }[]; raw?: { day: string; kg: number }[] };
 
 /** One section (day, ISO week or month) of the range: means per logged day. */
 export interface Section {
@@ -403,7 +402,7 @@ export interface Section {
   under_days: number;
 }
 
-export type CalendarState = 'none' | 'under' | 'in_range' | 'over' | 'no_goal';
+type CalendarState = 'none' | 'under' | 'in_range' | 'over' | 'no_goal';
 
 export interface Expenditure {
   kcal: number;
@@ -418,9 +417,9 @@ export interface Expenditure {
 }
 
 export interface Delta { abs: number; pct: number | null }
-export type DeltaKey = 'kcal' | 'protein' | 'carbs' | 'fat' | 'sugars' | 'fiber' | 'salt' | 'water_ml' | 'steps' | 'active_kcal' | 'workout_minutes' | 'weight_change' | 'in_range_share';
+type DeltaKey = 'kcal' | 'protein' | 'carbs' | 'fat' | 'sugars' | 'fiber' | 'salt' | 'water_ml' | 'steps' | 'active_kcal' | 'workout_minutes' | 'weight_change' | 'in_range_share';
 
-export interface InsightRange { from: string; to: string; days: number; logged_days: number }
+interface InsightRange { from: string; to: string; days: number; logged_days: number }
 
 export interface Insights {
   range: InsightRange;
@@ -485,7 +484,7 @@ export interface FoodDetail extends Omit<FoodStat, 'share' | 'avg_amount'> {
   usual_amounts: { amount: number; times: number }[];
 }
 
-export interface TemplateItem {
+interface TemplateItem {
   name: string;
   brand: string | null;
   amount: number;
@@ -500,7 +499,7 @@ export interface Template {
   items: TemplateItem[];
 }
 
-export interface RecipeItem {
+interface RecipeItem {
   food_id: number | null;
   name: string;
   brand: string | null;
@@ -566,7 +565,7 @@ export interface Badges {
   new: BadgeCode[];
 }
 
-export interface ReviewHighlight {
+interface ReviewHighlight {
   code: string;
   params: Record<string, number>;
 }
@@ -777,7 +776,7 @@ export interface CookidooAccount {
 export type CookidooScope = 'shared' | 'own';
 
 /** The Yazio import in the app: files waiting for a preview, and the direct one-time sign-in. */
-export interface YazioStage { token: string; source: 'upload' | 'login'; files: Record<string, number> }
+interface YazioStage { token: string; source: 'upload' | 'login'; files: Record<string, number> }
 export interface YazioRun { state: 'running' | 'done' | 'error' | 'cancelled'; phase: string; done: number; total: number; requests: number; error: string | null; error_kind: string | null }
 export interface YazioState {
   stage: YazioStage | null;
@@ -832,7 +831,7 @@ export interface WebPreviewIn { url: string; whole?: boolean; portions?: number 
 /** "What still fits today" (GET /recipes/suggestions). */
 export type SuggestFocus = 'balanced' | 'protein' | 'light' | 'rotation';
 export type SuggestReason = 'fills_protein' | 'high_protein' | 'fits_kcal' | 'not_eaten_lately' | 'light' | 'slightly_over';
-export interface SuggestRest { kcal: number | null; protein: number | null; carbs: number | null; fat: number | null }
+interface SuggestRest { kcal: number | null; protein: number | null; carbs: number | null; fat: number | null }
 export interface SuggestionItem {
   food: Food;
   portions: number;

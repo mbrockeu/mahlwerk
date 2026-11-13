@@ -2,7 +2,7 @@
 // tested by tests/workouts.test.mjs.
 import type { WorkoutKind } from './types';
 
-export type WorkoutIcon = 'walk' | 'run' | 'bike' | 'mountain' | 'swim' | 'dumbbell' | 'lotus' | 'bolt' | 'stairs' | 'ball' | 'music';
+type WorkoutIcon = 'walk' | 'run' | 'bike' | 'mountain' | 'swim' | 'dumbbell' | 'lotus' | 'bolt' | 'stairs' | 'ball' | 'music';
 
 export interface KindInfo { key: WorkoutKind; met: number; icon: WorkoutIcon }
 

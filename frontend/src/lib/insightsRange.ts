@@ -4,7 +4,7 @@
 export type Gran = 'day' | 'week' | 'month';
 export type RangeKey = '7' | '30' | '90' | '365' | 'all' | 'custom';
 export const PRESETS = ['7', '30', '90', '365'] as const;
-export const MAX_DAYS = 3660; // ten years, as the server allows
+const MAX_DAYS = 3660; // ten years, as the server allows
 export const DETAIL_DAYS = 370; // per-day lists (calendar, days) come only up to this many days
 
 export interface Q {
@@ -22,7 +22,7 @@ const ms = (day: string) => Date.parse(`${day}T00:00:00Z`);
 const toIso = (t: number) => new Date(t).toISOString().slice(0, 10);
 export const addDays = (day: string, n: number) => toIso(ms(day) + n * 86400000);
 export const diffDays = (a: string, b: string) => Math.round((ms(b) - ms(a)) / 86400000);
-export const validDay = (day: string) => DAY.test(day) && !Number.isNaN(ms(day)) && toIso(ms(day)) === day;
+const validDay = (day: string) => DAY.test(day) && !Number.isNaN(ms(day)) && toIso(ms(day)) === day;
 
 export function parseQuery(params: URLSearchParams, today: string): Q {
   const raw = params.get('range') ?? '30';

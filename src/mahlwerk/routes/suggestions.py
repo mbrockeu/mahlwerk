@@ -8,7 +8,7 @@ Goals and history are per person; the recipes are the household's.
 from datetime import date
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from .. import activity, suggest
