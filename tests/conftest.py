@@ -84,6 +84,7 @@ def clean_env(monkeypatch, tmp_path):
         "MAHLWERK_VISION_MODEL",
         "MAHLWERK_VISION_KEY",
         "MAHLWERK_VISION_PER_HOUR",
+        "MAHLWERK_VISION_PARALLEL",
         "MAHLWERK_YAZIO_CLIENT_ID",
         "MAHLWERK_YAZIO_CLIENT_SECRET",
         "MAHLWERK_COOKIDOO_EMAIL",

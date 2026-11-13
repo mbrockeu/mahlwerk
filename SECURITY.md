@@ -43,13 +43,13 @@ maintainer, so replies may take a few days.
   can set it, so it is not a way into your network for users; **do not point it at something you would not give a photo to**. With a hosted provider
   photos leave your server. Before sending, the photo is decoded in the picture child process (below) and re-encoded as a new JPEG of at most 1568
   pixels without any metadata (no EXIF, no GPS). Redirects are not followed (they would carry the key and the photo elsewhere), the call has fixed limits (connect 5 s,
-  total 90 s, answer 256 KB), the key appears in no log line, error text or API answer. Nothing is stored. The **answer of the model is untrusted** (text in a photo can steer it): it is
+  total 90 s as a hard limit, answer 256 KB counted before any decompression), the key appears in no log line, error text or API answer. Nothing is stored. The **answer of the model is untrusted** (text in a photo can steer it): it is
   read as strict JSON, only known fields are used, texts are cleaned and cut, numbers are clamped; anything else is a neutral 502. Only normal sign-ins can use it (no access
   keys, no demo account), with a brake per person and hour and two runs at the same time on the server. Estimates are not advice.
 - **Recipe pictures.** Pictures of Cookidoo and web recipes (off by default, a switch per connector) are fetched with the same
   guarded fetcher as web recipes (public addresses only, pinned connection, redirects checked, own hosts blocked, 10 s, at most 6 MB,
   only `image/jpeg`, `image/png`, `image/webp`). Every picture (also an own upload, at most 8 MB) is decoded in a **child process**
-  (`python -m mahlwerk.imageproc`) with **resource limits and reduced rights, not a complete sandbox**: an address-space limit (768 MB), a
+  (`python -I -c ... mahlwerk.imageproc`) with **resource limits and reduced rights, not a complete sandbox**: an address-space limit (768 MB), a
   CPU limit (20 s), a wall-clock limit (30 s), no files it may write (`RLIMIT_FSIZE` 0), 8 file descriptors, no new processes
   (`RLIMIT_NPROC` 0), all inherited descriptors closed, an empty working directory and, where the system allows it without privileges
   (`os.unshare`, Python 3.12+), an own empty network and user namespace (skipped silently otherwise). It can still read whatever the server's

@@ -53,6 +53,11 @@ WAIT_FOR_TURN = 5.0  # how long a request waits for the one child that may run
 _TURN = threading.BoundedSemaphore(1)
 _QUEUE = threading.BoundedSemaphore(1 + MAX_WAITING)  # one running and at most MAX_WAITING waiting; the rest is refused without waiting
 
+# The child runs exactly the code of THIS copy of the package (not whatever `-m mahlwerk` would find installed): the root is the folder
+# that holds this package, taken from this file, never from the request or the environment. `-I` stays: no PYTHON* variables, no user site.
+PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CHILD_CODE = "import sys; sys.path.insert(0, sys.argv[1]); from mahlwerk.imageproc import _main; sys.exit(_main())"
+
 MAGIC = b"MWI1"
 MAX_OUTPUT_BYTES = {"l": 1024 * 1024, "m": 200 * 1024, "s": 64 * 1024}  # far above what the encoder produces; a child that sends more is not trusted
 ACCEPTED = ("JPEG", "PNG", "WEBP")
@@ -136,7 +141,7 @@ def _run_child(data: bytes, mode: str) -> bytes:
         try:
             try:
                 done = subprocess.run(
-                    [sys.executable, "-I", "-m", "mahlwerk.imageproc"], input=data, capture_output=True, timeout=WALL_SECONDS,
+                    [sys.executable, "-I", "-c", CHILD_CODE, PACKAGE_ROOT], input=data, capture_output=True, timeout=WALL_SECONDS,
                     env={"PATH": os.environ.get("PATH", ""), "MAHLWERK_IMAGE_CHILD": "1", "MAHLWERK_IMAGE_MODE": mode}, check=False, close_fds=True, cwd="/",
                 )
             except subprocess.TimeoutExpired:

@@ -6,6 +6,8 @@ import json
 import logging
 import subprocess
 import sys
+import threading
+import time
 
 import httpx
 import pytest
@@ -75,13 +77,6 @@ class Model:
         url = self.body(index)["messages"][0]["content"][1]["image_url"]["url"]
         assert url.startswith("data:image/jpeg;base64,")
         return base64.b64decode(url.split(",", 1)[1])
-
-
-@pytest.fixture(autouse=True)
-def inprocess_child(monkeypatch):
-    """The picture is made clean in the child process (imageproc.for_model); a child started with `-I` imports the INSTALLED
-    package, which is not always the code under test, so the routes use the same function in-process here. The real child has its own test."""
-    monkeypatch.setattr(imageproc, "for_model", imageproc._model_jpeg)
 
 
 @pytest.fixture
@@ -183,7 +178,7 @@ def test_recipe_is_read_and_only_the_known_fields_are_taken():
 
 
 def test_recipe_limits_and_clamping():
-    out = vision.parse_recipe(json.dumps({"name": "N" * 900, "portions": 1e9, "ingredients": ["i" * 900] * 200 + [None, 3, {"a": 1}],
+    out = vision.parse_recipe(json.dumps({"name": "N" * 900, "portions": 1e9, "ingredients": ["i" * 400] * 120 + [None, 3, {"a": 1}],
                                            "nutrition_per_portion": {"kcal": 1e12, "protein_g": -4, "fat_g": "x", "carbs_g": 2}}))
     assert len(out["name"]) == vision.MAX_NAME and out["portions"] == 100
     assert len(out["ingredients"]) == vision.MAX_INGREDIENTS and all(len(line) == vision.MAX_LINE for line in out["ingredients"])
@@ -209,7 +204,7 @@ def test_the_prompts_name_the_language_and_forbid_instructions_from_the_photo():
 # ---- the settings ----
 
 
-@pytest.mark.parametrize("url", ["", "ftp://x/v1", "model.local/v1", "http://user:pw@host/v1", "http:///v1", "http://host/v1#frag", "file:///etc/passwd"])
+@pytest.mark.parametrize("url", ["", "ftp://x/v1", "model.local/v1", "http://user:pw@host/v1", "http:///v1", "http://host/v1#frag", "file:///etc/passwd", "http://host/v1?key=abc", "http://host/v1?"])
 def test_an_unusable_address_is_not_configured(monkeypatch, url):
     monkeypatch.setenv("MAHLWERK_VISION_URL", url)
     monkeypatch.setenv("MAHLWERK_VISION_MODEL", "m")
@@ -259,7 +254,7 @@ def test_the_default_language_is_english_and_other_values_are_refused(ann, model
     assert upload(ann, params={"lang": "fr"}).status_code == 422
 
 
-@pytest.mark.parametrize("status", [400, 401, 404, 429, 500, 503])
+@pytest.mark.parametrize("status", [400, 401, 404, 500, 502])
 def test_an_error_of_the_model_is_a_502_with_a_neutral_text(ann, model, caplog, status):
     model.status = status
     model.raw = ("secret detail from the model " + KEY + " " + BASE).encode()
@@ -268,7 +263,7 @@ def test_an_error_of_the_model_is_a_502_with_a_neutral_text(ann, model, caplog, 
     assert r.status_code == 502 and r.json()["detail"] == vision.MESSAGES["unavailable"]
     assert KEY not in r.text and "secret detail" not in r.text and "model.internal" not in r.text
     assert KEY not in caplog.text and "secret detail" not in ours(caplog) and "model.internal" not in ours(caplog)
-    assert "HTTP 503" in ours(caplog) or status != 503
+    assert f"HTTP {status}" in ours(caplog)
 
 
 def test_a_redirect_is_not_followed(ann, model):
@@ -299,12 +294,44 @@ def test_the_time_limits_are_fixed():
     assert client._http.follow_redirects is False
 
 
-def test_a_slow_trickle_ends_at_the_total_limit(ann, app, model):
-    ticks = iter(range(0, 10_000, 40))
-    app.state.vision.client._clock = lambda: next(ticks)  # every look at the clock is 40 seconds later
-    model.raw = (b'{"choices": [{"message": {"content": "' if i == 0 else b"x" for i in range(10))  # an answer that arrives in many small pieces
-    r = upload(ann)
-    assert r.status_code == 504
+class Stuck(httpx.SyncByteStream):
+    """An answer whose body never arrives: the read blocks until the connection is closed (like a socket with a model that went quiet)."""
+
+    def __init__(self):
+        self.release = threading.Event()
+
+    def __iter__(self):
+        yield b'{"choices": [{"message": {"content": "'
+        self.release.wait(30)  # a real read would wait on the socket
+        raise httpx.ReadError("closed")
+
+    def close(self):
+        self.release.set()
+
+
+def test_the_total_limit_is_hard_even_when_a_read_blocks(app, configured, monkeypatch):
+    monkeypatch.setattr(vision, "TOTAL_TIMEOUT", 1.0)
+    stuck = Stuck()
+    app.state.vision.client = vision.Client(httpx.MockTransport(lambda request: httpx.Response(200, stream=stuck)))
+    started = time.monotonic()
+    r = upload(person(app))
+    assert r.status_code == 504 and r.json()["detail"] == vision.MESSAGES["timeout"]
+    assert time.monotonic() - started < 4
+
+
+def test_the_total_limit_also_covers_the_wait_for_the_first_byte(app, configured, monkeypatch):
+    monkeypatch.setattr(vision, "TOTAL_TIMEOUT", 1.0)
+    release = threading.Event()
+
+    def slow(request):
+        release.wait(5)
+        return httpx.Response(200, json={})
+
+    app.state.vision.client = vision.Client(httpx.MockTransport(slow))
+    started = time.monotonic()
+    r = upload(person(app))
+    release.set()
+    assert r.status_code == 504 and time.monotonic() - started < 7
 
 
 @pytest.mark.parametrize("raw", [
@@ -389,18 +416,6 @@ def test_nothing_of_the_photo_or_the_answer_is_logged_or_stored(ann, model, capl
     dump = "\n".join(con.iterdump())
     con.close()
     assert "Boiled potatoes" not in dump and "potatoes" not in dump
-
-
-def test_the_real_child_process_makes_the_clean_jpeg(monkeypatch):
-    """imageproc.for_model with the child itself. Skipped when the child would import another copy of the package."""
-    found = subprocess.run([sys.executable, "-I", "-c", "import mahlwerk; print(mahlwerk.__file__)"], capture_output=True, text=True).stdout.strip()
-    if found != mahlwerk.__file__:
-        pytest.skip("the child process imports an installed copy of mahlwerk, not this source tree")
-    monkeypatch.undo()
-    clean = imageproc.for_model(jpeg((3000, 2000), exif=True, orientation=6))
-    assert b"Exif" not in clean and Image.open(io.BytesIO(clean)).size == (1045, 1568)
-    with pytest.raises(imageproc.ImageRejected):
-        imageproc.for_model(b"GIF89a" + b"\0" * 50)
 
 
 # ---- who may use it, and when ----
@@ -565,3 +580,151 @@ def test_the_default_is_off(app, configured, monkeypatch):
 def test_the_upload_limit_is_registered():
     from mahlwerk import security
     assert security.limit_for(MEAL) == security.limit_for(RECIPE) == 8 * 1024 * 1024
+
+
+# ---- more of the call ----
+
+
+def test_no_compression_is_asked_for_and_a_compressed_answer_is_refused(ann, model):
+    upload(ann)
+    assert model.requests[0].headers["accept-encoding"] == "identity"
+    import gzip
+    model.raw = gzip.compress(json.dumps({"choices": [{"message": {"content": json.dumps(GOOD_MEAL)}}]}).encode())
+    original = model.__call__
+
+    def zipped(request):
+        response = original(request)
+        return httpx.Response(200, headers={"content-encoding": "gzip"}, content=model.raw)
+
+    ann.app.state.vision.client = vision.Client(httpx.MockTransport(zipped))
+    assert upload(ann).status_code == 502
+
+
+def test_a_model_that_is_busy_is_a_429_with_its_retry_after_and_costs_no_allowance(app, configured, model, monkeypatch):
+    monkeypatch.setenv("MAHLWERK_VISION_PER_HOUR", "2")
+    ann = person(app)
+    original = model.__call__
+
+    def busy(request):
+        model.requests.append(request)
+        return httpx.Response(429, headers={"Retry-After": "17"}, text="queue full " + KEY)
+
+    app.state.vision.client = vision.Client(httpx.MockTransport(busy))
+    for _ in range(5):  # more often than the allowance: none of them counts
+        r = upload(ann)
+        assert r.status_code == 429 and r.headers["Retry-After"] == "17" and KEY not in r.text and "queue full" not in r.text
+    app.state.vision.client = vision.Client(httpx.MockTransport(original))
+    assert upload(ann).status_code == 200 and upload(ann).status_code == 200
+    assert upload(ann).status_code == 429  # now the allowance is used up
+
+
+def test_a_model_503_is_busy_too_and_a_wild_retry_after_is_bounded(app, configured):
+    def busy(request):
+        return httpx.Response(503, headers={"Retry-After": "99999"})
+
+    app.state.vision.client = vision.Client(httpx.MockTransport(busy))
+    r = upload(person(app))
+    assert r.status_code == 429 and r.headers["Retry-After"] == "300"
+    app.state.vision.client = vision.Client(httpx.MockTransport(lambda request: httpx.Response(503, headers={"Retry-After": "soon"})))
+    assert upload(person(app)).headers["Retry-After"] == "10"
+
+
+def test_the_number_of_parallel_runs_is_set_by_the_environment(monkeypatch, tmp_path):
+    for raw, want in (("", 2), ("x", 2), ("0", 1), ("99", 8), ("1", 1), ("4", 4)):
+        monkeypatch.setenv("MAHLWERK_VISION_PARALLEL", raw)
+        assert vision.parallel_from_env() == want
+    monkeypatch.setenv("MAHLWERK_VISION_PARALLEL", "1")
+    app = create_app(str(tmp_path / "p.db"))
+    brake = app.state.vision.brake
+    assert brake.slot() and not brake.slot()
+
+
+@pytest.mark.parametrize("filler", [" ", "a", "`", "``", "\n", "{", "[", "-", "<"])
+def test_an_unclosed_fence_and_other_hostile_texts_cost_no_time(filler):
+    for text in ("```" + filler * 250_000, "```json" + filler * 250_000, "```" * 80_000, ("```" + filler) * 60_000, "<" * 250_000):
+        for parse in (vision.parse_meal, vision.parse_recipe):
+            started = time.monotonic()
+            with pytest.raises(vision.VisionError):
+                parse(text)
+            assert time.monotonic() - started < 0.5, (filler, text[:10])
+
+
+def test_the_text_is_cut_before_reading_and_numbers_as_text_are_bounded():
+    assert vision.clean_number(" " * 250_000 + "x", 0, 10) is None
+    late = " " * vision.MAX_CONTENT + json.dumps(GOOD_MEAL)  # the answer starts after the part that is looked at
+    with pytest.raises(vision.VisionError):
+        vision.parse_meal(late)
+
+
+# ---- the picture child: the same code as this process, and clean output in both modes ----
+
+
+def _meta_jpeg():
+    image = Image.new("RGB", (400, 300), (200, 120, 40))
+    exif = Image.Exif()
+    exif[0x010E] = "SECRETEXIF"
+    exif[0x8825] = {1: "N", 2: (52.0, 31.0, 12.0), 3: "E", 4: (13.0, 24.0, 5.0)}
+    buffer = io.BytesIO()
+    image.save(buffer, "JPEG", exif=exif.tobytes(), icc_profile=b"ICCSECRET" * 40, comment=b"SECRETCOMMENT",
+               xmp=b"<x:xmpmeta SECRETXMP></x:xmpmeta>")
+    return buffer.getvalue()
+
+
+def _meta_png():
+    from PIL.PngImagePlugin import PngInfo
+
+    info = PngInfo()
+    info.add_text("Comment", "SECRETTEXT")
+    info.add_itxt("XML:com.adobe.xmp", "<x:xmpmeta SECRETXMP></x:xmpmeta>")
+    exif = Image.Exif()
+    exif[0x010E] = "SECRETEXIF"
+    buffer = io.BytesIO()
+    Image.new("RGB", (400, 300), (10, 200, 10)).save(buffer, "PNG", pnginfo=info, icc_profile=b"ICCSECRET" * 40, exif=exif.tobytes())
+    return buffer.getvalue()
+
+
+def _meta_webp():
+    exif = Image.Exif()
+    exif[0x010E] = "SECRETEXIF"
+    buffer = io.BytesIO()
+    Image.new("RGB", (400, 300), (10, 10, 200)).save(buffer, "WEBP", exif=exif.tobytes(), icc_profile=b"ICCSECRET" * 40,
+                                                      xmp=b"<x:xmpmeta SECRETXMP></x:xmpmeta>")
+    return buffer.getvalue()
+
+
+MARKERS = (b"SECRETEXIF", b"SECRETCOMMENT", b"SECRETTEXT", b"SECRETXMP", b"ICCSECRET", b"Exif", b"xmpmeta", b"ICC_PROFILE", b"GPS")
+
+
+@pytest.mark.parametrize("make", [_meta_jpeg, _meta_png, _meta_webp])
+def test_the_real_child_strips_all_metadata_in_both_modes(make):
+    data = make()
+    assert any(marker in data for marker in MARKERS[:5])  # the test picture really carries them
+    clean = imageproc.for_model(data)
+    assert not [m for m in MARKERS if m in clean]
+    picture = Image.open(io.BytesIO(clean))
+    assert picture.format == "JPEG" and not (set(picture.info) & {"exif", "icc_profile", "comment", "xmp", "XML:com.adobe.xmp"})
+    made = imageproc.process(data)
+    for key, blob in made.files.items():
+        assert not [m for m in MARKERS if m in blob], key
+        assert not (set(Image.open(io.BytesIO(blob)).info) & {"exif", "icc_profile", "xmp"})
+
+
+def test_the_real_child_limits_pixels_and_formats_in_both_modes():
+    big = bytearray(png())
+    big[16:24] = (7000).to_bytes(4, "big") + (6000).to_bytes(4, "big")
+    for run in (imageproc.for_model, imageproc.process):
+        with pytest.raises(imageproc.ImageRejected) as caught:
+            run(bytes(big))
+        assert caught.value.kind == "too_many_pixels"
+        with pytest.raises(imageproc.ImageRejected) as caught:
+            run(b"GIF89a" + b"\0" * 50)
+        assert caught.value.kind == "format"
+        with pytest.raises(imageproc.ImageRejected):
+            run(jpeg()[:300])  # cut off in the middle of the data
+
+
+def test_the_child_runs_the_code_of_this_copy_of_the_package():
+    assert imageproc.PACKAGE_ROOT == str(__import__("pathlib").Path(imageproc.__file__).resolve().parent.parent)
+    found = subprocess.run([sys.executable, "-I", "-c", imageproc.CHILD_CODE.replace("from mahlwerk.imageproc import _main; sys.exit(_main())", "import mahlwerk; print(mahlwerk.__file__)"),
+                            imageproc.PACKAGE_ROOT], capture_output=True, text=True, check=True).stdout.strip()
+    assert found == mahlwerk.__file__

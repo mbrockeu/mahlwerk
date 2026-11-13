@@ -938,8 +938,8 @@ normal sign-in (an access token gets **403**; the demo account gets **403**) and
 `nutrition_per_portion` only when the page shows a table. No preparation text is returned.
 
 Answers: **404** the connector is switched off; **409** not configured; **413** the image is over 8 MB or 24 megapixels; **422** empty body or not a
-JPEG, PNG or WebP picture, or `lang` is neither `de` nor `en`; **429** (with `Retry-After`) the brake: `per_hour` photos per person and hour, two runs at the same
-time on the whole server, or the picture worker is busy; **502** the model could not be reached or refused the request, or its answer could not be used
+JPEG, PNG or WebP picture, or `lang` is neither `de` nor `en`; **429** (with `Retry-After`) the brake: `per_hour` photos per person and hour, `MAHLWERK_VISION_PARALLEL` (default two) runs at the same
+time on the whole server, the picture worker is busy, or the model itself answered 429/503 (then with its `Retry-After`, and the photo is not counted); **502** the model could not be reached or refused the request, or its answer could not be used
 (neutral texts, never the model's own text); **504** the model took longer than 90 seconds. The admin card is `vision` in `GET /admin/connectors`
 (`status` `off`, `not_configured` or `ready`; `info`: `model` (the name only), `per_hour`, `env`).
 

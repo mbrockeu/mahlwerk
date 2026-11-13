@@ -42,7 +42,10 @@ CONNECT_TIMEOUT = 5.0
 TOTAL_TIMEOUT = 90.0  # for the whole call, however slowly the model answers
 MAX_ANSWER_BYTES = 256 * 1024
 MAX_TOKENS = 2000
-PARALLEL = 2  # runs at the same time on the whole server
+PARALLEL = 2  # runs at the same time on the whole server (default; MAHLWERK_VISION_PARALLEL)
+MAX_CONTENT = 64 * 1024  # characters of the model text that are looked at at all
+MAX_FENCES = 5
+MAX_LANGUAGE_TAG = 20
 DEFAULT_PER_HOUR = 30  # photos per person and hour
 
 MAX_NAME = 120
@@ -56,6 +59,7 @@ LANGUAGES = {"de": "German", "en": "English"}
 MESSAGES = {
     "unavailable": "the image model could not be reached or refused the request",
     "timeout": "the image model took too long to answer",
+    "busy": "the image model is busy, try again in a moment",
     "unusable": "the image model's answer could not be used, try again or use another photo",
 }
 
@@ -63,9 +67,10 @@ MESSAGES = {
 class VisionError(Exception):
     """`kind`: unavailable, timeout or unusable. The text is neutral: it never holds the answer of the model, the address or the key."""
 
-    def __init__(self, kind: str):
+    def __init__(self, kind: str, retry_after: int | None = None):
         super().__init__(MESSAGES[kind])
         self.kind = kind
+        self.retry_after = retry_after  # seconds, for `busy`
 
 
 @dataclass(frozen=True)
@@ -87,10 +92,18 @@ def settings_from_env() -> Settings | None:
         return None
     try:
         parts = urlsplit(base)
-        valid = parts.scheme in ("http", "https") and bool(parts.hostname) and not parts.username and not parts.password and not parts.fragment
+        valid = (parts.scheme in ("http", "https") and bool(parts.hostname) and not parts.username and not parts.password
+                 and not parts.fragment and not parts.query and "?" not in base and "#" not in base)
     except ValueError:
         return None
     return Settings(base, model, key) if valid else None
+
+
+def parallel_from_env() -> int:
+    try:
+        return max(1, min(8, int(os.environ.get("MAHLWERK_VISION_PARALLEL", "").strip() or PARALLEL)))
+    except ValueError:
+        return PARALLEL
 
 
 def per_hour_from_env() -> int:
@@ -129,6 +142,13 @@ class Brake:
                 for key in [k for k, q in self._users.items() if not q or q[-1] <= now - self.WINDOW]:
                     del self._users[key]
         return 0
+
+    def refund(self, user_id: int) -> None:
+        """Give back the photo that was counted last (the model was busy: the person did nothing wrong)."""
+        with self._lock:
+            mine = self._users.get(user_id)
+            if mine:
+                mine.pop()
 
     def slot(self) -> bool:
         return self._slots.acquire(blocking=False)
@@ -172,7 +192,6 @@ def prompt(kind: str, lang: str) -> str:
 # ---- reading the answer ----
 
 _TAGS = re.compile(r"<[^>]*>")
-_FENCE = re.compile(r"```[A-Za-z0-9_-]*\s*(.*?)```", re.S)
 
 
 def _refuse_constant(_name: str):
@@ -182,9 +201,30 @@ def _refuse_constant(_name: str):
 _DECODER = json.JSONDecoder(parse_constant=_refuse_constant)
 
 
+def _fenced(text: str) -> list[str]:
+    """The contents of the ``` blocks, found with plain `find` (a regular expression with `.*?` is quadratic on an unclosed fence).
+    A language tag right after the opening fence is skipped up to a fixed length."""
+    blocks, position = [], 0
+    while len(blocks) < MAX_FENCES:
+        start = text.find("```", position)
+        if start < 0:
+            break
+        begin = start + 3
+        tag = 0
+        while tag < MAX_LANGUAGE_TAG and begin + tag < len(text) and (text[begin + tag].isalnum() or text[begin + tag] in "_-"):
+            tag += 1
+        end = text.find("```", begin + tag)
+        if end < 0:
+            break
+        blocks.append(text[begin + tag:end])
+        position = end + 3
+    return blocks
+
+
 def _object(text: str) -> dict | list | None:
     """The first JSON value of the text (a ``` block wins when there is one), else None. No repair, no guessing."""
-    candidates = [m.group(1) for m in _FENCE.finditer(text)] + [text]
+    text = text[:MAX_CONTENT]
+    candidates = _fenced(text) + [text]
     for candidate in candidates:
         start = min((i for i in (candidate.find("{"), candidate.find("[")) if i >= 0), default=-1)
         if start < 0:
@@ -213,7 +253,7 @@ def clean_number(value, low: float, high: float, digits: int = 1) -> float | Non
     if isinstance(value, bool):
         return None
     if isinstance(value, str):
-        if not re.fullmatch(r"\s*-?\d{1,9}(\.\d{1,6})?\s*", value):
+        if len(value) > 40 or not re.fullmatch(r"\s*-?\d{1,9}(\.\d{1,6})?\s*", value):
             return None
         value = float(value)
     if not isinstance(value, (int, float)) or not math.isfinite(value):
@@ -278,6 +318,13 @@ PARSERS = {"meal": parse_meal, "recipe": parse_recipe}
 # ---- the call ----
 
 
+def _retry_after(value: str | None) -> int:
+    try:
+        return max(1, min(300, int((value or "").strip())))
+    except ValueError:
+        return 10
+
+
 class Client:
     """The call to the model. `transport` stands in for the network in tests."""
 
@@ -286,7 +333,7 @@ class Client:
             transport=transport, follow_redirects=False, timeout=httpx.Timeout(TOTAL_TIMEOUT, connect=CONNECT_TIMEOUT),
             headers={"User-Agent": "Mahlwerk"}, trust_env=False,
         )
-        self._clock = clock
+        self._clock = clock  # kept for tests that look at it
 
     def close(self) -> None:
         self._http.close()
@@ -301,28 +348,65 @@ class Client:
                 {"type": "text", "text": prompt(kind, lang)}, {"type": "image_url", "image_url": {"url": url}}]}],
         }
         headers = {"Authorization": f"Bearer {settings.key}"} if settings.key else {}
-        deadline = self._clock() + TOTAL_TIMEOUT
+        headers["Accept-Encoding"] = "identity"  # the size limit counts what arrives, so nothing may be compressed
+        # The hard limit for the whole call: a timer closes the connection when the time is up, whatever the read is waiting for
+        # (httpx times each single read, a model that trickles bytes would otherwise stretch the call).
+        state = {"response": None, "expired": False}
+        lock = threading.Lock()
+
+        def expire() -> None:
+            with lock:
+                state["expired"] = True
+                response = state["response"]
+            if response is not None:
+                try:
+                    response.close()
+                except Exception:  # noqa: BLE001 - closing from another thread may raise; the read fails either way
+                    pass
+
+        timer = threading.Timer(TOTAL_TIMEOUT, expire)
+        timer.daemon = True
+        timer.start()
         try:
-            with self._http.stream("POST", settings.base + "/chat/completions", json=body, headers=headers) as response:
+            request = self._http.build_request("POST", settings.base + "/chat/completions", json=body, headers=headers,
+                                               timeout=httpx.Timeout(TOTAL_TIMEOUT, connect=CONNECT_TIMEOUT))
+            response = self._http.send(request, stream=True)
+            with lock:
+                state["response"] = response
+                late = state["expired"]
+            try:
+                if late:
+                    raise VisionError("timeout")
+                if response.status_code in (429, 503):  # the model (or the bridge in front of it) is busy: not an error of the person
+                    log.warning("image model answered HTTP %s", response.status_code)
+                    raise VisionError("busy", _retry_after(response.headers.get("retry-after")))
                 if response.status_code != 200:  # also every redirect: it is not followed
                     log.warning("image model answered HTTP %s", response.status_code)
                     raise VisionError("unavailable")
+                if response.headers.get("content-encoding", "identity").strip().lower() not in ("", "identity"):
+                    raise VisionError("unusable")
                 raw = bytearray()
-                for chunk in response.iter_bytes():
+                # the bytes as they arrive: the limit works before anything is decoded (a stand-in transport may hand over a body that is read already)
+                for chunk in ([response.content] if response.is_stream_consumed else response.iter_raw()):
                     raw += chunk
                     if len(raw) > MAX_ANSWER_BYTES:
                         log.warning("image model answer too large")
                         raise VisionError("unusable")
-                    if self._clock() > deadline:
-                        raise VisionError("timeout")
+            finally:
+                response.close()
         except VisionError:
             raise
-        except httpx.TimeoutException:
-            log.warning("image model timeout")
-            raise VisionError("timeout") from None
-        except (httpx.HTTPError, httpx.InvalidURL, OSError, ValueError):  # connection refused, TLS, invalid URL ...: the text of the exception can hold the address
-            log.warning("image model not reachable (%s)", "error")
+        except Exception as exc:  # noqa: BLE001 - see below: nothing of the exception reaches the person or the log
+            with lock:
+                expired = state["expired"]
+            if expired or isinstance(exc, httpx.TimeoutException):
+                log.warning("image model timeout")
+                raise VisionError("timeout") from None
+            # connection refused, TLS, invalid URL ...: the text of the exception can hold the address
+            log.warning("image model not reachable")
             raise VisionError("unavailable") from None
+        finally:
+            timer.cancel()
         try:
             content = json.loads(bytes(raw))["choices"][0]["message"]["content"]
             if isinstance(content, list):  # some servers answer with parts
@@ -344,4 +428,4 @@ class Vision:
 
     def __init__(self, clock: Callable[[], float] = time.time, transport: httpx.BaseTransport | None = None):
         self.client = Client(transport)
-        self.brake = Brake(clock)
+        self.brake = Brake(clock, parallel=parallel_from_env())

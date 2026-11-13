@@ -382,6 +382,9 @@ JSON object (the prompt says so; the shapes are in api-v1.md).
 | `MAHLWERK_VISION_KEY` | Optional. Sent as `Authorization: Bearer ...`. |
 | `MAHLWERK_VISION` | `on` / `off` fixes the switch (the admin area shows it as fixed). Without it the admin decides; default off. |
 | `MAHLWERK_VISION_PER_HOUR` | Photos per person and hour, default 30 (1 to 10000). |
+| `MAHLWERK_VISION_PARALLEL` | Runs at the same time on the whole server, default 2 (1 to 8). Set it to what your model can really do at once; a local model often manages one. |
+
+Keep the key (and the other settings) in an environment file readable only by the service user (mode `0600`, `EnvironmentFile=` in systemd, `env_file:` in Compose), **not** as `Environment=` in a unit file or in a world-readable Compose file: those are visible to every local user (`systemctl show`, `docker inspect`). An address with a query (`?...`), a fragment or a user name in it counts as not configured.
 
 An internal address is allowed here **on purpose**: a local model lives in your network, and only the operator can set the
 environment (unlike webhook hosts or recipe links, which people name). The card shows the name of the model, never the address
@@ -412,8 +415,8 @@ checked and clamped to sensible ranges, `NaN` and `Infinity` refused. An answer 
 text; the raw text of the model is never passed on.
 
 **Limits and brakes.** Photos: 8 MB, JPEG, PNG or WebP, at most 24 megapixels (like the label reader). Connection 5 seconds,
-whole call 90 seconds, answer at most 256 KB, redirects are not followed. Per person `MAHLWERK_VISION_PER_HOUR` photos an hour and
-**two runs at the same time** on the whole server; beyond that **429** with `Retry-After`. Only signed-in people (no access keys),
+whole call 90 seconds (a hard limit: a timer closes the connection), answer at most 256 KB counted as it arrives (`Accept-Encoding: identity`; a compressed answer is refused), redirects are not followed, only the first 64 KB of the model's text are looked at. Per person `MAHLWERK_VISION_PER_HOUR` photos an hour and
+**`MAHLWERK_VISION_PARALLEL` runs at the same time** (default two) on the whole server; beyond that **429** with `Retry-After`. When the model itself answers 429 or 503 (it is busy), the person gets **429** with the model's `Retry-After` (default 10 s) and the photo is **not** counted against the hourly allowance. Only signed-in people (no access keys),
 never the demo account.
 
 **Limits of the result.** Amounts and nutrition values of a meal are **estimates** from a picture: portion sizes, hidden fat and

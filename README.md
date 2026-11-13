@@ -395,6 +395,7 @@ All settings are environment variables (see `.env.example`). The Docker image se
 | `MAHLWERK_VISION` | off | `on` / `off` fixes the switch of the connector "Photo recognition" (the admin area shows it as fixed). Without it the admin decides; default off. |
 | `MAHLWERK_VISION_URL`, `MAHLWERK_VISION_MODEL`, `MAHLWERK_VISION_KEY` | – | The image model: the base address of an OpenAI-compatible API (e.g. `http://127.0.0.1:11434/v1`), the model name and, optionally, a key (sent as a Bearer token, never shown). An internal address is allowed on purpose. See [Photo recognition](docs/integrations.md#photo-recognition). |
 | `MAHLWERK_VISION_PER_HOUR` | `30` | Photos per person and hour for photo recognition. |
+| `MAHLWERK_VISION_PARALLEL` | `2` | Photo recognition runs at the same time on the whole server (1 to 8). Keep the key in a `0600` environment file, not in a unit file. |
 | `MAHLWERK_COOKIDOO` | off | `on` / `off` fixes the Cookidoo connector switch (the admin area shows it as fixed). Without it the admin decides; default off. |
 | `MAHLWERK_COOKIDOO_IMAGES` | off | `on` / `off` fixes the switch "Store recipe pictures" of the Cookidoo connector. Without it the admin decides; default off. |
 | `MAHLWERK_WEB_RECIPES_IMAGES` | off | The same for recipes from web pages. |

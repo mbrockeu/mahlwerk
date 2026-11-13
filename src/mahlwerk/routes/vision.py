@@ -6,7 +6,7 @@ position), sent to the model, and forgotten: nothing is stored, neither the phot
 anything of either. The result is a SUGGESTION made of checked fields (see vision.py): amounts and nutrition values are
 estimates the person reviews before anything is booked.
 
-Brakes: a number of photos per person and hour (MAHLWERK_VISION_PER_HOUR, default 30) and two runs at the same time on the
+Brakes: a number of photos per person and hour (MAHLWERK_VISION_PER_HOUR, default 30) and `MAHLWERK_VISION_PARALLEL` runs (default two) at the same time on the
 whole server; beyond them 429 with `Retry-After`.
 """
 
@@ -27,7 +27,7 @@ router = APIRouter(prefix="/api/v1/vision", dependencies=[Depends(session_user)]
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 BUSY_WAIT = 10
 STATUS = {"too_large": 413, "too_many_pixels": 413, "busy": 429, "unavailable": 501, "format": 422, "broken": 422}
-FAILURE = {"timeout": 504, "unavailable": 502, "unusable": 502}
+FAILURE = {"timeout": 504, "unavailable": 502, "unusable": 502, "busy": 429}
 
 
 class VisionState(BaseModel):
@@ -103,6 +103,9 @@ async def _run(request: Request, user: dict, kind: str, lang: str) -> dict:
         except imageproc.ImageRejected as exc:
             raise HTTPException(STATUS.get(exc.kind, 422), str(exc), headers={"Retry-After": "5"} if exc.kind == "busy" else None) from None
         except vision.VisionError as exc:
+            if exc.kind == "busy":  # the model is busy: the person did nothing wrong, the photo does not count
+                hub.brake.refund(user["id"])
+                raise HTTPException(429, str(exc), headers={"Retry-After": str(exc.retry_after or BUSY_WAIT)}) from None
             raise HTTPException(FAILURE[exc.kind], str(exc)) from None
     finally:
         hub.brake.release()
