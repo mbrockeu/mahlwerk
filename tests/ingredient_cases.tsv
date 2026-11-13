@@ -1,0 +1,108 @@
+# line <TAB> regex that the suggested food's name must match (case-insensitive); checked against the real BLS by scripts/check_ingredients.py
+200 g Mehl	^Weizen Mehl, Type 405
+2 cups flour	^Weizen Mehl, Type 405
+200 gMehl	^Weizen Mehl, Type 405
+250 g Dinkelmehl	^Dinkel Mehl
+2 Eier	^Hühnerei roh
+3 eggs	^Hühnerei roh
+2 Eigelb	Eigelb, roh
+1 Zwiebel, fein gehackt	^Speisezwiebel roh
+2 onions, chopped	^Speisezwiebel roh
+2 rote Zwiebeln	^Speisezwiebel roh
+2 Knoblauchzehen	^Knoblauch roh
+3 cloves garlic, minced	^Knoblauch roh
+1 Prise Salz	^Speisesalz
+1 tsp salt	^Speisesalz
+1 TL Zucker	^Zucker weiß
+100 g sugar	^Zucker weiß
+50 g Puderzucker	^Puderzucker
+80 g brauner Zucker	^Zucker braun
+2 Karotten	^Karotte/Möhre, roh
+2 carrots, diced	^Karotte/Möhre, roh
+100 g Butter	^Butter mild
+2 tbsp butter, melted	^Butter mild
+1 Becher Sahne	^Schlagsahne mind. 30
+200 ml heavy cream	^Schlagsahne mind. 30
+1 Becher Schmand	Sauerrahm
+1 Becher Joghurt	^Joghurt mild
+200 g plain yogurt	^Joghurt mild
+250 g Magerquark	Magerquark
+300 ml Milch	^Vollmilch frisch
+1 cup milk	^Vollmilch frisch
+1 EL Olivenöl	^Olivenöl$
+2 tbsp olive oil	^Olivenöl$
+3 EL Öl	^Rapsöl
+2 EL Sonnenblumenöl	^Sonnenblumenöl
+1 EL Essig	essig
+1 EL Balsamicoessig	^Balsamicoessig
+1 TL Senf	^Senf
+2 EL Tomatenmark	^Tomatenmark
+1 EL Ketchup	^Tomatenketchup
+2 EL Sojasauce	^Sojasauce
+1 EL Honig	Honig
+1 tbsp honey	Honig
+1 TL Backpulver	^Backpulver
+1 Päckchen Trockenhefe	Backhefe
+20 g frische Hefe	^Backhefe frisch
+2 EL Speisestärke	Stärke
+2 EL Kakao	Kakao
+100 g Haferflocken	Haferflocken
+150 g Reis	^Reis
+1 cup rice	^Reis
+200 g Spaghetti	Teigwaren
+1 Dose Tomaten (400 g)	^Tomate.*Konserve
+500 g Hähnchenbrustfilet	^Hähnchen Brustfilet, roh
+1 chicken breast	^Hähnchen Brustfilet, roh
+500 g Hackfleisch gemischt	Hackfleisch gemischt, roh
+300 g Rinderhack	^Rind Hackfleisch, roh
+1 lb ground beef	^Rind Hackfleisch, roh
+200 g Lachsfilet	Lachs
+150 g Thunfisch	^Thunfisch
+100 g Schinken	Schinken
+100 g Speck	Speck
+200 g Tofu	^Tofu
+100 g Gouda	Edamer|Gouda
+100 g Parmesan	^Parmesan
+125 g Mozzarella	^Mozzarella
+100 g Feta	^Feta
+100 g cheddar	Cheddar
+100 g Frischkäse	Frischkäse
+500 g Kartoffeln	^Kartoffel geschält, roh
+2 medium potatoes	^Kartoffel geschält, roh
+1 Süßkartoffel	^Batate/Süßkartoffel, roh
+2 Tomaten	^Tomate roh
+3 tomatoes	^Tomate roh
+1 rote Paprika	^Paprika
+1 Gurke	^Gurke roh
+1 Zucchini	^Zucchini roh
+1 Aubergine	^Aubergine roh
+200 g Spinat	^Spinat roh
+1 Brokkoli	^Broccoli roh
+1 Blumenkohl	^Blumenkohl roh
+1 Stange Lauch	^Porree/Lauch, roh
+2 Stangen Sellerie	^Bleichsellerie roh
+250 g Champignons	^Champignon roh
+1 Dose Mais	Mais
+1 Kohlrabi	^Kohlrabi roh
+1 Avocado	^Avocado roh
+2 Äpfel	^Apfel roh
+1 Banane	^Banane roh
+1 Zitrone	Zitrone
+Saft von 1 Zitrone	Zitronensaft
+juice of 1 lemon	Zitronensaft
+200 g Erdbeeren	^Erdbeere roh
+150 g blueberries	^Heidelbeere roh
+1 Birne	^Birne roh
+50 g Rosinen	Rosine
+50 g gemahlene Mandeln	Mandel
+50 g Walnüsse	^Walnuss
+1 handful almonds	Mandel
+½ Bund Petersilie	^Petersilienblatt roh
+1 bunch parsley	^Petersilienblatt roh
+1 Bund Schnittlauch	^Schnittlauch roh
+1 Bund Basilikum	^Basilikum roh
+1 TL Pfeffer	^Pfeffer schwarz
+1 Stück Ingwer	^Ingwer
+250 ml Gemüsebrühe	Bouillon
+1 EL Mayonnaise	Mayonnaise
+100 ml Weißwein	^Weißwein

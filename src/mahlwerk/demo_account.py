@@ -74,6 +74,7 @@ _classify(
     "POST /badges/seen", "POST /water/{day}", "PUT /water/{day}",
     "POST /fasting/start", "POST /fasting/stop", "PATCH /fasting/{fast_id}", "DELETE /fasting/{fast_id}",
     "PUT /activity/{day}", "POST /workouts", "PATCH /workouts/{workout_id}", "DELETE /workouts/{workout_id}", "POST /health/sync",
+    "POST /recipes/ingredients/match",  # reads a pasted ingredient list and looks up foods; writes nothing
     "POST /label-scans",  # reads a photo; writes nothing for the demo account (the debug copy of MAHLWERK_LABEL_DEBUG_DIR is skipped for it)
 )
 _classify(

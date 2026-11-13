@@ -79,6 +79,10 @@ proxy with a valid certificate. Append `?engine=wasm` to the URL to force the bu
   eat often can be saved as templates and added again from the Add sheet.
 - **Your own recipes.** Combine ingredients (also from the product catalogue) into a recipe with portions and an
   optional weight of the finished dish; it is calculated like any product and logged as "1 portion".
+- **Recipe from an ingredient list.** Paste the ingredients of a cookbook or a web page (one per line, German or
+  English: "200 g Mehl", "2 EL Olivenöl", "1 Dose Tomaten (400 g)", "½ bunch parsley"); Mahlwerk matches each line to a
+  food (your own first, then the catalogue), works out the grams (typical sizes and densities, marked as estimates) and
+  shows a check step before anything is added to the recipe. Deterministic, no AI model, no network.
 - **Barcode scanning in the browser.** Installable web app, no app store. Uses the browser's built-in
   `BarcodeDetector` where available (Chrome on Android) and a bundled WebAssembly detector everywhere else
   (Safari on iOS). No CDN, no fonts or scripts from third parties.

@@ -3,6 +3,12 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- Recipes: "Paste ingredient list" in the recipe editor (and "Calculate from ingredients" for the ingredient lines of a recipe taken from a web page). One ingredient per line, German or English; amounts (decimal comma or point, fractions, ranges, brackets), units (g, kg, oz, lb, ml, l, EL/TL, tbsp/tsp, cup, Tasse, Prise, Dose, Bund, Zehe, Scheibe, Stück ...) and names are read, converted to grams with a small table of densities and typical piece weights (always marked as estimates) and matched to foods: own foods first, then basic foods (BLS) and packaged products of the local catalogue. A check step lets the person change the food, the amount or leave a line out; lines without a match do not block the rest. Deterministic, no AI model, no network. The match is ranked so that the plain basic food wins over a prepared or compound one (Butter before Butterzwieback, Speisesalz for Salz, Hühnerei roh before Eier-Frischteigwaren), helped by a small table of the usual meaning of common ingredients (search words, no catalogue codes); a doubtful first match is listed but not pre-selected. `scripts/check_ingredients.py` measures the hit rate against a real catalogue (about 107 + 96 lines; test `test_hit_rate_against_a_real_catalogue` with `MAHLWERK_TEST_CATALOG`). The catalogue search now finds words with `ß` (Weißzucker, Süßkartoffel). New route `POST /recipes/ingredients/match` (writes nothing; a read access key and the demo account may use it); no schema change.
+
 ## [0.1.0] - 2026-11-13
 
 ### Added

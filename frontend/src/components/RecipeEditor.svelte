@@ -9,6 +9,7 @@
   import PhotoActions from './PhotoActions.svelte';
   import RecipeThumb from './RecipeThumb.svelte';
   import IngredientPicker from './IngredientPicker.svelte';
+  import IngredientPaste from './IngredientPaste.svelte';
   import Icon from './Icon.svelte';
   import Sheet from './Sheet.svelte';
 
@@ -31,6 +32,8 @@
   let loading = $state(!!recipe);
   let lost = $state(0);
   let picking = $state(false);
+  // the ingredient list that is pasted (or taken from a web page, `auto`): checked in its own sheet, then added as lines
+  let pasting = $state<{ text: string; auto: boolean } | null>(null);
   let status = $state('');
   let saving = $state(false);
   let confirming = $state(false);
@@ -103,6 +106,11 @@
       input?.focus();
       input?.select();
     }, 80);
+  }
+  function addPasted(items: { food: Food; amount: number }[]) {
+    for (const { food, amount } of items) lines.push({ key: nextKey++, food, amount: inputNumber(amount) });
+    pasting = null;
+    toast(t('pasteAdded', { n: items.length }));
   }
   const removeLine = (key: number) => { lines = lines.filter((l) => l.key !== key); };
 
@@ -190,6 +198,7 @@
       <details class="memo">
         <summary>{t('wrDraft', { host: draft.host })} <small>({draft.ingredients.length})</small></summary>
         <ul>{#each draft.ingredients as line}<li>{line}</li>{/each}</ul>
+        <button type="button" class="btn lime" onclick={() => (pasting = { text: draft.ingredients.join('\n'), auto: true })}>{t('wrCalc')}</button>
       </details>
     {/if}
 
@@ -222,6 +231,7 @@
     {/if}
     {#if lost}<p class="note warn">{t('recipeLost', { n: lost })}</p>{/if}
     <button type="button" class="btn lime" onclick={() => (picking = true)}><Icon name="plus" size={18} stroke={2.4} />{t('addIngredient')}</button>
+    <button type="button" class="btn" onclick={() => (pasting = { text: '', auto: false })} disabled={loading}>{t('pasteOpen')}</button>
 
     <div class="result" aria-live="polite">
       {#if lines.length === 0}
@@ -254,6 +264,7 @@
 </Sheet>
 
 {#if picking}<IngredientPicker onpick={addFood} onclose={() => (picking = false)} />{/if}
+{#if pasting}<IngredientPaste initial={pasting.text} auto={pasting.auto} onapply={addPasted} onclose={() => (pasting = null)} />{/if}
 
 <style>
   form { display: flex; flex-direction: column; gap: 12px; }
@@ -276,6 +287,7 @@
   .memo summary { min-height: 44px; display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 14px; cursor: pointer; padding: 0 8px; }
   .memo summary small { color: var(--quiet); font-weight: 500; }
   .memo ul { padding: 0 8px 10px; display: flex; flex-direction: column; gap: 4px; max-height: 28vh; overflow-y: auto; }
+  .memo .btn { margin: 0 8px 10px; }
   .memo li { font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
   .ings { display: flex; flex-direction: column; gap: 6px; }
   .ings li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; background: var(--paper); border-radius: 20px; padding: 6px 6px 6px 16px; min-height: 60px; }

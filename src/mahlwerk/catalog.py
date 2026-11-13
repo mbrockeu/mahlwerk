@@ -121,7 +121,8 @@ def default_bls_path(off_path: str) -> str:
 
 def fold(text: str) -> str:
     """Lower case without diacritics ('Äpfel' -> 'apfel'), like the FTS tokenizer sees words."""
-    decomposed = unicodedata.normalize("NFKD", text.casefold())
+    # 'ß' stays: the full text index keeps it too ('Weißzucker' is found by "weißzucker", not by "weisszucker")
+    decomposed = unicodedata.normalize("NFKD", "ß".join(part.casefold() for part in text.split("ß")))
     return "".join(c for c in decomposed if not unicodedata.combining(c))
 
 

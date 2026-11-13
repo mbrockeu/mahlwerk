@@ -10,6 +10,7 @@ import { recipePreview } from './nutrition';
 import { buildCookidoo } from './mockCookidoo';
 import { buildWebPages, interpretWeb, normaliseWeb, NO_RECIPE } from './mockWeb';
 import { rank as rankSuggestions } from './mockSuggest';
+import { mockMatch } from './mockIngredients';
 import type { DemoAccountState, ActivitySource, DayActivity, Workout, WorkoutIn, WorkoutKind, AccessToken, BadgeCode, Badges, Connector, RefreshState, Webhook, WebhookDelivery, WebhookIn, CatalogItem, Day, Entry, Extra, Food, FoodIn, Goal, ImportBatch, InsightFood, InsightDay, InsightMicro, Insights, NutrientCurve, Section, FoodStat, Meal, NutrientInfo, Per100, Recipe, RecipeGroup, RecipeIn, Review, SuggestFocus, Template, TopMetric } from './types';
 
 // the made-up foods follow the language of the interface: L(German, English)
@@ -115,6 +116,13 @@ const basics: CatalogItem[] = [
   basicFood('K110132', 'Kartoffel geschält, gekocht', 'Potato peeled, boiled', per(76, 0.1, 0, 16.7, 0.8, 1.7, 2, 0.01), { vitamin_c: 11, potassium: 400 }),
   basicFood('B101000', 'Vollkornbrot', 'Wholemeal bread', per(210, 1.2, 0.2, 38, 2.5, 7.5, 7.5, 1.2), { magnesium: 70, vitamin_b1: 0.2 }),
   basicFood('F503100', 'Banane roh', 'Banana raw', per(79, 0.2, 0.1, 17.4, 16, 1.8, 1.1, 0), { vitamin_c: 11, potassium: 370, magnesium: 30 }),
+  basicFood('C101100', 'Weizenmehl Type 405', 'Wheat flour type 405', per(343, 1, 0.2, 70, 0.8, 3.2, 10.6, 0.01), { magnesium: 22 }),
+  basicFood('Q110200', 'Olivenöl', 'Olive oil', per(824, 91.6, 14, 0, 0, 0, 0, 0)),
+  basicFood('G101100', 'Zwiebel roh', 'Onion raw', per(28, 0.3, 0, 4.9, 4.2, 1.8, 1.2, 0.01), { vitamin_c: 7, potassium: 160 }),
+  basicFood('H101100', 'Hühnerei Vollei roh', 'Hen egg whole raw', per(137, 9.3, 2.9, 0.4, 0.4, 0, 12.4, 0.35), { vitamin_d: 2.9 }),
+  basicFood('G300100', 'Petersilie roh', 'Parsley raw', per(53, 0.9, 0.2, 5.4, 0.9, 4.9, 4.4, 0.1), { vitamin_c: 160, potassium: 810 }),
+  basicFood('Q500100', 'Speisesalz', 'Table salt', per(0, 0, 0, 0, 0, 0, 0, 99.8)),
+  basicFood('G200100', 'Karotte roh', 'Carrot raw', per(27, 0.2, 0, 4.8, 4.8, 3.6, 0.8, 0.1), { vitamin_c: 5, potassium: 250 }),
 ];
 const adoptedBasics = new Map<string, number>();
 let catalogUpdatedAt = Math.floor(Date.now() / 1000) - 3 * 86400;
@@ -1526,6 +1534,13 @@ export async function mockRequest(method: string, path: string, body?: unknown, 
     const source = (entries.get(b.from_day) ?? []).filter((e) => !b.meal || e.meal === b.meal);
     if (!source.length) throw new ApiError(404, 'nothing to copy');
     return { entries: addCopies(r[1], source, b.to_meal) };
+  }
+  if (p === 'recipes/ingredients/match' && method === 'POST') {
+    const text = (body as { text?: string })?.text;
+    if (typeof text !== 'string') throw new ApiError(422, 'text is required');
+    const rows = text.split(/\r?\n/);
+    if (text.length > 20000 || rows.length > 200 || rows.some((l) => l.length > 300)) throw new ApiError(422, 'too long');
+    return clone(mockMatch(text, { own: foods, catalog: [...basics, ...catalog] }));
   }
   if (p === 'recipes' && method === 'GET') return clone(recipes.map(recipeOut).reverse());
   if (p === 'recipes' && method === 'POST') {

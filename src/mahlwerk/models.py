@@ -5,7 +5,7 @@ from typing import Annotated, Literal, get_args
 
 from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
 
-from . import activity, nutrients
+from . import activity, ingredients, nutrients
 
 Meal = Literal["breakfast", "lunch", "dinner", "snack"]
 Unit = Literal["g", "ml"]
@@ -795,6 +795,54 @@ class Recipe(BaseModel):
     total_weight: float | None
     items: list[RecipeItem]
     kcal_per_portion: float | None
+
+
+class IngredientsIn(BaseModel):
+    text: str = Field(description=f"one ingredient per line, German or English; at most {ingredients.MAX_LINES} lines, {ingredients.MAX_LINE} characters each, {ingredients.MAX_TEXT} in all")
+
+    @field_validator("text")
+    @classmethod
+    def _limits(cls, value: str) -> str:
+        if len(value) > ingredients.MAX_TEXT:
+            raise ValueError(f"at most {ingredients.MAX_TEXT} characters")
+        lines = value.splitlines()
+        if len(lines) > ingredients.MAX_LINES:
+            raise ValueError(f"at most {ingredients.MAX_LINES} lines")
+        if any(len(line) > ingredients.MAX_LINE for line in lines):
+            raise ValueError(f"a line may have at most {ingredients.MAX_LINE} characters")
+        return value
+
+
+class IngredientCandidate(BaseModel):
+    source: Literal["own", "openfoodfacts", "bls", "yazio"]
+    food_id: int | None = Field(None, description="the stored food; null for a catalogue item, which `POST /catalog/adopt` (source + code) turns into one")
+    code: str | None = Field(None, description="barcode (stored foods) or catalogue code")
+    name: str
+    brand: str | None
+    unit: Unit
+    per_100: Per100
+
+
+class IngredientLine(BaseModel):
+    line: int = Field(description="line number in the text, from 1")
+    text: str = Field(description="the line as it was sent")
+    quantity: float | None = Field(description="a range such as 2-3 counts as its mean; null when the line has no amount")
+    unit: str | None = Field(description="the unit as written (`EL`, `cups`, `Dose`); null without one")
+    name: str = Field(description="the ingredient without amount, unit and cutting words")
+    note: str | None = Field(description="what was left out of the name: brackets, text after a comma, 'gehackt'")
+    optional: bool
+    grams: float | None = Field(description="the amount in grams; null when it cannot be worked out")
+    ml: float | None = Field(description="the amount in ml, where it is known (a volume was given, or the density of the food is known)")
+    estimated: bool = Field(description="grams rests on an assumption: a typical piece weight, an assumed density (1 g/ml) or a spoon or cup of uncertain size")
+    basis: Literal["mass", "volume", "explicit", "piece", "unit", "none"] = Field(
+        description="where grams comes from: the given mass, a volume, a weight given in brackets, a typical piece weight, a typical weight of the unit (bunch, clove, ...), or nothing")
+    candidates: list[IngredientCandidate] = Field(description="at most 5 foods that may be meant: own foods, then basic foods, then packaged products")
+    suggestion: IngredientCandidate | None = Field(description="the best candidate (the first); null when there is none")
+
+
+class IngredientMatches(BaseModel):
+    lines: list[IngredientLine]
+    ignored: int = Field(description="non-empty lines that hold no ingredient (headings such as 'For the dough:') and are left out")
 
 
 class BadgeEarned(BaseModel):

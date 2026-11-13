@@ -1,6 +1,6 @@
 // API client. All paths are relative (`api/v1/...`) so the app works below any path prefix.
 import type {
-  Account, ActivityDayOut, CookidooAccount, CookidooBulkPreview, CookidooBulkRun, CookidooBulkScope, CookidooPicturePreview, RecipeGroup, CookidooScope, YazioPreview, YazioRun, YazioState, AccessToken, AuthStatus, AccessTokenCreated, AdminOverview, AdminUser, DemoAccountState, Badges, CatalogItem, Connector, CookidooCollection, CookidooPlanDay, CookidooPreview, RefreshState, TokenScope, Webhook, WebhookCreated, WebhookDelivery, WebhookIn, FoodDetail, FoodList, FoodSort, Granularity, NutrientCurve, DemoResult, Day, Entry, Fast, Fasting, Food, FoodIn, Goal, HistoryDay, ImportBatch, ImportRemoved, Insights, LabelScan, Me, Meal, NutrientInfo, RecentFood, Recipe, RecipeIn, Review, Settings, SettingsPatch, SuggestFocus, Suggestions, Template, WebPreview, WebPreviewIn, WeightPoint, Workout, WorkoutIn,
+  Account, ActivityDayOut, CookidooAccount, CookidooBulkPreview, CookidooBulkRun, CookidooBulkScope, CookidooPicturePreview, RecipeGroup, CookidooScope, YazioPreview, YazioRun, YazioState, AccessToken, AuthStatus, AccessTokenCreated, AdminOverview, AdminUser, DemoAccountState, Badges, CatalogItem, Connector, CookidooCollection, CookidooPlanDay, CookidooPreview, RefreshState, TokenScope, Webhook, WebhookCreated, WebhookDelivery, WebhookIn, FoodDetail, FoodList, FoodSort, Granularity, NutrientCurve, DemoResult, IngredientMatches, Day, Entry, Fast, Fasting, Food, FoodIn, Goal, HistoryDay, ImportBatch, ImportRemoved, Insights, LabelScan, Me, Meal, NutrientInfo, RecentFood, Recipe, RecipeIn, Review, Settings, SettingsPatch, SuggestFocus, Suggestions, Template, WebPreview, WebPreviewIn, WeightPoint, Workout, WorkoutIn,
 } from './types';
 
 export class ApiError extends Error {
@@ -167,6 +167,8 @@ export const api = {
   deleteTemplate: (id: number) => request<void>('DELETE', `templates/${id}`),
   applyTemplate: (id: number, to: { day: string; meal: Meal }) => request<{ entries: Entry[] }>('POST', `templates/${id}/apply`, to),
 
+  /** Reads a pasted ingredient list (nothing is stored): amounts, grams and the foods that may be meant. */
+  matchIngredients: (text: string) => request<IngredientMatches>('POST', 'recipes/ingredients/match', { text }),
   recipes: () => request<Recipe[]>('GET', 'recipes'),
   createRecipe: (recipe: RecipeIn) => request<Recipe>('POST', 'recipes', recipe),
   updateRecipe: (id: number, recipe: RecipeIn) => request<Recipe>('PUT', `recipes/${id}`, recipe),

@@ -2,11 +2,12 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from .. import nutrients
+from .. import ingredients, nutrients
 from ..auth import current_user
+from ..catalog import Catalog
 from ..db import Store
-from ..deps import get_store
-from ..models import Recipe, RecipeIn
+from ..deps import get_catalog, get_store
+from ..models import IngredientCandidate, IngredientLine, IngredientMatches, IngredientsIn, Recipe, RecipeIn
 from ..nutrition import r1, recipe_food, scale
 from .foods import build_food
 
@@ -67,6 +68,24 @@ def _existing(store: Store, recipe_id: int) -> dict:
     if row is None:
         raise HTTPException(404, "unknown recipe")
     return row
+
+
+@router.post("/recipes/ingredients/match", response_model=IngredientMatches)
+def match_ingredients(
+    body: IngredientsIn, user: dict = Depends(current_user), store: Store = Depends(get_store), catalog: Catalog = Depends(get_catalog)
+) -> IngredientMatches:
+    """Reads a pasted ingredient list (one per line, German or English): amount, unit, name, grams and the foods that may be
+    meant. Writes nothing; a recipe is made with `POST /recipes` from what the person confirms. Deterministic, no network."""
+    parsed, ignored = ingredients.parse_text(body.text)
+    own = [f for f in store.list_foods("", None, 100_000, ("recipe", "cookidoo", "web"), demo_account=bool(user.get("is_demo")))]
+    lines = []
+    for number, line in parsed:
+        found = ingredients.candidates(line.name, own, catalog, store.known_catalog, context=line.text, canned=line.canned)
+        out = [IngredientCandidate(**{k: v for k, v in vars(c).items() if k != "good"}) for c in found]
+        lines.append(IngredientLine(
+            line=number, text=line.text, quantity=line.quantity, unit=line.unit, name=line.name, note=line.note, optional=line.optional,
+            grams=line.grams, ml=line.ml, estimated=line.estimated, basis=line.basis, candidates=out, suggestion=out[0] if out and found[0].good else None))
+    return IngredientMatches(lines=lines, ignored=ignored)
 
 
 @router.get("/recipes", response_model=list[Recipe])

@@ -515,6 +515,37 @@ export interface RecipeIn {
   items: { food_id: number; amount: number }[];
 }
 
+/** A food that may be meant by a pasted ingredient line: a stored one (`food_id`) or a catalogue item that is stored when it is taken over (`source` + `code`). */
+export interface IngredientCandidate {
+  source: 'own' | 'openfoodfacts' | 'bls' | 'yazio';
+  food_id: number | null;
+  code: string | null;
+  name: string;
+  brand: string | null;
+  unit: 'g' | 'ml';
+  per_100: Per100;
+}
+
+/** One line of a pasted ingredient list, read by the server (`POST /recipes/ingredients/match`). */
+export interface IngredientLine {
+  line: number;
+  text: string;
+  quantity: number | null;
+  unit: string | null;
+  name: string;
+  note: string | null;
+  optional: boolean;
+  grams: number | null;
+  ml: number | null;
+  /** grams rests on an assumption (typical piece weight, assumed density, a cup of uncertain size). */
+  estimated: boolean;
+  basis: 'mass' | 'volume' | 'explicit' | 'piece' | 'unit' | 'none';
+  candidates: IngredientCandidate[];
+  suggestion: IngredientCandidate | null;
+}
+
+export interface IngredientMatches { lines: IngredientLine[]; ignored: number }
+
 export type BadgeCode =
   | 'first_entry' | 'streak_3' | 'streak_7' | 'streak_30' | 'streak_100' | 'scans_10' | 'scans_50' | 'first_recipe'
   | 'protein_week' | 'balanced_week' | 'fiber_5' | 'weigh_in_4' | 'full_day_10';

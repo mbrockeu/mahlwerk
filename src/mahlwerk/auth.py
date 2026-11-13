@@ -20,6 +20,7 @@ from .oidc import OidcConfig
 
 TOKEN_PREFIX = "mw_"
 READ_METHODS = ("GET", "HEAD")
+READ_ONLY_POSTS = ("/api/v1/recipes/ingredients/match",)  # POST routes that only read (the text is too long for a query string): a read access key may call them
 SESSION_COOKIE = "mahlwerk_session"
 HOST_PREFIX = "__Host-"  # the browser then insists on Secure, Path=/ and no Domain: no sibling site can plant or overwrite it
 OIDC_SESSION_DAYS = 7  # the oidc mode asks the provider again after a week of silence (a withdrawn right then ends sooner)
@@ -168,7 +169,7 @@ def _token_user(request: Request, token: str) -> dict:
     row = store.find_token(hash_token(token), require_password=request.app.state.auth.mode == "local")
     if row is None:
         raise HTTPException(401, "invalid, expired or revoked access token")
-    if row["scope"] == "read" and request.method not in READ_METHODS:
+    if row["scope"] == "read" and request.method not in READ_METHODS and request.url.path not in READ_ONLY_POSTS:
         raise HTTPException(403, "this access token may only read")
     store.touch_token(row["token_id"])
     # a token never makes its owner an admin and cannot manage tokens or webhooks (see `session_user`)

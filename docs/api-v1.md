@@ -196,6 +196,7 @@ Editing or deleting the food later does not change past days; deleting sets `foo
 | GET | `/api/v1/recipes` | – | Recipe[] | all recipes of the household, most recently changed first |
 | POST | `/api/v1/recipes` | `{name, portions, total_weight?, items:[{food_id, amount}]}` | Recipe (201) | see Recipes |
 | GET | `/api/v1/recipes/{id}` | – | Recipe | |
+| POST | `/api/v1/recipes/ingredients/match` | `{text}` | `{lines:[IngredientLine], ignored}` | reads a pasted ingredient list and looks up foods; writes nothing, see Calculating from an ingredient list |
 | PUT | `/api/v1/recipes/{id}` | as POST | Recipe | recalculates the food; diary entries logged earlier stay unchanged |
 | DELETE | `/api/v1/recipes/{id}` | – | 204 | removes recipe and food; diary copies and templates stay |
 | GET | `/api/v1/history?days=` | – | `[{day, kcal, protein, carbs, fat, logged}]` | last N days (default 14, max 366) ending today, oldest first |
@@ -294,6 +295,50 @@ Ingredients are stored as snapshots of the food at save time (`recipe_item`, in 
 - A recipe food cannot be changed with `PUT /foods/{id}` or `PUT /foods/barcode/{code}`, nor deleted with
   `DELETE /foods/{id}`: all answer `409`. It shows up in `GET /foods`, `GET /foods/recent`, and as `source: "recipe"`.
 - Recipes belong to the household like foods do: every user can see, change and delete them. `created_by` is stored.
+
+### Calculating from an ingredient list
+
+`POST /recipes/ingredients/match` turns pasted text (one ingredient per line, German or English) into suggestions for a recipe:
+the amount of each line in grams and the foods that may be meant. It is deterministic (no model) and offline, and it **writes
+nothing**; the recipe itself is made with `POST /recipes` from what the person confirms, and a catalogue hit becomes a stored food
+with `POST /catalog/adopt` first, like in the ordinary ingredient search.
+
+- Body: `{text}`. At most 200 lines, 300 characters per line, 20 000 characters in all (more: `422`). Empty lines are skipped. A
+  line that holds no ingredient (a heading such as `Für den Teig:`, only punctuation) is left out and counted in `ignored`.
+- Answer `lines`, one per ingredient line, in order: `line` (number in the text, from 1), `text` (as sent), `quantity` (a range such as
+  `2-3` counts as its mean; fractions `1/2`, `1 1/2`, `½` and decimal comma or point are read; `null` without an amount), `unit` (as
+  written), `name` (without amount, unit and cutting words such as *gehackt* or *chopped*), `note` (what was taken out: brackets,
+  text after a comma), `optional`, `grams`, `ml`, `estimated`, `basis`, `candidates` and `suggestion`.
+- Units: g, kg, mg, oz, lb, Pfund; ml, cl, dl, l, EL/tbsp (15 ml), TL/tsp (5 ml), Tasse (250 ml, estimated), cup (240 ml), fl oz, pint, quart,
+  gallon, Msp; counts such as Stück/piece, Dose/can (400 g, estimated), Bund/bunch, Zehe/clove, Scheibe/slice, Packung/pack, Prise/pinch, Stange,
+  Zweig, Blatt, Würfel, Knolle/head, stick; size words (klein/mittel/groß, small/medium/large) scale piece weights.
+- `grams` and `basis`: `explicit` a weight or volume in brackets (`1 Dose (400 g)`, `2 Eier (je 60 g)`) wins and counts per piece on a counted
+  line; `mass` a given mass; `volume` a volume times the density of the food (a small built-in table: water, milk, oils, flour, sugar, honey ...), **1 g/ml
+  is assumed otherwise** and `estimated` is `true`; `piece` a typical weight of one piece of common basics (egg, onion, garlic clove, carrot, potato,
+  tomato, apple, banana, lemon, pepper ...); `unit` a typical weight of the unit for the food (a bunch of parsley, a slice of bread, a pinch of salt);
+  `none`: `grams` is `null` and the person types the amount. `estimated` is `true` whenever the figure rests on an assumption (piece or unit weight,
+  assumed density, a cup of uncertain size). `ml` is set where a volume was given or the density is known.
+- `candidates` (at most 5, best first) and `suggestion` (the first candidate, but only when the match is confident, else `null` while the candidates are
+  still listed: the words are no more than the start of a longer word, as with "Zimt" and "Zimtsterne"). Where the foods come from and how they rank:
+  - Stored foods (own ones, and basic foods and products taken over earlier; recipes and recipes from Cookidoo or a web page never) and the basic foods
+    (BLS) of the catalogue are ranked together; packaged products (Open Food Facts) only fill up where there is no confident basic food, and are all there is when
+    nothing else matches. Catalogue items already stored as a food appear as stored foods, not twice. Without a catalogue only stored foods are found.
+  - Rank (a score, smaller is better): the word as a whole word (Butter) before the end of a compound (Speisesalz for Salz) before the start of a longer word
+    (Butterzwieback, Salzburger) before somewhere inside; a raw or plain food (name with *roh* / *raw*, or a BLS base entry whose code ends in `00`) before a prepared
+    one (*gebraten, gekocht, Püree, Sauce, Suppe, Konserve, getrocknet, mit ...*) unless the line itself names the preparation (a can, "gekocht") which then
+    wins; the food at the start of its name; fewer extra words. Foods the person made themselves (`own`, `yazio`) get a head start (but only when confident), so they come first.
+  - A small built-in table (`ingredients._USUAL`, about 200 German and English names) gives the **usual meaning** of the most common ingredients as search words in the
+    BLS style: Mehl / flour is "Weizen Mehl Type 405", Ei / egg "Hühnerei roh", Zucker / sugar white sugar, Salz "Speisesalz", Sahne / cream "Schlagsahne 30",
+    Butter, Milch "Vollmilch", Zwiebel, Knoblauch, Karotte, Tomate (a can: the preserved one), Hähnchenbrust, Hackfleisch, the common vegetables, fruit, herbs,
+    cheeses, nuts ... Names with a cut word (*Paprikaschote*, *Brokkoliröschen*, *Hähnchenbrustfilet*) are understood; a compound of another food (*Kartoffelmehl*,
+    *Kartoffelsalat*) is not. The table holds search words, **never catalogue codes**: another catalogue, or none, simply finds something else, and the general search
+    (all words of the name, then fewer, then single words without adjectives and plural endings) takes over where the table does not apply.
+  - Each candidate: `source`, `food_id` (`null` for a catalogue item), `code`, `name`, `brand`, `unit`, `per_100`.
+- Also read: `Saft` / `Schale` / `Abrieb von 1 Zitrone` (also Limette, Orange, Grapefruit; `juice of` / `zest of`; half fruits) as `Zitronensaft` etc. with a typical
+  yield (45 g juice, 6 g zest of a lemon; estimated); `Becher Sahne` / `Schmand` 200 g, `Becher Joghurt` 150 g (estimated); a unit written together with the name (`200gMehl`);
+  `Salz und Pfeffer` / `A oder B` read as the first food, the rest goes to `note`.
+- Rules like a search: needs a sign-in; a **read** access key may call it (the one POST route that only reads); the demo account may call it
+  (own data rule, nothing is written).
 
 ## Recipe pictures
 
@@ -756,6 +801,8 @@ tokens then give 401 and the token routes 404.
 | `GET /me/tokens` | Own tokens: `id, name, prefix, scope, created_at, expires_at, last_used_at, revoked_at`. No hash, no secret. |
 | `POST /me/tokens` | `{name, scope: "read"|"write", expires_in_days?}` returns 201 with the same fields and `token`, the clear text, shown only here. |
 | `DELETE /me/tokens/{id}` | Revoke (204). |
+
+A `read` token may only use GET and HEAD, with one exception: `POST /recipes/ingredients/match` (it only reads; the text is too long for a query string).
 
 A token is `mw_` plus 43 URL-safe characters (32 random bytes). Only its SHA-256 is stored. `last_used_at` is written at
 most once per minute.
