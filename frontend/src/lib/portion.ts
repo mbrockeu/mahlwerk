@@ -6,9 +6,9 @@ import type { Entry, Food } from './types';
 export const PORTION_GRAMS = 100;
 /** The brand the server gives every taken-over Cookidoo recipe. A diary entry keeps only a copy of name and brand (and survives
  *  the removal of its food), so the brand is how an entry is recognised. */
-export const COOKIDOO_BRAND = 'Cookidoo';
+const COOKIDOO_BRAND = 'Cookidoo';
 /** A recipe taken over from a web page has the brand `Web · <host>` (the same reason: an entry keeps only name and brand). */
-export const WEB_BRAND_PREFIX = 'Web \u00b7 ';
+const WEB_BRAND_PREFIX = 'Web \u00b7 ';
 
 export const isPortionFood = (food: Pick<Food, 'source'> | null | undefined) => food?.source === 'cookidoo' || food?.source === 'web';
 export const isPortionEntry = (entry: Pick<Entry, 'brand' | 'unit'> | null | undefined) =>

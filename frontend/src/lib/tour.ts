@@ -2,7 +2,7 @@
 
 export interface Rect { left: number; top: number; width: number; height: number }
 export interface Size { w: number; h: number }
-export type Side = 'top' | 'bottom' | 'left' | 'right' | 'center';
+type Side = 'top' | 'bottom' | 'left' | 'right' | 'center';
 export interface Placement {
   left: number;
   top: number;

@@ -339,13 +339,6 @@ function toFood(body: FoodIn, base?: Food): Food {
   };
 }
 
-const lastOf = (foodId: number) => {
-  const all = [...entries.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
-  for (const [, es] of all) for (const e of [...es].reverse()) if (e.food_id === foodId) return e;
-  return null;
-};
-
-
 // templates (per user) and recipes (shared), kept as snapshots like the server does
 let nextTemplateId = 1;
 const templates: { id: number; name: string; items: Entry[] }[] = [];

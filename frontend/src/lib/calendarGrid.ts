@@ -6,7 +6,7 @@ export type CalState = 'none' | 'under' | 'in_range' | 'over' | 'no_goal';
 export interface CalDay { day: string; state: CalState }
 /** One square of the grid. `inPeriod` is false for days of a month shown only to complete its weeks. */
 export interface GridCell { day: string; state: CalState; inPeriod: boolean }
-export type Row = (GridCell | null)[];
+type Row = (GridCell | null)[];
 export interface MonthBlock { month: string; weeks: Row[] }
 export interface WeekColumns {
   /** one entry per week, each with seven rows (null = outside the period) */
@@ -18,13 +18,12 @@ export interface WeekColumns {
 }
 
 /** Up to this many days the calendar is a month view, above it the compact week-column view. */
-export const MONTH_VIEW_MAX_DAYS = 56;
+const MONTH_VIEW_MAX_DAYS = 56;
 export const calendarMode = (days: number): 'months' | 'weeks' => (days <= MONTH_VIEW_MAX_DAYS ? 'months' : 'weeks');
 
 const ms = (day: string) => Date.parse(`${day}T00:00:00Z`);
 const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
 const plus = (day: string, n: number) => iso(ms(day) + n * 86400000); // UTC midnights: 86400000 is exact there
-const between = (a: string, b: string) => Math.round((ms(b) - ms(a)) / 86400000);
 
 /** 0 = first day of the week … 6, for week starts Monday (1, the default; the whole app counts weeks from Monday) or Sunday (0). */
 export function weekdayIndex(day: string, weekStart: 0 | 1 = 1): number {

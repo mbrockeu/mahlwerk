@@ -16,7 +16,7 @@ const FRACTIONS: Record<string, string> = { '½': '1/2', '¼': '1/4', '¾': '3/4
 
 const fold = (s: string) => s.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase();
 
-export function numberOf(text: string): number | null {
+function numberOf(text: string): number | null {
   const t = text.trim();
   let m = /^(\d+)\s+(\d+)\/(\d+)$/.exec(t);
   if (m) return Number(m[1]) + Number(m[2]) / Number(m[3]);

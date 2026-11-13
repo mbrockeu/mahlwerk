@@ -2,7 +2,7 @@
   import { onMount, untrack } from 'svelte';
   import Icon from './Icon.svelte';
   import { api, ApiError } from '../lib/api';
-  import { clock, fromLocalInput, hoursMinutes, toLocalInput } from '../lib/date';
+  import { clock, fromLocalInput, hoursMinutes, pad, toLocalInput } from '../lib/date';
   import { fmt, t } from '../lib/i18n';
   import { Tweened, easeOut } from '../lib/motion.svelte';
   import { toast } from '../lib/store.svelte';
@@ -55,7 +55,7 @@
   const px = $derived(50 + R * Math.cos(angle));
   const py = $derived(50 + R * Math.sin(angle));
   const hm = $derived(hoursMinutes(elapsed));
-  const seconds = $derived(String(Math.floor(elapsed) % 60).padStart(2, '0'));
+  const seconds = $derived(pad(Math.floor(elapsed) % 60));
   const goalText = $derived(current ? fmt(current.target_hours, 1) : '');
   const reason = (err: unknown) => (err instanceof ApiError ? err.status || err.message : 'error');
 

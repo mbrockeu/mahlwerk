@@ -6,7 +6,7 @@ export const CORE_KEYS = ['kcal', 'protein', 'carbs', 'fat', 'sugars', 'fiber', 
 export const MAX_PICK = 4;
 export const DEFAULT_PICK = 'fiber';
 /** Below this share of the calories with a value a figure is probably too low (same limit as the rest of the app). */
-export const LOW_COVERAGE = 0.2;
+const LOW_COVERAGE = 0.2;
 
 export interface Ref { value: number; kind: 'goal' | 'nrv' }
 export interface GoalLike { kcal: number; protein: number; carbs: number; fat: number }
@@ -74,7 +74,7 @@ export function pickGroup(key: string, group: string): PickGroup {
 export interface Section { start: string; end: string; average: number | null; coverage: number }
 export interface Pt { value: number | null; pct: number | null; coverage: number; known: boolean; low: boolean }
 /** A section has a value when there is a mean and at least some calories carry it; otherwise it is a gap, never a zero. */
-export const isKnown = (p: Section) => p.average != null && p.coverage > 0;
+const isKnown = (p: Section) => p.average != null && p.coverage > 0;
 export function pointsOf(series: Section[], ref: Ref | null): Pt[] {
   return series.map((p) => {
     const known = isKnown(p);

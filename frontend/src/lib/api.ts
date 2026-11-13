@@ -23,7 +23,7 @@ export const hooks: { unauthorized: () => void; blocked: () => void; viewChanged
 /** Which account the interface believes it is looking at (`own` or the built-in `demo` account); null until the profile is known.
  * Sent with every request; the server refuses a WRITE for another account (409 `view changed`) and names the real one in every answer. */
 export const view: { current: 'own' | 'demo' | null } = { current: null };
-export const VIEW_CHANGED = 'view changed';
+const VIEW_CHANGED = 'view changed';
 /** What the server answers (403) when the demo account tries something it may not (see demo_account.py). */
 export const DEMO_BLOCKED = 'not available in the demo account';
 
