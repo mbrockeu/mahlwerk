@@ -159,13 +159,13 @@ _PREP = {fold(w) for w in (
     "finely", "roughly", "coarsely", "cold", "warm", "room", "temperature", "crushed", "shredded", "halved", "cubed", "trimmed", "rinsed", "drained",
     "entkernt", "entsteint", "abgetropft", "abgespült", "gewaschen", "gezupft", "ca", "etwa", "circa", "ungefähr", "about", "approx", "approximately",
 )}
-_ADJECTIVES = {fold(w) for w in (
+_ADJECTIVES = {t for w in (
     "rot", "rote", "roter", "roten", "rotes", "grün", "grüne", "grüner", "grünen", "gelb", "gelbe", "gelber", "gelben", "weiß", "weiße", "weißer", "schwarz", "schwarze", "schwarzer",
     "groß", "große", "großer", "großen", "klein", "kleine", "kleiner", "kleinen", "mittelgroß", "mittelgroße", "reif", "reife", "reifer", "reifen", "bio", "frisch", "frische",
     "festkochend", "festkochende", "mehligkochend", "mehligkochende", "säuerlich", "säuerliche", "süß", "süße", "dick", "dicke", "dünn", "dünne", "ganz", "ganze", "halb", "halbe",
     "red", "green", "yellow", "white", "black", "ripe", "large", "small", "big", "medium", "whole", "organic", "fresh", "sweet", "thick", "thin", "half", "extra", "virgin",
     "unsalted", "salted", "plain", "natural", "lean", "dry", "light", "dark",
-)}
+) for t in _words(w)}
 _STOP = {"of", "von", "vom", "und", "and", "or", "oder", "mit", "with", "ohne", "without", "the", "der", "die", "das", "aus", "an", "for", "fur", "in",
          "nach", "typ", "type", "sorte", "art", "extra", "etwa", "ca", "circa"}
 _MODIFIERS = {fold(w) for w in (
@@ -559,6 +559,7 @@ milch, milk, vollmilch, whole milk: Vollmilch frisch
 fettarme milch, low fat milk: Milch fettarm frisch
 buttermilch, buttermilk: Buttermilch
 joghurt, yogurt, yoghurt, naturjoghurt, plain yogurt: Joghurt mild
+fruchtjoghurt, fruit yogurt, fruit yoghurt: Joghurt mild Fruchtzubereitung
 quark, magerquark, speisequark, quark cheese: Speisequark Magerstufe
 frischkase, cream cheese: Frischkäse
 hüttenkase, huttenkase, cottage cheese: Hüttenkäse
@@ -584,7 +585,9 @@ gelatine: Gelatine
 kakao, kakaopulver, cocoa, cocoa powder: Kakaopulver schwach entölt
 schokolade, chocolate, zartbitterschokolade, dark chocolate: Schokolade Zartbitter
 haferflocken, oats, rolled oats, oatmeal: Haferflocken
-reis, rice, basmatireis, jasminreis, long grain rice: Reis unpoliert roh
+reis, rice, basmatireis, jasminreis, long grain rice, white rice, weisser reis: Reis poliert roh
+vollkornreis, naturreis, brown rice, wholegrain rice: Reis unpoliert roh
+wildreis, wild rice: Wildreis roh
 nudeln, pasta, spaghetti, penne, fusilli, macaroni, noodles: Teigwaren eifrei roh
 brot, bread: Weizenmischbrot
 brotchen, bread roll, roll: Weizenbrötchen
@@ -596,6 +599,9 @@ schalotte, shallot: Schalotte roh
 knoblauch, knoblauchzehe, garlic, garlic clove: Knoblauch roh
 karotte, mohre, mohren, carrot, karotten: Karotte Möhre roh
 kartoffel, potato, potatoes, kartoffeln: Kartoffel geschält roh
+kartoffelpuree, kartoffelbrei, mashed potatoes, mashed potato: Kartoffelpüree
+bratkartoffeln, fried potatoes: Bratkartoffeln
+pommes, pommes frites, french fries, fries, chips potato: Pommes frites
 susskartoffel, sweet potato: Batate Süßkartoffel roh
 tomate, tomato, tomatoes, tomaten: Tomate roh
 kirschtomate, cherry tomato: Tomate roh
@@ -604,6 +610,7 @@ gurke, salatgurke, cucumber: Gurke roh
 zucchini, courgette: Zucchini roh
 aubergine, eggplant: Aubergine roh
 spinat, spinach: Spinat roh
+spargel, asparagus, grüner spargel, green asparagus, weisser spargel: Spargel roh
 brokkoli, broccoli: Broccoli roh
 blumenkohl, cauliflower: Blumenkohl roh
 lauch, porree, leek: Porree Lauch roh
@@ -612,8 +619,9 @@ champignon, champignons, pilze, mushroom, mushrooms: Champignon roh
 mais, corn, sweetcorn: Zuckermais roh
 erbsen, peas: Erbse roh
 kichererbsen, chickpeas: Kichererbse
-linsen, lentils: Linsen
-bohnen, beans, kidneybohnen, kidney beans: Bohnen
+linsen, lentils, braune linsen, brown lentils: Linse reif
+rote linsen, red lentils: Linse rot reif
+grune bohnen, green beans, brechbohnen, stangenbohnen, grune bohne, green bean: Bohne grün roh
 kurbis, pumpkin, squash: Kürbis roh
 rote bete, rote rube, beetroot, beet: Rote Rübe Rote Bete roh
 kohlrabi: Kohlrabi roh
@@ -676,21 +684,23 @@ rinderhack, rinderhackfleisch, beef mince, ground beef, minced beef: Rind Hackfl
 schweinehack, schweinehackfleisch, pork mince: Schwein Hackfleisch roh
 hahnchenbrust, hahnchenbrustfilet, hahnchen, chicken breast, chicken, huhn, hühnerbrust: Hähnchen Brustfilet roh
 putenbrust, turkey breast, pute, turkey: Pute Brust roh
-rindfleisch, beef, steak: Rind roh
-schweinefleisch, pork: Schwein roh
+rindfleisch, beef, steak, rindersteak, beef steak, rumpsteak, sirloin: Rind Steak Rücken roh
+schweinefleisch, pork, schweinekotelett, pork chop, kotelett: Schwein Kotelett roh
+schnitzel, schweineschnitzel, pork cutlet, cutlet: Schwein Schnitzel roh
 lachs, salmon, lachsfilet: Lachs roh
 thunfisch, tuna: Thunfisch
 schinken, ham: Schinken
 speck, bacon: Speck
 wurst, sausage: Bratwurst
 tofu: Tofu
-gouda, edamer: Edamer 45
+gouda: Gouda 40
+edamer: Edamer 40
 parmesan: Parmesan
 mozzarella: Mozzarella
 feta, schafskase: Feta
 cheddar: Cheddar
 emmentaler: Emmentaler
-kase, cheese, reibekase, geriebener kase, grated cheese: Gouda
+kase, cheese, reibekase, geriebener kase, grated cheese: Gouda 40
 wasser, water, leitungswasser: Trinkwasser
 wein, wine, weisswein, white wine: Weißwein trocken
 rotwein, red wine: Rotwein
@@ -729,14 +739,49 @@ def usual_query(name: str) -> str | None:
 # --- the finding of foods ------------------------------------------------------------------------------------------------
 
 # words that make a food a prepared one: a name with one of them ranks behind the plain one unless the line says it too
-_PREPARED = {fold(w) for w in (
+_PREPARED = {t for w in (
     "gebraten", "gekocht", "gedünstet", "geschmort", "gegrillt", "gebacken", "pochiert", "frittiert", "überbacken", "gratiniert", "paniert", "gedämpft",
     "getrocknet", "tiefgefroren", "konserve", "püree", "pürierte", "sauce", "soße", "sosse", "suppe", "pulver", "kuchen", "torte", "salat", "brei",
     "gesüßt", "geräuchert", "gepökelt", "eingelegt", "gesalzen", "mit", "in", "gefüllt", "gesäuert", "fertigprodukt", "gezuckert", "gargezogen",
     "fried", "boiled", "stewed", "braised", "grilled", "baked", "poached", "deep-fried", "gratinated", "breaded", "dried", "deep-frozen", "canned",
     "puree", "soup", "powder", "brotaufstrich", "aufstrich", "dip", "füllung", "creme", "marinade", "spread", "filling", "cream", "cake", "salad", "sweetened", "smoked", "salted", "pickled", "steamed", "roasted", "cooked", "with", "filled", "sugared",
-)}
-_PREPARED.discard(fold("gesäuert"))  # "Butter mild gesäuert" is the plain butter
+) for t in _words(w)}
+_PREPARED.discard("gesauert")  # "Butter mild gesäuert" is the plain butter
+
+# words that say the same about the preparation, in both languages: a line that says one of them is satisfied by a name with any of them
+_SAME_PREPARATION = [
+    ("gekocht", "boiled", "cooked", "boil"),
+    ("gebraten", "fried", "pan-fried", "pan fried", "sautéed", "sauteed"),
+    ("gebraten", "gebacken", "gegrillt", "geschmort", "roasted", "baked", "grilled", "roast", "überbacken"),
+    ("gedämpft", "gedünstet", "gekocht", "steamed", "stewed"),
+    ("geschmort", "gedünstet", "braised", "stewed"),
+    ("püree", "puree"),
+    ("pochiert", "poached"),
+    ("getrocknet", "dried"),
+    ("tiefgefroren", "deep-frozen", "frozen", "gefroren"),
+    ("konserve", "canned", "tinned"),
+    ("geräuchert", "smoked"),
+    ("frittiert", "deep-fried", "fried"),
+    ("paniert", "breaded"),
+]
+_SAME_WORDS = [{t for w in group for t in _words(w)} for group in _SAME_PREPARATION]
+_PREPARED |= set().union(*_SAME_WORDS)
+_PREPARED |= {"eintopf", "auflauf"}
+_PREPARED.discard("deep")
+_DISH_WORDS = {"suppe", "soup", "salat", "salad", "sauce", "sosse", "soße", "soße", "kuchen", "cake", "torte", "eintopf", "stew", "auflauf", "pie", "pizza", "burger"}
+
+
+def _expand(context: set[str]) -> tuple[set[str], bool]:
+    """The words of a line plus every word that says the same about the preparation; and whether the line names a preparation at all."""
+    expanded = set(context)
+    named = False
+    for group in _SAME_WORDS:
+        if any(c in group or any(len(w) >= 5 and c.startswith(w) for w in group) for c in context):
+            expanded |= group
+            named = True
+    return expanded, named
+
+
 _RAW = {"roh", "raw"}
 _USER_SOURCES = ("own", "yazio")
 USER_BONUS = 4.0
@@ -767,8 +812,8 @@ def _word_class(word: str, tokens: list[str]) -> float | None:
     return best
 
 
-def _score(words: list[str], names: list[str], context: set[str], code: str | None, source: str) -> tuple[float, bool] | None:
-    """(score, confident) of a food for the search words; smaller is better. None when a word does not occur in any of the names."""
+def _score(words: list[str], names: list[str], context: set[str], code: str | None, source: str, said: frozenset[str] = frozenset()) -> tuple[float, bool, bool] | None:
+    """(score, confident, says the preparation of the line) of a food for the search words; smaller is better. None when a word does not occur in any of the names."""
     best = None
     for name in names:
         tokens = _tokens(name)
@@ -779,18 +824,32 @@ def _score(words: list[str], names: list[str], context: set[str], code: str | No
             continue
         cls = sum(classes)  # type: ignore[arg-type]
         prepared = [t for t in tokens if t in _PREPARED]
-        penalty = sum(1 for t in prepared if not any(c.startswith(t) or t.startswith(c) for c in context if len(c) >= 4) and t not in context)
-        credit = sum(1 for t in prepared if t in context or any(len(c) >= 4 and (c.startswith(t) or t.startswith(c)) for c in context))
+        penalty = sum((2 if t.endswith("pulver") else 1) for t in prepared if t not in context)
+        penalty += sum(2 for t in tokens if t.endswith("pulver") and t not in _PREPARED and t not in context)  # "Instantpulver": the dry mix
+        credit = sum(1 for t in prepared if t in context)
+        exact = sum(1 for t in prepared if t in said)  # the very word of the line counts more than one that says the same
+        dish = any(t in _DISH_WORDS and t not in ('suppe', 'soup') and t not in context for t in tokens)  # a soup, a stew, a cake: not the plain food
         raw = -2.0 if any(t in _RAW for t in tokens) else 0.0
         base = -1.0 if source == "bls" and code and code.endswith("00") else 0.0
         extra = max(0, len(tokens) - len(words)) * 0.2
         first = -1.0 if any(tokens[0] == w or (tokens[0].startswith(w) and len(tokens[0]) - len(w) <= 3) for w in words) else 0.0  # the food comes first in its name
-        score = 2 * cls + 3 * penalty - 4 * credit + raw + base + extra + first
+        score = 2 * cls + 3 * penalty - 4 * credit - 3 * exact + raw + base + extra + first
         if best is None or score < best[0]:
-            best = (score, cls <= GOOD_LIMIT * len(words))
+            best = (score, cls <= GOOD_LIMIT * len(words) and not dish, credit > 0)
     if best is None:
         return None
-    return (best[0] - (USER_BONUS if source in _USER_SOURCES and best[1] else 0.0), best[1])
+    return (best[0] - (USER_BONUS if source in _USER_SOURCES and best[1] else 0.0), best[1], best[2])
+
+
+_COLOURS = ("grun", "rot", "weiß", "schwarz", "gelb", "braun", "blau", "green", "red", "white", "black", "yellow", "brown", "blue")
+
+
+def _colour(token: str) -> str | None:
+    """'grüne' -> 'grun', 'rote' -> 'rot': the colour a word names (a colour can make a food of its own: grüne Bohnen, rote Linsen)."""
+    for stem in _COLOURS:
+        if token == stem or (token.startswith(stem) and token[len(stem):] in ("e", "er", "en", "es", "em")):
+            return stem
+    return None
 
 
 def variants(name: str) -> list[list[str]]:
@@ -805,6 +864,10 @@ def variants(name: str) -> list[list[str]]:
             result.append(tokens)
 
     add(full)
+    coloured = [_colour(w) or w for w in full if not w.isdigit() and w not in _STOP and w not in _PREP and w not in _PREPARED]
+    if any(_colour(w) for w in full):  # "grüne Bohnen" -> "grun bohnen" before the colour is dropped
+        add(coloured)
+    core = [w for w in core if w not in _PREPARED] or core
     add(core)
     for n in range(len(core) - 1, 0, -1):
         add(core[:n])
@@ -873,34 +936,43 @@ def candidates(name: str, own_foods: list[dict], catalog: Any, skip: Any = None,
     context_words = set(_tokens(context))
     if canned:
         context_words |= {"konserve", "canned"}
-    says_prepared = any(len(c) >= 4 and any(c.startswith(t) or t.startswith(c) for t in _PREPARED) for c in context_words)
+    said = frozenset(context_words | {t for t in _PREPARED if len(t) >= 5 and any(c.startswith(t) for c in context_words)})  # "gebratenes" says "gebraten"
+    context_words, says_prepared = _expand(context_words)
+    name_tokens = _tokens(name)
+    colours = {c for w in name_tokens if (c := _colour(w))} | (set(name_tokens) & _DISH_WORDS)  # words that make a food of its own
     steps: list[list[str]] = []
-    if (usual := usual_query(name)) is not None:
+    table_steps = 0
+    if not _DISH_WORDS & set(name_tokens) and (usual := usual_query(name)) is not None:
         usual_words = _tokens(usual)
         if canned or says_prepared:  # the line names the preparation (a can, "gekocht"): "Tomate roh" becomes "Tomate"
             usual_words = [w for w in usual_words if w not in _RAW] or usual_words
         steps.append(usual_words)
+        table_steps = 1
     steps += [t for t in variants(name) if t not in steps]
 
     def stored(tokens: list[str]) -> list[tuple[float, int, Candidate]]:
         found = []
         for index, food in enumerate(own_foods):
             data = food["data"]
-            if (hit := _score(tokens, [data.get("name") or ""], context_words, food.get("code"), food["source"])) is not None:
-                found.append((hit[0], index, _from_food(food, hit[1])))
+            if (hit := _score(tokens, [data.get("name") or ""], context_words, food.get("code"), food["source"], said)) is not None:
+                found.append((hit[0], index, _from_food(food, hit[1] and (hit[2] or not says_prepared))))
         return found
 
     # stored foods are looked for with every form of the name, the first form that finds one wins (a food made by the person is not
     # named like the usual meaning: "Butter selbstgemacht"); the basic foods of the catalogue the same way, in their own pass
     own_hits = next((hits for tokens in steps if (hits := stored(tokens))), [])
-    for tokens in steps:
+    for position, tokens in enumerate(steps):
         scored = list(own_hits)
+        loose = position >= table_steps and bool(colours) and not colours & set(tokens)  # "grüne Bohnen" found as "Bohnen", "Chicken soup" as "Chicken": no sure match
         if len(" ".join(tokens)) >= 2:
             for index, item in enumerate(catalog.search(" ".join(tokens), BASIC_POOL, "bls", skip=skip), start=len(own_foods)):
-                if (hit := _score(tokens, [item["name"], item.get("name_en") or ""], context_words, item["code"], "bls")) is not None:
-                    scored.append((hit[0], index, _from_item(item, hit[1])))
+                if (hit := _score(tokens, [item["name"], item.get("name_en") or ""], context_words, item["code"], "bls", said)) is not None:
+                    scored.append((hit[0], index, _from_item(item, hit[1] and (hit[2] or not says_prepared))))
         if len(scored) > len(own_hits) or (own_hits and tokens is steps[-1]):
             found = [c for _, _, c in sorted(scored, key=lambda r: (r[0], r[1]))][:MAX_CANDIDATES]
+            if loose:
+                for c in found:
+                    c.good = False
             if len(found) < MAX_CANDIDATES and not found[0].good:  # packaged products only where the basic foods give no confident answer
                 found += _packaged(catalog, tokens, MAX_CANDIDATES - len(found), skip, context_words)
             return found

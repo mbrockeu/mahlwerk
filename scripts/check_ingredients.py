@@ -4,7 +4,7 @@
 
 FOLDER holds `catalog.db` and `catalog-bls.db` (default: the catalogue next to the default database, see MAHLWERK_DB). Every line of
 tests/ingredient_cases.tsv (the table was tuned on it) and tests/ingredient_cases_heldout.tsv (it was not) is read and matched with an empty list of own foods; the suggested food (or, without a suggestion, none)
-must match the regular expression of the line (`-`: no suggestion is the right answer, the food is not in the BLS). Prints the rate and every miss. Exit code 1 below 90 %."""
+must match the regular expression of the line (`-`: no suggestion is the right answer, the food is not in the BLS; `?regex`: the food or no suggestion, a wrong food never). tests/ingredient_cases_meals.tsv holds components of finished meals as a photo model names them (goal 85 %). Prints the rate and every miss. Exit code 1 below 90 %."""
 
 import re
 import sys
@@ -17,6 +17,7 @@ from mahlwerk.catalog import Catalog, default_path  # noqa: E402
 
 CASES = Path(__file__).resolve().parents[1] / "tests" / "ingredient_cases.tsv"
 HELD_OUT = CASES.with_name("ingredient_cases_heldout.tsv")
+MEALS = CASES.with_name("ingredient_cases_meals.tsv")
 
 
 def load_cases(path: Path = CASES) -> list[tuple[str, str]]:
@@ -40,7 +41,12 @@ def run(catalog: Catalog, show_all: bool = False, path: Path = CASES) -> tuple[i
     for text, expected in cases:
         _, pick, found = suggestion(catalog, text)
         name = pick.name if pick else None
-        ok = (name is None) if expected == "-" else name is not None and re.search(expected, name, re.I) is not None
+        if expected == "-":
+            ok = name is None
+        elif expected.startswith("?"):  # the food or no suggestion; a wrong food never
+            ok = name is None or re.search(expected[1:], name, re.I) is not None
+        else:
+            ok = name is not None and re.search(expected, name, re.I) is not None
         hits += ok
         if not ok:
             misses.append(f"{text!r}: got {name!r} (expected /{expected}/); candidates: {[c.name for c in found]}")
@@ -57,7 +63,7 @@ if __name__ == "__main__":
     if catalog.info()["bls"]["products"] == 0:
         sys.exit(f"no basic foods (BLS) found next to {path}")
     rate = 1.0
-    for path in (CASES, HELD_OUT):
+    for path in (CASES, HELD_OUT, MEALS):
         hits, total, misses = run(catalog, "--all" in sys.argv, path)
         print(f"{path.name}: {hits}/{total} = {100 * hits / total:.1f} % sensible first suggestions")
         print(*misses, sep="\n")

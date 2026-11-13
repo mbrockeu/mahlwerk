@@ -1,0 +1,147 @@
+# components of finished meals, named the way a photo model names them; checked against the real BLS by scripts/check_ingredients.py
+# a regex must match the suggested name; `-`: no suggestion is the right answer (nothing fitting in the BLS); `?regex`: the regex or no suggestion (a wrong food never)
+150 g Reis gekocht	^Reis poliert, gekocht$
+150 g Cooked rice	^Reis poliert, gekocht$
+180 g Basmatireis, gekocht	^Reis poliert, gekocht$
+150 g Reis	^Reis poliert, roh
+200 g Kartoffeln gekocht	^Kartoffel geschält, gekocht
+200 g Boiled potatoes	^Kartoffel geschält, gekocht
+200 g Bratkartoffeln	Bratkartoffeln
+150 g Pommes frites	^Pommes frites
+200 g Mashed potatoes	Kartoffelpüree
+200 g Kartoffelpüree	Kartoffelpüree
+200 g Nudeln gekocht	Teigwaren.* gekocht|Eierteigwaren gekocht
+180 g Spaghetti gekocht	Teigwaren.* gekocht|Eierteigwaren gekocht
+180 g Cooked pasta	Teigwaren.* gekocht|Eierteigwaren gekocht
+100 g Couscous	?Couscous
+120 g Quinoa gekocht	^Quinoa weiß, gekocht
+120 g Green beans	^Bohne grün
+120 g Grüne Bohnen	^Bohne grün
+100 g Grüne Bohnen, gekocht	^Bohne grün, gekocht
+150 g Brokkoli gekocht	^Broccoli gekocht
+150 g Steamed broccoli	Broccoli (gekocht|gedünstet|gedämpft)
+100 g Karotten gekocht	^Karotte/Möhre, gekocht
+100 g Gedünsteter Spinat	^Spinat (gedünstet|gekocht)
+150 g Zucchini gebraten	?^Zucchini (gebraten|gebacken|geschmort|gedünstet)
+150 g Roasted vegetables	?Gemüse
+120 g Erbsen gekocht	?Erbse
+60 g Mais	Mais|Zuckermais
+100 g Blumenkohl gekocht	^Blumenkohl gekocht
+120 g Gebratenes Hähnchenfilet	^Hähnchen Brustfilet, gebraten
+120 g Fried chicken breast	^Hähnchen Brustfilet, gebraten
+120 g Grilled chicken breast	^Hähnchen Brustfilet, gegrillt
+150 g Gebratene Hähnchenbrust	^Hähnchen Brustfilet, gebraten
+150 g Rindersteak gebraten	?Rind.*gebraten
+150 g Schweineschnitzel paniert	?Schwein.*Schnitzel|Schnitzel
+100 g Bratwurst	?Bratwurst
+100 g Currywurst	Currywurst
+80 g Frikadelle	?Frikadelle
+120 g Lachs gebraten	^Lachs.*gebraten
+120 g Baked salmon	Lachs.*(gebacken|gebraten|gegart)
+100 g Thunfisch aus der Dose	^Thunfisch.*Konserve
+120 g Garnelen gekocht	?Garnele|Krabbe
+100 g Fischstäbchen	?Fischstäbchen
+100 g Fried egg	Hühnerei gebraten
+1 Spiegelei	Spiegelei|^Hühnerei gebraten
+2 Eier gekocht	^Hühnerei gekocht
+2 Boiled eggs	^Hühnerei gekocht
+2 Rühreier	?Hühnerei|Rührei
+1 Omelett	?Omelett|Hühnerei
+50 g Vollkornbrot	^Vollkornbrot$|^Vollkornbrot
+2 Scheiben Toast	?Toast
+60 g Brötchen	Brötchen
+1 Vollkornbrötchen	^Vollkornbrötchen
+40 g Käse	Käse|Gouda|Edamer|Schnittkäse
+30 g Gouda	^Gouda
+30 g Emmentaler	^Emmentaler
+50 g Mozzarella	^Mozzarella
+30 g Salami	?Salami
+30 g Kochschinken	?Schinken
+20 g Leberwurst	?Leberwurst
+20 g Butter	^Butter mild
+200 g Tomatensalat	?Tomatensalat|Tomate
+100 g Gemischter Salat	?Salat
+100 g Green salad	?Salat
+80 g Gurkensalat	?Gurke
+100 g Coleslaw	?Kraut
+50 g Salat	?Salat
+50 g Eisbergsalat	^Eisbergsalat roh
+150 g Tomatensuppe	^Tomatensuppe
+250 g Gemüsesuppe	^Gemüsesuppe
+250 g Chicken soup	?Hühnersuppe|Hühner.*suppe|Suppe
+150 g Bolognesesauce	?Bologne
+50 g Tomatensauce	?Tomatensauce|Tomate
+20 g Ketchup	^Tomatenketchup
+20 g Mayonnaise	Mayonnaise
+50 g Hummus	^Hummus
+60 g Guacamole	Guacamole
+30 g Sahnesauce	?Sahne
+1 Apfel	^Apfel roh
+1 Banane	^Banane roh
+100 g Erdbeeren	^Erdbeere roh
+100 g Weintrauben	^Weintraube roh
+100 g Blueberries	^Heidelbeere roh
+100 g Orange	^Orange roh
+100 g Melon	?Melone
+30 g Müsli	^Müsli
+150 g Joghurt	^Joghurt
+150 g Fruchtjoghurt	Joghurt.*Frucht
+200 g Haferbrei	?Haferbrei|Haferflocken
+40 g Haferflocken	^Haferflocken
+30 g Honig	Honig
+20 g Marmelade	?Marmelade|Konfitüre
+20 g Nuss-Nougat-Creme	?Nuss-Nougat
+30 g Erdnussbutter	?Erdnuss
+30 g Mandeln	Mandel
+100 g Pizza Margherita	?Pizza
+150 g Burger	?burger
+100 g Pfannkuchen	?Pfannkuchen|Eierkuchen
+1 Stück Apfelkuchen	^Apfelkuchen
+1 Stück Käsekuchen	?Käsekuchen|Quarkkuchen
+1 Croissant	?Croissant
+1 Stück Schokoladenkuchen	?Schokolade|Kuchen
+20 g Schokolade	Schokolade
+200 ml Orangensaft	^Orangensaft
+200 ml Apfelsaft	^Apfelsaft
+200 ml Milch	^Vollmilch
+250 ml Kaffee	?Kaffee
+250 ml Tee	?Tee
+330 ml Cola	?Cola|Limonade
+500 ml Water	^(Trinkwasser|Wasser|Mineralwasser)
+# a further 36 lines, written after the first 108 had been tuned on
+100 g Rotkohl gekocht	?Rotkohl
+120 g Gedünstete Zucchini	?Zucchini
+80 g Kidneybohnen	?Kidney|Bohne
+100 g Rote Linsen gekocht	^Linse rot
+100 g Weißer Spargel	?Spargel
+150 g Roasted potatoes	?Kartoffel
+150 g Baked potato	?Kartoffel
+100 g Gebratene Champignons	?Champignon
+120 g Gegrillter Lachs	?Lachs
+100 g Pork chop	?Schwein
+150 g Beef steak	?Rind
+120 g Gebratener Tofu	?Tofu
+100 g Roasted turkey breast	?Pute
+2 Scheiben Vollkorntoast	?Toast|Vollkorn
+40 g Roggenbrot	?Roggenbrot|Roggenmischbrot
+1 Laugenbrezel	?Brezel
+40 g Gouda in Scheiben	^Gouda
+30 g Camembert	?Camembert
+100 g Hüttenkäse	?Hüttenkäse
+100 g Naturjoghurt	^Joghurt
+100 g Quark mit Früchten	?Quark
+150 g Rührei	?Rührei|Hühnerei
+1 Ei hart gekocht	?Hühnerei gekocht
+100 g Gurkensalat	?Gurke
+150 g Kartoffelsalat	?Kartoffelsalat
+100 g Caesar salad	?Salat
+200 ml Gemüsesuppe	^Gemüsesuppe
+200 g Kürbissuppe	?Kürbis
+50 g Pesto	?Pesto
+100 ml Orange juice	^Orangensaft
+1 Stück Schwarzwälder Kirschtorte	?Kirsch|Torte
+30 g Cornflakes	?Cornflakes|Getreide|Müsli
+100 g Ananas	^Ananas roh
+100 g Mango	?Mango
+1 Kiwi	?Kiwi
+150 g Wassermelone	?Melone

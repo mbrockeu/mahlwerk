@@ -440,6 +440,16 @@ def test_canned_lines():
     assert not parsed("2 Tomaten").canned
 
 
+def test_preparation_words_of_both_languages_say_the_same():
+    expanded, named = ingredients._expand({"cooked", "rice"})
+    assert named and {"gekocht", "boiled"} <= expanded
+    expanded, named = ingredients._expand({"gebratenes", "huhn"})
+    assert named and {"gebraten", "fried"} <= expanded
+    assert ingredients._expand({"rice"}) == ({"rice"}, False)
+    assert ingredients._colour("grüne") is None and ingredients._colour("grune") == "grun" and ingredients._colour("weiße") == "weiß" and ingredients._colour("green") == "green"
+    assert ["grun", "bohnen"] in ingredients.variants("grüne Bohnen")
+
+
 def test_the_usual_meaning_table():
     assert ingredients.usual_query("Eier") == "Hühnerei roh" == ingredients.usual_query("eggs")
     assert ingredients.usual_query("Mehl") == ingredients.usual_query("flour") == "Weizen Mehl Type 405"
@@ -480,11 +490,22 @@ TRICKY_ROWS = [  # names as the BLS writes them, with the neighbours that fool a
     ["G560900", "Tomate Konserve", "Tomato canned", "19", "1", "0.2", "3"],
     ["R161200", "Tomaten passiert/Tomatenpüree", "Tomato puree", "30", "1.5", "0.3", "5"],
     ["V416100", "Hähnchen Brustfilet, roh", "Chicken breast fillet, raw", "110", "23", "1.5", "0"],
-    ["V416182", "Hähnchen Brustfilet, gebraten ohne Fett (Pfanne)", "Chicken breast fillet, fried", "150", "30", "3", "0"],
     ["F601100", "Zitrone roh", "Lemon raw", "35", "0.7", "0.5", "3"],
     ["F601600", "Zitronensaft", "Lemon juice", "25", "0.4", "0.1", "2.5"],
     ["N310400", "Zitronenlimonade", "Carbonated lemonade", "40", "0", "0", "10"],
     ["G490100", "Knoblauch roh", "Garlic raw", "140", "6", "0.1", "28"],
+    ["G710100", "Bohne grün, roh", "Bean green, raw", "30", "2", "0.2", "5"],
+    ["G710132", "Bohne grün, gekocht", "Bean green, boiled", "30", "2", "0.2", "5"],
+    ["X900100", "Weinbrand-Bohnen", "Brandy beans", "470", "5", "30", "40"],
+    ["X900200", "Weiße-Bohnen-Eintopf", "White bean stew", "90", "5", "2", "12"],
+    ["C352000", "Reis poliert, roh", "Rice polished, raw", "350", "7", "0.6", "77"],
+    ["C352032", "Reis poliert, gekocht", "Rice polished, boiled", "120", "2.5", "0.2", "27"],
+    ["C351000", "Reis unpoliert, roh", "Rice unpolished, raw", "350", "7", "2", "74"],
+    ["C351032", "Reis unpoliert, gekocht", "Rice unpolished, boiled", "130", "2.7", "0.9", "28"],
+    ["M402500", "Gouda mind. 40 % Fett i. Tr.", "Gouda min. 40 % fat", "350", "25", "28", "0"],
+    ["M401600", "Edamer mind. 45 % Fett i. Tr.", "Edam min. 45 % fat", "340", "25", "27", "0"],
+    ["V416182", "Hähnchen Brustfilet, gebraten ohne Fett (Pfanne)", "Chicken breast fillet, fried", "150", "30", "3", "0"],
+    ["V416172", "Hähnchen Brustfilet, gegrillt", "Chicken breast fillet, grilled", "140", "30", "2", "0"],
     ["D610500", "Zimtsterne (Eiklarmasse)", "Cinnamon stars (meringue)", "430", "7", "17", "60"],
     ["S111100", "Puderzucker", "Icing sugar", "400", "0", "0", "100"],
 ]
@@ -493,7 +514,7 @@ TRICKY_CASES = [  # (line, the name that must be suggested; None: nothing may be
     ("1 Prise Salz", "Speisesalz/Siedesalz/Tafelsalz"), ("1 tsp salt", "Speisesalz/Siedesalz/Tafelsalz"), ("Salz und Pfeffer", "Speisesalz/Siedesalz/Tafelsalz"),
     ("2 Eier", "Hühnerei roh"), ("3 eggs", "Hühnerei roh"),
     ("200 g Mehl", "Weizen Mehl, Type 405"), ("2 cups flour", "Weizen Mehl, Type 405"), ("200 gMehl", "Weizen Mehl, Type 405"),
-    ("1 Zwiebel, fein gehackt", "Speisezwiebel roh"), ("2 onions", "Speisezwiebel roh"), ("1 Zwiebel, gekocht", "Speisezwiebel gekocht"), ("2 gekochte Karotten", "Karotte/Möhre, roh"),
+    ("1 Zwiebel, fein gehackt", "Speisezwiebel roh"), ("2 onions", "Speisezwiebel roh"), ("1 Zwiebel, gekocht", "Speisezwiebel gekocht"), ("2 gekochte Karotten", None),
     ("2 Karotten", "Karotte/Möhre, roh"), ("2 carrots", "Karotte/Möhre, roh"),
     ("1 TL Zucker", "Zucker weiß (Raffinadezucker/Weißzucker)"), ("100 g sugar", "Zucker weiß (Raffinadezucker/Weißzucker)"),
     ("50 g Puderzucker", "Puderzucker"), ("80 g brauner Zucker", "Zucker braun (Kandisfarin/Rohzucker)"),
@@ -502,6 +523,13 @@ TRICKY_CASES = [  # (line, the name that must be suggested; None: nothing may be
     ("500 g Hähnchenbrustfilet", "Hähnchen Brustfilet, roh"), ("1 chicken breast", "Hähnchen Brustfilet, roh"),
     ("Saft von 1 Zitrone", "Zitronensaft"), ("juice of 1 lemon", "Zitronensaft"), ("1 Zitrone", "Zitrone roh"),
     ("2 Knoblauchzehen", "Knoblauch roh"), ("3 cloves garlic", "Knoblauch roh"),
+    ("120 g Grüne Bohnen", "Bohne grün, roh"), ("100 g Green beans", "Bohne grün, roh"), ("100 g Grüne Bohnen, gekocht", "Bohne grün, gekocht"),
+    ("100 g Weiße Bohnen", None),  # a colour can make a food of its own: not "Bohne grün"
+    ("150 g Reis", "Reis poliert, roh"), ("180 g Reis gekocht", "Reis poliert, gekocht"), ("150 g Cooked rice", "Reis poliert, gekocht"), ("150 g Vollkornreis", "Reis unpoliert, roh"),
+    ("30 g Gouda", "Gouda mind. 40 % Fett i. Tr."), ("30 g Edamer", "Edamer mind. 45 % Fett i. Tr."),
+    ("120 g Fried chicken breast", "Hähnchen Brustfilet, gebraten ohne Fett (Pfanne)"), ("120 g Gebratenes Hähnchenfilet", "Hähnchen Brustfilet, gebraten ohne Fett (Pfanne)"),
+    ("120 g Grilled chicken breast", "Hähnchen Brustfilet, gegrillt"), ("120 g Hähnchenbrust roh", "Hähnchen Brustfilet, roh"),
+    ("250 g Chicken soup", None),  # a soup is not the chicken
     ("1 TL Zimt", None), ("Drachenschuppen", None),
 ]
 
@@ -531,7 +559,7 @@ def test_a_confident_suggestion_may_have_alternatives_that_are_not(client, trick
 def test_sharp_s_is_found_in_the_catalogue(tricky, tmp_path):
     from mahlwerk.catalog import Catalog
     catalog = Catalog(str(tmp_path / "catalog.db"))
-    assert [i["name"] for i in catalog.search("weiß", 5, "bls")] == ["Zucker weiß (Raffinadezucker/Weißzucker)"]
+    assert "Zucker weiß (Raffinadezucker/Weißzucker)" in [i["name"] for i in catalog.search("weiß", 5, "bls")]
     assert [i["name"] for i in catalog.search("Weißzucker", 5, "bls")] == ["Zucker weiß (Raffinadezucker/Weißzucker)"]
 
 
@@ -549,7 +577,7 @@ def test_own_foods_still_come_first_and_a_stored_basic_food_is_ranked_like_the_o
 
 def test_hit_rate_against_a_real_catalogue():
     """Skipped without the real catalogues: set MAHLWERK_TEST_CATALOG to a folder (or catalog.db) that holds catalog.db and
-    catalog-bls.db. Needs at least 90 % sensible first suggestions on both lists (scripts/check_ingredients.py)."""
+    catalog-bls.db. Needs at least 90 % sensible first suggestions on the two ingredient lists and 85 % on the list of meal components (scripts/check_ingredients.py)."""
     import importlib.util
     import os
     from pathlib import Path
@@ -566,6 +594,6 @@ def test_hit_rate_against_a_real_catalogue():
     spec = importlib.util.spec_from_file_location("check_ingredients", script)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    for cases in (module.CASES, module.HELD_OUT):
+    for cases, goal in ((module.CASES, 0.9), (module.HELD_OUT, 0.9), (module.MEALS, 0.85)):
         hits, total, misses = module.run(catalog, path=cases)
-        assert hits / total >= 0.9, f"{cases.name}: {hits}/{total}\n" + "\n".join(misses)
+        assert hits / total >= goal, f"{cases.name}: {hits}/{total}\n" + "\n".join(misses)
