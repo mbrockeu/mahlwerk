@@ -1,5 +1,8 @@
 # Mahlwerk
 
+[![CI](https://github.com/mbrockeu/mahlwerk/actions/workflows/ci.yml/badge.svg)](https://github.com/mbrockeu/mahlwerk/actions/workflows/ci.yml)
+[![Licence: AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-1d5c43.svg)](LICENSE)
+
 A self-hosted nutrition diary with barcode scanning: log meals in seconds, keep your data on your own server.
 
 > **Status: young project (version 0.x).** It works for a household, but expect rough edges and breaking changes.
