@@ -305,7 +305,10 @@ def test_host_restriction(app, wc, oats, receiver):
     early = add_hook(wc, receiver.url)  # registered before the restriction
     assert wc.patch("/api/v1/admin/connectors/webhooks", json={"config": {"hosts": ["Hooks.Example"]}}).json()["config"] == {"hosts": ["hooks.example"]}
     assert wc.post(HOOKS, json={"name": "x", "url": receiver.url, "events": ["entry.created"]}).status_code == 422
-    assert wc.post(HOOKS, json={"name": "x", "url": "https://hooks.example/in", "events": ["entry.created"]}).status_code == 201
+    allowed = wc.post(HOOKS, json={"name": "x", "url": "https://hooks.example/in", "events": ["entry.created"]})
+    assert allowed.status_code == 201
+    # switched off again: the test is about what may be registered, and a delivery to that name would need a network
+    assert wc.patch(f"{HOOKS}/{allowed.json()['id']}", json={"enabled": False}).status_code == 200
     assert wc.patch(f"{HOOKS}/{early['id']}", json={"url": "http://elsewhere.example/"}).status_code == 422
     entry(wc, oats)
     settle(app)
