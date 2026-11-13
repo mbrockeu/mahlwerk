@@ -593,7 +593,7 @@ def test_no_compression_is_asked_for_and_a_compressed_answer_is_refused(ann, mod
     original = model.__call__
 
     def zipped(request):
-        response = original(request)
+        original(request)
         return httpx.Response(200, headers={"content-encoding": "gzip"}, content=model.raw)
 
     ann.app.state.vision.client = vision.Client(httpx.MockTransport(zipped))

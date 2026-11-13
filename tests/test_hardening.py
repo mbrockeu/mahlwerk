@@ -3,7 +3,6 @@ every mode, setup code, label photo size, key and session handling."""
 
 import logging
 import struct
-import threading
 
 import httpx
 import pytest

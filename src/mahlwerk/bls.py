@@ -17,7 +17,6 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 
 from . import nutrients
-from .nutrition import CORE
 
 CODE = "BLS Code"
 NAME_DE = "Lebensmittelbezeichnung"

@@ -16,7 +16,7 @@ from mahlwerk.db import SignInRefused, Store
 from mahlwerk.main import create_app
 from mahlwerk.routes.diary import today
 
-from conftest import COST, CSRF, PW
+from conftest import CSRF, PW
 from test_local_auth import add_user, login, nocsrf  # noqa: F401
 
 CARD = "/api/v1/admin/connectors/demo_account"

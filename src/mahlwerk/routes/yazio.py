@@ -8,7 +8,6 @@ import batch like any other: it can be taken back under "Imported data" in the p
 
 import asyncio
 import json
-from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field

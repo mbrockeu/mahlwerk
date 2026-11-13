@@ -6,7 +6,6 @@ Nothing here reaches Yazio: the "service" is an httpx.MockTransport that answers
 import gzip
 import io
 import json
-import re
 import sqlite3
 import threading
 import time

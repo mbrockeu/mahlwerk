@@ -24,7 +24,6 @@ How:
 Table `secret`: (user_id, name) -> `blob` = 0x01 | nonce | ciphertext+tag. `user_id` 0 is the household (shared) scope.
 """
 
-import base64
 import json
 import logging
 import os

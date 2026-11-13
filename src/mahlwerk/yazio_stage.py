@@ -19,7 +19,6 @@ between "preview" and "confirm". Nothing is written to disk.
   limit); encrypted entries are refused.
 """
 
-import gzip
 import io
 import json
 import secrets
