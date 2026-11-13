@@ -1,0 +1,37 @@
+services:
+  mahlwerk:
+    build:
+      context: .
+      args:
+        # set to 1 to include the optional label reader (about 200 MB more)
+        WITH_LABEL: "0"
+        # set to 1 to include the optional Cookidoo connector (see README)
+        WITH_COOKIDOO: "0"
+    image: mahlwerk:local
+    restart: unless-stopped
+    # Published on localhost only. To reach it from other devices put a reverse proxy with HTTPS in front
+    # (and set MAHLWERK_COOKIE_SECURE=1 and MAHLWERK_TRUSTED_PROXIES), rather than opening this port.
+    ports:
+      - "127.0.0.1:8110:8110"
+    # Optional: settings such as MAHLWERK_CONTACT (see .env.example). Compose 2.24 or newer.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # "local" = Mahlwerk's own accounts with passwords; the first visit creates the first admin, so open the
+      # page right after starting. Other modes: "proxy" (a reverse proxy signs people in, with
+      # MAHLWERK_TRUSTED_PROXIES), "oidc" (an OpenID Connect provider; add MAHLWERK_OIDC_ISSUER,
+      # MAHLWERK_OIDC_CLIENT_ID and MAHLWERK_PUBLIC_URL) and "single" (no login at all: only for trying it out
+      # on your own machine, never reachable by others). See README, Authentication.
+      MAHLWERK_AUTH: ${MAHLWERK_AUTH:-local}
+      # Host names the server answers to (DNS rebinding protection). In single mode the default is localhost only:
+      # if you open the app by a LAN name, put it here, e.g. MAHLWERK_ALLOWED_HOSTS=localhost,mahlwerk.lan
+      # (the variable is passed on from .env). /healthz is exempt, so the container health check keeps working.
+      # Fixed paths inside the container; they win over the same names in .env (the example file uses local paths).
+      MAHLWERK_DB: /data/mahlwerk.db
+      MAHLWERK_WEB_DIR: /app/web
+    volumes:
+      - mahlwerk-data:/data
+
+volumes:
+  mahlwerk-data:

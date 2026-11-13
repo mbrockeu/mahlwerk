@@ -1,0 +1,51 @@
+name: Bug report
+description: Something in Mahlwerk does not work as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Wrong product data comes from Open Food Facts and should be fixed there. Never paste secrets or access keys.
+  - type: input
+    id: version
+    attributes:
+      label: Mahlwerk version
+      description: Shown in the admin area and at `/healthz`.
+    validations:
+      required: true
+  - type: dropdown
+    id: auth
+    attributes:
+      label: Authentication mode
+      options:
+        - single
+        - proxy
+        - not sure
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: Browser and device
+      placeholder: e.g. Chrome 130 on Android 15, Safari on iPhone
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: Include error messages or server log lines (remove anything private).
+    validations:
+      required: true

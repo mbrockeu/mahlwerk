@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mahlwerk – a self-hosted nutrition diary with barcode scanning</title>
+<meta name="description" content="Mahlwerk is a self-hosted nutrition diary: log meals in seconds with a barcode scan and keep your data on your own server. Open source (AGPL-3.0), young project.">
+<meta name="theme-color" content="#1d5c43">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://mbrockeu.github.io/mahlwerk/">
+<link rel="alternate" hreflang="en" href="https://mbrockeu.github.io/mahlwerk/">
+<link rel="alternate" hreflang="de" href="https://mbrockeu.github.io/mahlwerk/de/">
+<link rel="icon" type="image/svg+xml" href="img/icon.svg">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<link rel="preload" href="fonts/bricolage-grotesque-latin-800-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/schibsted-grotesk-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<meta property="og:type" content="website">
+<meta property="og:title" content="Mahlwerk – a self-hosted nutrition diary with barcode scanning">
+<meta property="og:description" content="Mahlwerk is a self-hosted nutrition diary: log meals in seconds with a barcode scan and keep your data on your own server. Open source (AGPL-3.0), young project.">
+<meta property="og:url" content="https://mbrockeu.github.io/mahlwerk/">
+<meta property="og:image" content="https://mbrockeu.github.io/mahlwerk/img/en/og.jpg">
+<meta property="og:image:alt" content="Day view">
+<meta property="og:locale" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="style.css">
+<script>
+// the theme picked with the button (the app and the demo use the same key); without a choice the device decides
+try { var t = localStorage.getItem('mahlwerk.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap">
+<header>
+<div class="top">
+<a class="brand" href="./"><img src="img/apple-touch-icon.png" alt="" width="36" height="36">Mahlwerk</a>
+<div class="tools">
+<button class="theme" type="button" hidden data-light="Light" data-dark="Dark"></button>
+<a class="lang" href="de/" hreflang="de" lang="de">Deutsch</a>
+</div>
+</div>
+<div class="hero">
+<div>
+<h1>Mahlwerk</h1>
+<p class="tag">Log meals in seconds. Keep your data on your own server.</p>
+<div class="btns"><a class="btn lime" href="demo/">Try the demo</a><a class="btn ghost" href="https://github.com/mbrockeu/mahlwerk">Get it on GitHub</a></div>
+<p class="status">Young project · version 0.x · AGPL-3.0</p>
+</div>
+<svg class="dial" viewBox="0 0 400 400" role="img" aria-label="Illustration of the day ring: a scale of 48 ticks, most of them filled, with 646 kcal left">
+<g class="ticks" stroke-width="9" stroke-linecap="round">
+<line x1="200.0" y1="50.0" x2="200.0" y2="14.0" stroke="#c9f04a" style="animation-delay:0ms"/>
+<line x1="219.6" y1="51.3" x2="224.3" y2="15.6" stroke="#c9f04a" style="animation-delay:14ms"/>
+<line x1="238.8" y1="55.1" x2="248.1" y2="20.3" stroke="#c9f04a" style="animation-delay:28ms"/>
+<line x1="257.4" y1="61.4" x2="271.2" y2="28.2" stroke="#c9f04a" style="animation-delay:42ms"/>
+<line x1="275.0" y1="70.1" x2="293.0" y2="38.9" stroke="#c9f04a" style="animation-delay:56ms"/>
+<line x1="291.3" y1="81.0" x2="313.2" y2="52.4" stroke="#c9f04a" style="animation-delay:70ms"/>
+<line x1="306.1" y1="93.9" x2="331.5" y2="68.5" stroke="#c9f04a" style="animation-delay:84ms"/>
+<line x1="319.0" y1="108.7" x2="347.6" y2="86.8" stroke="#c9f04a" style="animation-delay:98ms"/>
+<line x1="329.9" y1="125.0" x2="361.1" y2="107.0" stroke="#c9f04a" style="animation-delay:112ms"/>
+<line x1="338.6" y1="142.6" x2="371.8" y2="128.8" stroke="#c9f04a" style="animation-delay:126ms"/>
+<line x1="344.9" y1="161.2" x2="379.7" y2="151.9" stroke="#c9f04a" style="animation-delay:140ms"/>
+<line x1="348.7" y1="180.4" x2="384.4" y2="175.7" stroke="#c9f04a" style="animation-delay:154ms"/>
+<line x1="350.0" y1="200.0" x2="386.0" y2="200.0" stroke="#c9f04a" style="animation-delay:168ms"/>
+<line x1="348.7" y1="219.6" x2="384.4" y2="224.3" stroke="#c9f04a" style="animation-delay:182ms"/>
+<line x1="344.9" y1="238.8" x2="379.7" y2="248.1" stroke="#c9f04a" style="animation-delay:196ms"/>
+<line x1="338.6" y1="257.4" x2="371.8" y2="271.2" stroke="#c9f04a" style="animation-delay:210ms"/>
+<line x1="329.9" y1="275.0" x2="361.1" y2="293.0" stroke="#c9f04a" style="animation-delay:224ms"/>
+<line x1="319.0" y1="291.3" x2="347.6" y2="313.2" stroke="#c9f04a" style="animation-delay:238ms"/>
+<line x1="306.1" y1="306.1" x2="331.5" y2="331.5" stroke="#c9f04a" style="animation-delay:252ms"/>
+<line x1="291.3" y1="319.0" x2="313.2" y2="347.6" stroke="#c9f04a" style="animation-delay:266ms"/>
+<line x1="275.0" y1="329.9" x2="293.0" y2="361.1" stroke="#c9f04a" style="animation-delay:280ms"/>
+<line x1="257.4" y1="338.6" x2="271.2" y2="371.8" stroke="#c9f04a" style="animation-delay:294ms"/>
+<line x1="238.8" y1="344.9" x2="248.1" y2="379.7" stroke="#c9f04a" style="animation-delay:308ms"/>
+<line x1="219.6" y1="348.7" x2="224.3" y2="384.4" stroke="#c9f04a" style="animation-delay:322ms"/>
+<line x1="200.0" y1="350.0" x2="200.0" y2="386.0" stroke="#c9f04a" style="animation-delay:336ms"/>
+<line x1="180.4" y1="348.7" x2="175.7" y2="384.4" stroke="#c9f04a" style="animation-delay:350ms"/>
+<line x1="161.2" y1="344.9" x2="151.9" y2="379.7" stroke="#c9f04a" style="animation-delay:364ms"/>
+<line x1="142.6" y1="338.6" x2="128.8" y2="371.8" stroke="#c9f04a" style="animation-delay:378ms"/>
+<line x1="125.0" y1="329.9" x2="107.0" y2="361.1" stroke="#c9f04a" style="animation-delay:392ms"/>
+<line x1="108.7" y1="319.0" x2="86.8" y2="347.6" stroke="#c9f04a" style="animation-delay:406ms"/>
+<line x1="93.9" y1="306.1" x2="68.5" y2="331.5" stroke="#c9f04a" style="animation-delay:420ms"/>
+<line x1="81.0" y1="291.3" x2="52.4" y2="313.2" stroke="#c9f04a" style="animation-delay:434ms"/>
+<line x1="70.1" y1="275.0" x2="38.9" y2="293.0" stroke="#c9f04a" style="animation-delay:448ms"/>
+<line x1="61.4" y1="257.4" x2="28.2" y2="271.2" stroke="#4d8a70" style="animation-delay:462ms"/>
+<line x1="55.1" y1="238.8" x2="20.3" y2="248.1" stroke="#4d8a70" style="animation-delay:476ms"/>
+<line x1="51.3" y1="219.6" x2="15.6" y2="224.3" stroke="#4d8a70" style="animation-delay:490ms"/>
+<line x1="50.0" y1="200.0" x2="14.0" y2="200.0" stroke="#4d8a70" style="animation-delay:504ms"/>
+<line x1="51.3" y1="180.4" x2="15.6" y2="175.7" stroke="#4d8a70" style="animation-delay:518ms"/>
+<line x1="55.1" y1="161.2" x2="20.3" y2="151.9" stroke="#4d8a70" style="animation-delay:532ms"/>
+<line x1="61.4" y1="142.6" x2="28.2" y2="128.8" stroke="#4d8a70" style="animation-delay:546ms"/>
+<line x1="70.1" y1="125.0" x2="38.9" y2="107.0" stroke="#4d8a70" style="animation-delay:560ms"/>
+<line x1="81.0" y1="108.7" x2="52.4" y2="86.8" stroke="#4d8a70" style="animation-delay:574ms"/>
+<line x1="93.9" y1="93.9" x2="68.5" y2="68.5" stroke="#4d8a70" style="animation-delay:588ms"/>
+<line x1="108.7" y1="81.0" x2="86.8" y2="52.4" stroke="#4d8a70" style="animation-delay:602ms"/>
+<line x1="125.0" y1="70.1" x2="107.0" y2="38.9" stroke="#4d8a70" style="animation-delay:616ms"/>
+<line x1="142.6" y1="61.4" x2="128.8" y2="28.2" stroke="#4d8a70" style="animation-delay:630ms"/>
+<line x1="161.2" y1="55.1" x2="151.9" y2="20.3" stroke="#4d8a70" style="animation-delay:644ms"/>
+<line x1="180.4" y1="51.3" x2="175.7" y2="15.6" stroke="#4d8a70" style="animation-delay:658ms"/>
+</g>
+<circle cx="44.8" cy="264.3" r="11" fill="#ff8a1f"/>
+<circle cx="200" cy="200" r="128" fill="#174a36"/>
+<text class="num" x="200" y="222" text-anchor="middle">646</text>
+<text class="cap" x="200" y="262" text-anchor="middle">kcal left</text>
+</svg>
+</div>
+<div class="facts"><div class="tile o"><b>4</b><span>meals a day</span><div class="scale" aria-hidden="true"><i></i><i></i><i></i><i></i><i class="off"></i><i class="off"></i><i class="off"></i><i class="off"></i><i class="off"></i><i class="off"></i><i class="off"></i><i class="off"></i><i class="off"></i><i class="off"></i></div></div><div class="tile l"><b>10</b><span>years of data in the insights</span><div class="scale" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="off"></i><i class="off"></i><i class="off"></i><i class="off"></i></div></div><div class="tile p"><b>4</b><span>sign-in modes</span><div class="scale" aria-hidden="true"><i></i><i></i><i></i><i></i><i class="off"></i><i class="off"></i><i class="off"></i><i class="off"></i><i class="off"></i><i class="off"></i><i class="off"></i><i class="off"></i><i class="off"></i><i class="off"></i></div></div></div>
+</header>
+</div>
+<main id="main">
+<section class="wrap" id="screens">
+<p class="eyebrow">The interface</p>
+<h2>Made for the phone, roomy on the desktop.</h2>
+<p>German and English. The screenshots show the English interface with invented demo data.</p>
+<div class="shots"><figure><div class="frame"><img src="img/en/today-phone.webp" width="560" height="1212" loading="lazy" alt="Day view"></div><figcaption>Day view</figcaption></figure><figure><div class="frame"><img src="img/en/today-dark-phone.webp" width="560" height="1212" loading="lazy" alt="Dark theme"></div><figcaption>Dark theme</figcaption></figure><figure><div class="frame"><img src="img/en/search-phone.webp" width="560" height="1212" loading="lazy" alt="Search with basic foods (BLS)"></div><figcaption>Search with basic foods (BLS)</figcaption></figure><figure><div class="frame"><img src="img/en/recipe-phone.webp" width="560" height="1212" loading="lazy" alt="Recipes page with pictures and groups"></div><figcaption>Recipes with pictures and groups</figcaption></figure></div>
+<div class="wide" style="margin-top:18px"><figure><div class="frame"><img src="img/en/today-desktop.webp" width="1400" height="1069" alt="Day view on the desktop"></div><figcaption>Day view on the desktop</figcaption></figure><figure><div class="frame"><img src="img/en/insights-desktop.webp" width="1400" height="1000" loading="lazy" alt="Insights over 90 days: a calendar of days within, below and above the goal range, with composition by weekday and meal"></div><figcaption>Insights: calendar and composition</figcaption></figure></div>
+<div class="shots three"><figure><div class="frame"><img src="img/en/fits-phone.webp" width="560" height="1212" loading="lazy" alt="Recipes that fit the rest of the day, with an amount and a reason"></div><figcaption>What still fits today</figcaption></figure><figure><div class="frame"><img src="img/en/badges-phone.webp" width="560" height="1212" loading="lazy" alt="Badges"></div><figcaption>Badges</figcaption></figure><figure><div class="frame"><img src="img/en/activity-phone.webp" width="560" height="1212" loading="lazy" alt="Activity"></div><figcaption>Activity</figcaption></figure></div>
+<p style="margin-top:28px"><b>Rather click than look? The demo runs the real interface in your browser, with made-up data. Nothing is saved and nothing is sent anywhere.</b></p>
+<div class="btns"><a class="btn solid" href="demo/">Try the demo</a></div>
+</section>
+<section class="wrap" id="features">
+<p class="eyebrow">What it does</p>
+<h2>Features</h2>
+<div class="grid"><article class="card"><span class="n" aria-hidden="true">01</span><h3>Day view</h3><p>Calories left, protein, carbohydrates and fat against your goal, four meals, a seven-day streak. Going over a goal is shown, never scolded.</p></article><article class="card"><span class="n" aria-hidden="true">02</span><h3>Barcode scanning</h3><p>Scan with the phone camera in the browser, no app store. The amount is pre-filled with the serving or your last amount. Or search, or pick from what you ate recently.</p></article><article class="card"><span class="n" aria-hidden="true">03</span><h3>Label photo, read locally</h3><p>Product missing or wrong? Photograph the nutrition table. The server reads it with local OCR on the CPU, nothing leaves your machine, and you confirm before saving.</p></article><article class="card"><span class="n" aria-hidden="true">04</span><h3>Catalogue and BLS</h3><p>Find packaged products by name, offline and instantly, from an optional local catalogue built from the Open Food Facts export, plus basic foods from the BLS, which you import yourself.</p></article><article class="card"><span class="n" aria-hidden="true">05</span><h3>Insights for years of data</h3><p>Up to ten years in days, weeks or months, comparison with the period before, nutrient curves you can lay side by side, a calendar heat map, a foods table and a rough estimate of your real energy expenditure. Numbers, not advice.</p></article><article class="card"><span class="n" aria-hidden="true">06</span><h3>Activity</h3><p>Steps, active energy and workouts by hand, from the Yazio export or from Apple Health via a Shortcut. Optionally added to the calorie goal.</p></article><article class="card"><span class="n" aria-hidden="true">07</span><h3>Recipes, groups and pictures</h3><p>Combine ingredients into your own recipe with portions, add a photo, sort recipes into groups and filter by them. Copy yesterday’s meal with one tap, save meals you eat often as templates.</p></article><article class="card"><span class="n" aria-hidden="true">08</span><h3>Recipes from Cookidoo and the web</h3><p>Optional and off by default: take over recipes from Cookidoo (meal plan, collections or a link) or from any recipe page that publishes its nutrition values, with the values per portion.</p></article><article class="card"><span class="n" aria-hidden="true">09</span><h3>What still fits today</h3><p>Recipes that suit the rest of your day, from your goal, what you ate and when you last ate each recipe, with an amount and a reason in words. Worked out on your server; it can be switched off.</p></article><article class="card"><span class="n" aria-hidden="true">10</span><h3>Badges, never scolding</h3><p>Badges for habits, a calm weekly review with one strength and at most one idea. It never rewards eating less or losing weight, and each person can switch it off.</p></article><article class="card"><span class="n" aria-hidden="true">11</span><h3>Water and fasting</h3><p>A glass-stroke scale with quick buttons for water. An optional fasting timer, off by default and never rewarded.</p></article><article class="card"><span class="n" aria-hidden="true">12</span><h3>Access keys and webhooks</h3><p>Personal access keys for scripts and Shortcuts, and signed webhooks to addresses you register. Both are per person; an admin can switch them off.</p></article></div>
+</section>
+<section class="wrap" id="privacy"><div class="band">
+<p class="eyebrow">Privacy</p>
+<h2>Your data stays on your server.</h2>
+<p>The diary lives in a SQLite database on your own machine. The interface loads no CDN, no fonts and no scripts from third parties. Label photos are read locally. This is all that ever leaves your server:</p>
+<div class="out"><div><b>By default</b>Product lookups at Open Food Facts: the barcode, once per barcode, then kept in your database. An admin can switch this off.</div><div><b>Only if you switch it on</b>The Cookidoo connector, recipe pages and recipe pictures from the sites you name, and a direct Yazio sign-in. All off by default.</div><div><b>Only if you use it</b>Your OpenID Connect provider for sign-in, webhooks to the addresses you register, and the catalogue download when an admin starts it.</div></div>
+<p class="note-out">Your own recipe photos and “What still fits today” send nothing anywhere. The full list is in the README under <a href="https://github.com/mbrockeu/mahlwerk#what-leaves-your-server">What leaves your server</a>.</p>
+</div></section>
+<section class="wrap" id="start">
+<div class="two"><div>
+<p class="eyebrow">Quick start</p>
+<h2>Run it with Docker Compose.</h2>
+<pre><code><span class="c"># clone, then:</span>
+git clone https://github.com/mbrockeu/mahlwerk.git &amp;&amp; cd mahlwerk
+cp .env.example .env     <span class="c"># set MAHLWERK_CONTACT to your own address</span>
+docker compose up -d</code></pre>
+<p>Then open <code>http://localhost:8110</code> and create the first admin account on the setup page. The database lives in the volume <code>mahlwerk-data</code>. The optional label reader and Cookidoo connector are build options, see the README.</p>
+<p class="warn"><b>Reaching it from other devices.</b> The Compose file starts Mahlwerk with its own accounts and publishes the port on 127.0.0.1 only. Put a reverse proxy with HTTPS in front instead of opening the port.</p>
+<div class="btns" style="margin-top:20px"><a class="btn solid" href="https://github.com/mbrockeu/mahlwerk#quick-start">Read the README</a></div>
+</div><div>
+<p class="eyebrow">Sign-in</p>
+<h2>Four ways to sign in.</h2>
+<p><code>single</code> for a private network, <code>proxy</code> behind your own login proxy, <code>local</code> with built-in accounts (passwords stored as scrypt), or <code>oidc</code> with OpenID Connect (Authelia, Keycloak, Authentik, Pocket ID, …). With several users, everyone sees only their own diary, goals and weight; the product list is shared.</p>
+<ul class="modes"><li>single · no login</li><li>proxy · your login proxy</li><li>local · built-in accounts</li><li>oidc · OpenID Connect</li></ul>
+</div></div>
+</section>
+<section class="wrap" id="status">
+<div class="two"><div>
+<p class="eyebrow">Honest status</p>
+<h2>A young project.</h2>
+<ul class="plain"><li>Version 0.x, developed for one household first. Expect rough edges and breaking changes.</li><li>The interface has mainly been tested in desktop Chromium. Safari on iOS only occasionally, other browsers not at all.</li><li>The API may still change between versions. The Cookidoo connector depends on an unofficial interface and may break without notice.</li><li>Mahlwerk shows numbers. It is not medical or dietary advice.</li></ul>
+</div><div>
+<p class="eyebrow">&nbsp;</p>
+<h2>Licence and data</h2>
+<ul class="plain"><li>Code: <a href="https://github.com/mbrockeu/mahlwerk/blob/main/LICENSE">AGPL-3.0-or-later</a>. If you run a modified version as a network service, you must offer its source to the users of that service.</li><li>Product data comes from <a href="https://world.openfoodfacts.org">Open Food Facts</a> under the ODbL (database), DbCL (contents) and CC BY-SA (images). This project ships no food data; every installation fetches its own.</li><li>The BLS 4.0 (Max Rubner-Institut) is not included. You request the file yourself and import it, subject to the institute’s terms.</li><li>Fonts: Bricolage Grotesque, Schibsted Grotesk and IBM Plex Mono under the SIL Open Font License.</li></ul>
+<h3 style="margin-top:28px">Built with AI assistance</h3>
+<p>The code is written with Claude (Anthropic). Design decisions, review and responsibility lie with the maintainer.</p>
+</div></div>
+</section>
+</main>
+<footer><div class="wrap">
+<ul><li><a href="https://github.com/mbrockeu/mahlwerk">Repository</a></li><li><a href="https://github.com/mbrockeu/mahlwerk/issues">Issues</a></li><li><a href="https://github.com/mbrockeu/mahlwerk/blob/main/SECURITY.md">Security policy</a></li><li><a href="https://github.com/mbrockeu/mahlwerk/blob/main/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/mbrockeu/mahlwerk/blob/main/THIRD_PARTY.md">Third-party licences</a></li></ul>
+<p>Mahlwerk is open source under the AGPL-3.0. This page loads nothing from other websites and does not track you.</p>
+</div></footer>
+<script>
+(function () {
+  var b = document.querySelector('.theme'); if (!b) return;
+  var root = document.documentElement, dark = window.matchMedia('(prefers-color-scheme: dark)');
+  function now() { return root.dataset.theme || (dark.matches ? 'dark' : 'light'); }
+  function label() { b.textContent = now() === 'dark' ? b.dataset.light : b.dataset.dark; }
+  b.hidden = false; label();
+  b.addEventListener('click', function () {
+    var next = now() === 'dark' ? 'light' : 'dark';
+    root.dataset.theme = next;
+    try { localStorage.setItem('mahlwerk.theme', next); } catch (e) {}
+    label();
+  });
+  dark.addEventListener('change', label);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+data/
+.env
+node_modules/
+web/dist/
+web/live/
+web/live.old/
+web/live.prev/
+web/live.new/
+*.pyc
+.DS_Store
+# any kept copy of the served interface
+web/live*/
+_site/
+_sitetest/
+*.key

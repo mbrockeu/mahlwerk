@@ -1,0 +1,230 @@
+@font-face { font-family: 'Bricolage Grotesque'; font-weight: 800; font-style: normal; font-display: swap; src: url('./assets/fonts/bricolage-grotesque-latin-800-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Schibsted Grotesk'; font-weight: 400; font-style: normal; font-display: swap; src: url('./assets/fonts/schibsted-grotesk-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Schibsted Grotesk'; font-weight: 500; font-style: normal; font-display: swap; src: url('./assets/fonts/schibsted-grotesk-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Schibsted Grotesk'; font-weight: 600; font-style: normal; font-display: swap; src: url('./assets/fonts/schibsted-grotesk-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-weight: 500; font-style: normal; font-display: swap; src: url('./assets/fonts/ibm-plex-mono-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-weight: 600; font-style: normal; font-display: swap; src: url('./assets/fonts/ibm-plex-mono-latin-600-normal.woff2') format('woff2'); }
+
+:root {
+  --stone: #eceee9;
+  --paper: #f7f8f5;
+  --ink: #17211c;
+  --quiet: #4b574f;
+  --green: #1d5c43;
+  --green-deep: #174a36;
+  --green-tick: #4d8a70;
+  --lime: #c9f04a;
+  --orange: #ff8a1f;
+  --pink: #ffb8d6;
+  --hairline: #c9cec6;
+  --warn: #9a4a00;
+  --on-tile: #17130f;
+  /* semantic tokens: the dark theme (below) changes these, not the palette above */
+  --text: #17211c;            /* text on stone / paper */
+  --on-lime: #17211c;         /* text on lime */
+  --deep: #17211c;            /* the dark surfaces: navigation, call-to-action rows, fasting card, week review */
+  --on-deep: #f7f8f5;
+  --deep-edge: transparent;   /* fine outline of a dark surface (only the dark theme draws it) */
+  --deep-line: #3a4840;       /* inner dividers and ghost-button outlines on a dark surface */
+  --sel-bg: #17211c;          /* selected chip / tab */
+  --sel-fg: #f7f8f5;
+  --nav-on-bg: #f7f8f5;       /* the active item of the navigation */
+  --nav-on-fg: #17211c;
+  --toggle-on: #17211c;
+  --primary: #1d5c43;         /* primary buttons */
+  --green-text: #1d5c43;      /* green used as text or icon colour on stone / paper */
+  --focus-base: #1d5c43;
+  --bar: #1d5c43;             /* chart bars and lines, scale fill */
+  --bar-soft: #9dbbad;
+  --bar-over: #d9709f;
+  --series-dark: #17211c;
+  --track: #d9ddd5;           /* empty part of a scale on paper */
+  --dim: #8a948c;
+  --tick-off: #4b574f;        /* unfilled ticks on a dark surface */
+  --sheet: #eceee9;
+  --sheet-edge: transparent;
+  --field-line: #c9cec6;
+  --scrim: rgba(23, 33, 28, 0.5);
+  --scrim-strong: rgba(23, 33, 28, 0.72);
+  --f-display: 'Bricolage Grotesque', 'Arial Narrow', sans-serif;
+  --f-body: 'Schibsted Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --nav-h: 72px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+  --focus: var(--focus-base);
+  color-scheme: light;
+}
+
+/* Dark theme: a green-black ground, cards one step lighter, the green hero and the accent colours kept.
+   Contrast pairs are listed in docs/design/README.md. */
+:root[data-theme='dark'] {
+  --stone: #0f1512;
+  --paper: #1b2620;
+  --ink: #eef1ec;
+  --quiet: #a5b2a9;
+  --hairline: #34443b;
+  --green: #1a6246;
+  --green-deep: #134733;
+  --warn: #ffb066;
+  --text: #eef1ec;
+  --deep: #22312a;
+  --on-deep: #eef1ec;
+  --deep-edge: #41594b;
+  --deep-line: #46604f;
+  --sel-bg: #eef1ec;
+  --sel-fg: #17211c;
+  --nav-on-bg: #eef1ec;
+  --nav-on-fg: #17211c;
+  --toggle-on: #2a8461;
+  --primary: #2a8461;
+  --green-text: #7fd4a8;
+  --focus-base: #c9f04a;
+  --bar: #4fae85;
+  --bar-soft: #4f8068;
+  --bar-over: #ef8db9;
+  --series-dark: #5d7b69;
+  --track: #2c3a32;
+  --dim: #6e7e73;
+  --tick-off: #5f7568;
+  --sheet: #141c18;
+  --sheet-edge: #2a3a31;
+  --field-line: #4d6355;
+  --scrim: rgba(0, 0, 0, 0.62);
+  --scrim-strong: rgba(0, 0, 0, 0.78);
+  color-scheme: dark;
+}
+/* dark surfaces get a fine green outline so that they do not sink into the ground */
+:root[data-theme='dark'] :is(nav:not(.jump), .fast.on, .meal.cta, .calc-open, .bar, .avatar, .pill, .btns .add, .go, .result:not(.on-dark), .moment-card, .review) {
+  outline: 1px solid var(--deep-edge); outline-offset: -1px;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html { background: var(--stone); }
+body {
+  margin: 0; min-height: 100dvh; background: var(--stone); color: var(--text);
+  font-family: var(--f-body); font-size: 15px; line-height: 1.35; -webkit-text-size-adjust: 100%;
+}
+body.locked { overflow: hidden; }
+h1, h2, h3, p { margin: 0; }
+button, input, select { font: inherit; color: inherit; }
+/* An app, not a document: no double-tap zoom, and no zoom when a field gets focus (iOS zooms below 16px). */
+html { touch-action: manipulation; }
+input, select, textarea { font-size: max(16px, 1em); }
+button { cursor: pointer; border: none; background: none; padding: 0; }
+ul { list-style: none; margin: 0; padding: 0; }
+
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.on-dark :focus-visible, .dark:focus-visible { outline-color: var(--lime); }
+
+.mono { font-family: var(--f-mono); }
+.micro { font-family: var(--f-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; }
+.display { font-family: var(--f-display); font-weight: 800; letter-spacing: -0.03em; }
+.quiet { color: var(--quiet); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* page frame */
+.page {
+  max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px;
+  padding: calc(26px + var(--safe-t)) 20px calc(var(--nav-h) + 18px + var(--safe-b) + 24px);
+  min-height: 100dvh;
+}
+.page-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 44px; }
+.page-head h1 { font-family: var(--f-display); font-weight: 800; font-size: 34px; letter-spacing: -0.03em; line-height: 1; }
+
+/* phone: the round menu button (MoreMenu) sits at the right end of the title row of the main pages */
+@media (max-width: 899px) { main.hasmenu .page-head { padding-right: 56px; } }
+
+/* wide screens: content sits right of the navigation rail */
+@media (min-width: 900px) {
+  main { padding-left: 108px; }
+  .page { padding: 36px 36px 56px; max-width: 560px; }
+  .page.wide { max-width: 1200px; }
+  .page.today { max-width: 1080px; }
+  .page-head h1 { font-size: 42px; }
+}
+/* big windows: split layouts (Products, Weight) use the width; the content grows with it up to a calm maximum */
+@media (min-width: 1280px) { .page.split { max-width: 1320px; } }
+@media (min-width: 1800px) { .page.split { max-width: 1660px; } }
+
+/* buttons */
+.btn {
+  min-height: 48px; padding: 0 22px; border-radius: 24px 24px 24px 10px; font-weight: 600; font-size: 15px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-align: center;
+  background: var(--paper); color: var(--text); border: 2px solid var(--hairline);
+}
+.btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+.btn.lime { background: var(--lime); color: var(--on-lime); border-color: var(--lime); }
+.btn.quiet-btn { background: transparent; border-color: transparent; color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.btn.danger { color: var(--warn); border-color: var(--warn); background: transparent; }
+.btn[disabled] { opacity: 0.55; cursor: default; }
+.round {
+  width: 44px; height: 44px; border-radius: 22px; background: var(--paper); color: var(--text);
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.chip {
+  min-height: 44px; padding: 0 16px; border-radius: 22px; background: var(--paper); border: 2px solid var(--hairline);
+  font-weight: 600; font-size: 14px; display: inline-flex; align-items: center; gap: 6px;
+}
+.chip.on { background: var(--sel-bg); color: var(--sel-fg); border-color: var(--sel-bg); }
+
+/* form fields */
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field > span { font-size: 13px; font-weight: 600; color: var(--quiet); }
+.input, .field input, .field select {
+  width: 100%; min-height: 48px; padding: 0 16px; border-radius: 16px; background: var(--paper);
+  border: 2px solid var(--field-line); font-size: 16px; font-family: var(--f-body); /* 16px keeps iOS from zooming */
+}
+.field input:focus-visible, .input:focus-visible { outline-offset: 0; border-color: var(--focus-base); }
+.field input[aria-invalid='true'] { border-color: var(--warn); }
+.note { font-size: 13px; color: var(--quiet); }
+.note.warn, .warn { color: var(--warn); }
+.error-box { background: var(--paper); border-radius: 20px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+
+/* generic list rows (paper pills) */
+.rows { display: flex; flex-direction: column; gap: 6px; }
+.row-pill {
+  min-height: 52px; width: 100%; border-radius: 20px; background: var(--paper); padding: 6px 18px; text-align: left;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.row-pill .t { display: flex; flex-direction: column; min-width: 0; }
+.row-pill .t strong { font-size: 15px; font-weight: 600; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-pill .t small { font-size: 12px; color: var(--quiet); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-pill .v { font-family: var(--f-mono); font-size: 14px; font-weight: 600; white-space: nowrap; text-align: right; }
+.badge { font-family: var(--f-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 7px; border-radius: 8px; background: var(--lime); color: var(--on-lime); }
+
+/* search fields: our own clear button instead of the browser's "x" */
+input[type='search'] { -webkit-appearance: none; appearance: none; }
+input[type='search']::-webkit-search-cancel-button, input[type='search']::-webkit-search-decoration { -webkit-appearance: none; appearance: none; display: none; }
+::placeholder { color: var(--quiet); opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+
+/* integrations and admin: cards of the profile (access keys, webhooks) and the admin view */
+.icard { background: var(--paper); border-radius: 28px 28px 28px 8px; padding: 18px 16px 18px 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.icard .btn, .icard .chip { min-height: 44px; }
+.icard .btn.small { padding: 0 16px; font-size: 14px; }
+.icard code, .admin code { font-family: var(--f-mono); font-size: 12.5px; background: var(--stone); padding: 2px 6px; border-radius: 6px; word-break: break-all; }
+.icard .field input[type='text'], .icard .field input[type='url'] { background: var(--stone); }
+.icard .rows .row-pill { background: var(--stone); min-height: 56px; padding: 8px 14px 8px 16px; }
+.icard .rows .row-pill .t small { white-space: normal; }
+.checks { display: grid; grid-template-columns: 1fr; gap: 6px; }
+.check { min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 14px; border-radius: 16px 16px 16px 6px; background: var(--stone); font-size: 14.5px; font-weight: 500; cursor: pointer; }
+.check input { width: 22px; height: 22px; accent-color: var(--primary); flex-shrink: 0; margin: 0; }
+.check:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
+.check:has(input:checked) { box-shadow: inset 0 0 0 2px var(--green-text); }
+/* a secret shown once: the dark surface of the design, mono text, a lime copy button */
+.reveal { background: var(--deep); color: var(--on-deep); border-radius: 20px 20px 20px 8px; padding: 14px 14px 14px 16px; display: flex; flex-direction: column; gap: 10px; --focus: var(--lime); }
+.reveal .micro { color: var(--lime); }
+.reveal .secret { font-family: var(--f-mono); font-size: 13.5px; font-weight: 500; word-break: break-all; user-select: all; background: rgba(0, 0, 0, 0.22); border-radius: 12px; padding: 10px 12px; }
+.reveal p { font-size: 13.5px; }
+.reveal .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.reveal button { min-height: 44px; padding: 0 16px; border-radius: 16px 16px 16px 6px; font-weight: 700; font-size: 14px; display: inline-flex; align-items: center; gap: 8px; background: var(--lime); color: var(--on-lime); }
+.reveal button.ghost { background: transparent; color: var(--on-deep); box-shadow: inset 0 0 0 2px var(--deep-line); }
+:root[data-theme='dark'] .reveal { outline: 1px solid var(--deep-edge); outline-offset: -1px; }
+.pill-state { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 8px; border-radius: 8px; background: var(--track); color: var(--text); white-space: nowrap; }
+.pill-state.ok { background: var(--lime); color: var(--on-lime); }
+.pill-state.bad { background: var(--warn); color: #fff; }
+:root[data-theme='dark'] .pill-state.bad { color: #17130f; }
