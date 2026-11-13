@@ -19,7 +19,15 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install -e ".[test]"
-      - run: pytest
+      - name: Run pytest
+        run: |
+          set -o pipefail
+          pytest -q -rf 2>&1 | tee pytest.log
+      - name: Show failures as annotations
+        if: failure()
+        run: |
+          grep -E '^(FAILED|ERROR) ' pytest.log | head -15 | sed 's/^/::error::/' || true
+          grep -E '^E   ' pytest.log | head -15 | sed 's/^/::error::/' || true
 
   frontend:
     # hosted runners cost minutes in a private repository; the checks run once it is public
