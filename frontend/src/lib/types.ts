@@ -311,6 +311,16 @@ export interface LabelScan {
   text: string;
 }
 
+/** GET vision/status: what the capture screen needs to know (no address, no key). */
+export interface VisionState { enabled: boolean; configured: boolean; ready: boolean; per_hour: number }
+/** One recognised part of a meal; amounts and values are ESTIMATES for the amount in the photo, every number may be missing. */
+export interface VisionMealItem { name: string; grams: number | null; kcal: number | null; protein_g: number | null; fat_g: number | null; carbs_g: number | null; confidence: number | null }
+export interface VisionMeal { items: VisionMealItem[]; note: string | null }
+export interface VisionRecipe {
+  name: string | null; portions: number | null; ingredients: string[];
+  nutrition_per_portion: { kcal: number | null; protein_g: number | null; fat_g: number | null; carbs_g: number | null } | null; note: string | null;
+}
+
 export interface InsightDay {
   day: string;
   logged: boolean;
@@ -667,7 +677,7 @@ export interface Account {
   disabled?: boolean;
 }
 export type ConnectorKey =
-  | 'openfoodfacts_lookup' | 'openfoodfacts_catalog' | 'bls' | 'yazio_import' | 'yazio_login' | 'label_reader' | 'demo_data' | 'demo_account' | 'access_tokens' | 'webhooks' | 'cookidoo' | 'web_recipes';
+  | 'openfoodfacts_lookup' | 'openfoodfacts_catalog' | 'bls' | 'yazio_import' | 'yazio_login' | 'label_reader' | 'demo_data' | 'demo_account' | 'access_tokens' | 'webhooks' | 'cookidoo' | 'web_recipes' | 'vision';
 export interface Connector {
   key: ConnectorKey;
   kind: 'source' | 'import' | 'interface';

@@ -104,6 +104,7 @@ _classify(
     "GET /admin/overview", "GET /admin/users", "GET /admin/connectors", "PATCH /admin/connectors/{key}",
     "GET /admin/catalog/refresh", "POST /admin/catalog/refresh",
     "GET /admin/cookidoo/account", "PUT /admin/cookidoo/account", "DELETE /admin/cookidoo/account", "POST /admin/cookidoo/account/check",
+    "GET /vision/status", "POST /vision/meal", "POST /vision/recipe",  # photos would go to a model the operator pays for
     "POST /admin/demo-account/reset", "DELETE /admin/demo-account",
 )
 

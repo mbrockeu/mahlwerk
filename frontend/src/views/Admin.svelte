@@ -16,21 +16,21 @@
 
   // the connectors in four groups (by what they are for; the server's own `kind` is the fallback for a connector this list does not know)
   const GROUPS: { id: string; title: () => string; keys: ConnectorKey[] }[] = [
-    { id: 'food', title: () => t('admGroupFood'), keys: ['openfoodfacts_lookup', 'openfoodfacts_catalog', 'bls', 'label_reader'] },
+    { id: 'food', title: () => t('admGroupFood'), keys: ['openfoodfacts_lookup', 'openfoodfacts_catalog', 'bls', 'label_reader', 'vision'] },
     { id: 'recipes', title: () => t('admGroupRecipes'), keys: ['cookidoo', 'web_recipes'] },
     { id: 'import', title: () => t('admGroupImport'), keys: ['yazio_import', 'yazio_login', 'demo_data', 'demo_account'] },
     { id: 'interface', title: () => t('admGroupInterface'), keys: ['access_tokens', 'webhooks'] },
   ];
-  const SWITCHES: ConnectorKey[] = ['openfoodfacts_lookup', 'access_tokens', 'webhooks', 'cookidoo', 'web_recipes', 'yazio_login', 'demo_account'];
+  const SWITCHES: ConnectorKey[] = ['openfoodfacts_lookup', 'access_tokens', 'webhooks', 'cookidoo', 'web_recipes', 'yazio_login', 'demo_account', 'vision'];
   // the environment variable behind each setting (see features.py), named in the technical notes when it fixes the setting
   const ENV_OF: Record<string, string> = {
     'openfoodfacts_lookup.enabled': 'MAHLWERK_OFF_LOOKUP', 'openfoodfacts_catalog.config.countries': 'MAHLWERK_OFF_COUNTRIES',
     'cookidoo.enabled': 'MAHLWERK_COOKIDOO', 'cookidoo.config.personal': 'MAHLWERK_COOKIDOO_PERSONAL', 'cookidoo.config.images': 'MAHLWERK_COOKIDOO_IMAGES',
     'web_recipes.enabled': 'MAHLWERK_WEB_RECIPES', 'web_recipes.config.images': 'MAHLWERK_WEB_RECIPES_IMAGES', 'yazio_login.enabled': 'MAHLWERK_YAZIO_LOGIN',
-    'access_tokens.enabled': 'MAHLWERK_TOKENS', 'webhooks.enabled': 'MAHLWERK_WEBHOOKS', 'webhooks.config.hosts': 'MAHLWERK_WEBHOOK_HOSTS', 'demo_data.enabled': 'MAHLWERK_DEMO_DATA', 'demo_account.enabled': 'MAHLWERK_DEMO_ACCOUNT',
+    'access_tokens.enabled': 'MAHLWERK_TOKENS', 'webhooks.enabled': 'MAHLWERK_WEBHOOKS', 'webhooks.config.hosts': 'MAHLWERK_WEBHOOK_HOSTS', 'demo_data.enabled': 'MAHLWERK_DEMO_DATA', 'demo_account.enabled': 'MAHLWERK_DEMO_ACCOUNT', 'vision.enabled': 'MAHLWERK_VISION',
   };
   const UNOFFICIAL: ConnectorKey[] = ['cookidoo', 'yazio_login'];
-  const WITH_SETTINGS: ConnectorKey[] = ['openfoodfacts_catalog', 'cookidoo', 'web_recipes', 'yazio_import', 'yazio_login', 'webhooks', 'demo_account'];
+  const WITH_SETTINGS: ConnectorKey[] = ['openfoodfacts_catalog', 'cookidoo', 'web_recipes', 'yazio_import', 'yazio_login', 'webhooks', 'demo_account', 'vision'];
 
   let overview = $state<AdminOverview | null>(null);
   let users = $state<AdminUser[]>([]);
@@ -154,6 +154,7 @@
       case 'yazio_import': return count(i.batches as number, 'admBatch1', 'admBatches');
       case 'access_tokens': return count(i.active as number, 'admKey1', 'admActiveKeys');
       case 'webhooks': return count(i.hooks as number, 'admHook1', 'admHooksN');
+      case 'vision': return c.info.model ? t('admVisionModel', { model: String(c.info.model) }) : '';
       default: return '';
     }
   };
@@ -179,6 +180,10 @@
     if (c.key === 'yazio_import') out.push({ text: t('admTechYazio'), cmd: 'python -m mahlwerk.yazio' });
     if (c.key === 'demo_data') out.push({ text: t('admTechDemo'), cmd: 'MAHLWERK_DEMO_DATA=1' });
     if (c.key === 'demo_account') out.push({ text: t('admTechDemoAcct'), cmd: 'MAHLWERK_DEMO_ACCOUNT=1' });
+    if (c.key === 'vision') {
+      out.push({ text: t('admTechVision') });
+      out.push({ cmd: 'MAHLWERK_VISION_URL=http://127.0.0.1:11434/v1' }, { cmd: 'MAHLWERK_VISION_MODEL=...' }, { cmd: 'MAHLWERK_VISION_KEY=... (optional)' });
+    }
     if (c.key === 'web_recipes' && !c.enabled) out.push({ text: t('admTechBlocked'), cmd: 'MAHLWERK_WEB_RECIPES_BLOCKED_HOSTS' });
     for (const name of fixedBy(c)) out.push({ text: t('admLockedBy', { name }) });
     return out;
@@ -285,6 +290,20 @@
           </span>
         </div>
       {/if}
+    {/if}
+
+    {#if c.key === 'vision'}
+      <p class="note warnbox">{t('admVisionWarn')}</p>
+      {#if c.status === 'not_configured'}
+        <div class="setup" role="note" aria-labelledby="vs-setup">
+          <h5 id="vs-setup" class="micro">{t('admYazioSetup')}</h5>
+          <p class="note">{t('admVisionKeys')}</p>
+          <span class="envs">
+            {#each ['MAHLWERK_VISION_URL', 'MAHLWERK_VISION_MODEL', 'MAHLWERK_VISION_KEY'] as name (name)}<code>{name}</code>{/each}
+          </span>
+        </div>
+      {/if}
+      {#if c.info.per_hour}<p class="note">{t('admVisionLimit', { n: Number(c.info.per_hour) })}</p>{/if}
     {/if}
 
     {#if c.key === 'webhooks'}

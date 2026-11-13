@@ -719,6 +719,10 @@ const mockConnectors: Connector[] = [
   { key: 'web_recipes', kind: 'source', enabled: new URLSearchParams(location.search).get('webrecipes') !== 'off', status: 'ok', configurable: true, locked: [], config: { images: false }, info: {} },
   { key: 'yazio_import', kind: 'import', enabled: true, status: 'upload', configurable: false, locked: [], config: {}, info: { batches: 1, cli: true, upload: true } },
   { key: 'yazio_login', kind: 'import', enabled: new URLSearchParams(location.search).get('yazio') !== 'off', status: (new URLSearchParams(location.search).get('yazio') === 'unset' || cnq === 'notconfigured') ? 'not_configured' : 'ready', configurable: true, locked: [], config: {}, info: { unofficial: true, env: 'MAHLWERK_YAZIO_CLIENT_ID, MAHLWERK_YAZIO_CLIENT_SECRET' } },
+  // ?vision=off: photo recognition is switched off; ?vision=unset (or ?cn=notconfigured): no model configured
+  { key: 'vision', kind: 'source', enabled: new URLSearchParams(location.search).get('vision') !== 'off',
+    status: new URLSearchParams(location.search).get('vision') === 'unset' || cnq === 'notconfigured' ? 'not_configured' : new URLSearchParams(location.search).get('vision') === 'off' ? 'off' : 'ready',
+    configurable: true, locked: [], config: {}, info: { model: new URLSearchParams(location.search).get('vision') === 'unset' || cnq === 'notconfigured' ? null : 'local-vision-model', per_hour: 30, env: 'MAHLWERK_VISION_URL, MAHLWERK_VISION_MODEL, MAHLWERK_VISION_KEY' } },
   { key: 'label_reader', kind: 'import', enabled: true, status: 'ok', configurable: false, locked: [], config: {}, info: {} },
   { key: 'demo_data', kind: 'import', enabled: true, status: 'ok', configurable: false, locked: [], config: {}, info: { env: 'MAHLWERK_DEMO_DATA' } },
   // ?mock=demoacct: the demo account is switched on (an admin can switch to it); ?mock=demoview: and the switch is already made
@@ -957,7 +961,7 @@ function mockIntegrations(method: string, p: string, body: unknown): unknown {
     const c = mockConnectors.find((x) => x.key === r![1]);
     if (!c) throw new ApiError(404, 'unknown connector');
     const b = body as { enabled?: boolean; config?: Record<string, string[] | boolean> };
-    if (b.enabled != null) { c.enabled = b.enabled; c.status = c.key === 'yazio_login' && new URLSearchParams(location.search).get('yazio') === 'unset' ? 'not_configured' : b.enabled ? (c.key === 'cookidoo' || c.key === 'yazio_login' ? 'ready' : 'ok') : 'off'; }
+    if (b.enabled != null) { c.enabled = b.enabled; c.status = (c.key === 'yazio_login' && new URLSearchParams(location.search).get('yazio') === 'unset') || (c.key === 'vision' && c.info.model === null) ? 'not_configured' : b.enabled ? (c.key === 'cookidoo' || c.key === 'yazio_login' || c.key === 'vision' ? 'ready' : 'ok') : 'off'; }
     if (b.config) Object.assign(c.config, b.config);
     if (c.key === 'demo_account' && b.enabled) c.info.exists = true;
     return clone(c);
@@ -1464,6 +1468,34 @@ export async function mockRequest(method: string, path: string, body?: unknown, 
       for (const es of entries.values()) for (const e of es) if (e.food_id === id) e.food_id = null;
       return undefined;
     }
+  }
+  if (p === 'vision/status') {
+    const v = mockConnectors.find((c) => c.key === 'vision')!;
+    const configured = v.info.model !== null;
+    return { enabled: v.enabled, configured, ready: v.enabled && configured, per_hour: 30 };
+  }
+  if (p === 'vision/meal' || p === 'vision/recipe') {
+    const v = mockConnectors.find((c) => c.key === 'vision')!;
+    if (!v.enabled) throw new ApiError(404, 'photo recognition is switched off (admin area)');
+    if (v.info.model === null) throw new ApiError(409, 'photo recognition is not configured (MAHLWERK_VISION_URL and MAHLWERK_VISION_MODEL)');
+    await wait(1400); // a model takes a moment
+    void raw;
+    const de = url.searchParams.get('lang') === 'de';
+    if (p === 'vision/meal') {
+      return {
+        items: [
+          { name: de ? 'Gekochte Kartoffeln' : 'Boiled potatoes', grams: 250, kcal: 190, protein_g: 5, fat_g: 0.3, carbs_g: 40, confidence: 0.82 },
+          { name: de ? 'Grüne Bohnen' : 'Green beans', grams: 120, kcal: 38, protein_g: 2.2, fat_g: 0.2, carbs_g: 6.5, confidence: 0.64 },
+          { name: de ? 'Gebratenes Hähnchenfilet' : 'Pan-fried chicken breast', grams: 140, kcal: 230, protein_g: 43, fat_g: 5.5, carbs_g: 0, confidence: 0.47 },
+        ],
+        note: de ? 'Mengen nach dem Augenmaß geschätzt.' : 'Amounts estimated by eye.',
+      };
+    }
+    return {
+      name: de ? 'Gemüsesuppe' : 'Vegetable soup', portions: 4,
+      ingredients: de ? ['2 Karotten', '1 Zwiebel', '300 g Kartoffeln', '1 l Gemüsebrühe', '2 EL Olivenöl', '1 TL Salz'] : ['2 carrots', '1 onion', '300 g potatoes', '1 l vegetable stock', '2 tbsp olive oil', '1 tsp salt'],
+      nutrition_per_portion: { kcal: 160, protein_g: 4, fat_g: 6, carbs_g: 22 }, note: null,
+    };
   }
   if (p === 'label-scans') {
     await wait(900);

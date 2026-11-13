@@ -56,6 +56,9 @@ _QUEUE = threading.BoundedSemaphore(1 + MAX_WAITING)  # one running and at most 
 MAGIC = b"MWI1"
 MAX_OUTPUT_BYTES = {"l": 1024 * 1024, "m": 200 * 1024, "s": 64 * 1024}  # far above what the encoder produces; a child that sends more is not trusted
 ACCEPTED = ("JPEG", "PNG", "WEBP")
+MODEL_EDGE = 1568  # long edge of the picture sent to an image model
+MODEL_QUALITY = 85
+MAX_MODEL_BYTES = 4 * 1024 * 1024
 
 
 class ImageRejected(Exception):
@@ -101,6 +104,23 @@ def check() -> bool:
 
 def process(data: bytes) -> Processed:
     """The three variants of the picture in `data`, else ImageRejected. Blocks (call it from a thread, not from the event loop)."""
+    return _parse(_run_child(data, "recipe"))
+
+
+def for_model(data: bytes) -> bytes:
+    """The picture as ONE clean JPEG for an image model: long edge at most `MODEL_EDGE`, no metadata at all (no EXIF, so no GPS
+    position), the camera's rotation applied. Same child process and limits as `process`. Blocks (call it from a thread)."""
+    blob = _run_child(data, "model")
+    if blob[:2] != b"\xff\xd8":
+        raise ImageRejected("broken")
+    size = imagesize.dimensions(blob)
+    if size is None or not (1 <= max(size) <= MODEL_EDGE) or len(blob) > MAX_MODEL_BYTES:
+        raise ImageRejected("broken")
+    return blob
+
+
+def _run_child(data: bytes, mode: str) -> bytes:
+    """The output of the child for `mode` (`recipe`: the three WebP files, `model`: one JPEG), else ImageRejected."""
     if len(data) > MAX_INPUT_BYTES:
         raise ImageRejected("too_large")
     size = imagesize.dimensions(data)
@@ -117,7 +137,7 @@ def process(data: bytes) -> Processed:
             try:
                 done = subprocess.run(
                     [sys.executable, "-I", "-m", "mahlwerk.imageproc"], input=data, capture_output=True, timeout=WALL_SECONDS,
-                    env={"PATH": os.environ.get("PATH", ""), "MAHLWERK_IMAGE_CHILD": "1"}, check=False, close_fds=True, cwd="/",
+                    env={"PATH": os.environ.get("PATH", ""), "MAHLWERK_IMAGE_CHILD": "1", "MAHLWERK_IMAGE_MODE": mode}, check=False, close_fds=True, cwd="/",
                 )
             except subprocess.TimeoutExpired:
                 raise ImageRejected("broken") from None
@@ -130,7 +150,7 @@ def process(data: bytes) -> Processed:
     if done.returncode != 0:
         kind = done.stderr.decode("ascii", "replace").strip().splitlines()[-1:] or ["broken"]
         raise ImageRejected(kind[0] if kind[0] in ImageRejected.TEXTS else "broken")
-    return _parse(done.stdout)
+    return done.stdout
 
 
 def _parse(blob: bytes) -> Processed:
@@ -227,10 +247,11 @@ def _encode(img, quality: int) -> bytes:
     return out.getvalue()
 
 
-def _variants(data: bytes) -> tuple[dict[str, bytes], tuple[int, int]]:
+def _open_upright(data: bytes, draft: int):
+    """The first frame as flat RGB pixels, turned the way the camera meant it. `draft`: a JPEG may be decoded this much smaller."""
     import io
 
-    from PIL import Image, ImageOps
+    from PIL import Image
 
     Image.MAX_IMAGE_PIXELS = MAX_PIXELS
     try:
@@ -248,7 +269,7 @@ def _variants(data: bytes) -> tuple[dict[str, bytes], tuple[int, int]]:
     try:
         img.seek(0)  # an animation: its first frame
         if img.format == "JPEG":
-            img.draft("RGB", (SIZES["l"] * 2, SIZES["l"] * 2))  # the decoder may scale down while reading: far less memory and time
+            img.draft("RGB", (draft, draft))  # the decoder may scale down while reading: far less memory and time
         orientation = img.getexif().get(0x0112, 1)
         img.load()
         img = _flatten(img)
@@ -260,6 +281,26 @@ def _variants(data: bytes) -> tuple[dict[str, bytes], tuple[int, int]]:
             5: Image.Transpose.TRANSPOSE, 6: Image.Transpose.ROTATE_270, 7: Image.Transpose.TRANSVERSE, 8: Image.Transpose.ROTATE_90}.get(orientation)
     if turn is not None:
         img = img.transpose(turn)
+    return img
+
+
+def _model_jpeg(data: bytes) -> bytes:
+    import io
+
+    from PIL import Image
+
+    img = _open_upright(data, MODEL_EDGE * 2)
+    img.thumbnail((MODEL_EDGE, MODEL_EDGE), Image.Resampling.LANCZOS)
+    clean = Image.frombytes("RGB", img.size, img.tobytes())  # a new image from the pixels alone: no metadata can come along
+    out = io.BytesIO()
+    clean.save(out, "JPEG", quality=MODEL_QUALITY, optimize=True)
+    return out.getvalue()
+
+
+def _variants(data: bytes) -> tuple[dict[str, bytes], tuple[int, int]]:
+    from PIL import Image, ImageOps
+
+    img = _open_upright(data, SIZES["l"] * 2)
     files: dict[str, bytes] = {}
     big = img.copy()
     big.thumbnail((SIZES["l"], SIZES["l"]), Image.Resampling.LANCZOS)
@@ -290,6 +331,11 @@ def _main() -> int:
             raise ImageRejected("format")
         if size[0] * size[1] > MAX_PIXELS:
             raise ImageRejected("too_many_pixels")
+        if os.environ.get("MAHLWERK_IMAGE_MODE") == "model":
+            out = _model_jpeg(data)
+            sys.stdout.buffer.write(out)
+            sys.stdout.buffer.flush()
+            return 0
         files, (width, height) = _variants(data)
         head = json.dumps({"width": width, "height": height, "lengths": {k: len(v) for k, v in files.items()}}).encode()
         out = MAGIC + struct.pack(">I", len(head)) + head + b"".join(files[k] for k in SIZES)

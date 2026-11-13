@@ -23,6 +23,7 @@ ENV = {
     "web_recipes.images": ("MAHLWERK_WEB_RECIPES_IMAGES", "bool"),
     "yazio_login.enabled": ("MAHLWERK_YAZIO_LOGIN", "bool"),
     "demo_account.enabled": ("MAHLWERK_DEMO_ACCOUNT", "bool"),
+    "vision.enabled": ("MAHLWERK_VISION", "bool"),
 }
 DEFAULTS = {
     "access_tokens.enabled": True,
@@ -37,6 +38,7 @@ DEFAULTS = {
     "cookidoo.personal": True,  # people may add an own Cookidoo account (the admin can forbid it)
     "yazio_login.enabled": False,  # the direct one-time Yazio sign-in is off until an admin switches it on
     "demo_account.enabled": False,  # the built-in demo account (admins may switch to it) is off until an admin switches it on
+    "vision.enabled": False,  # photo recognition: photos go to the image model the operator configured, so it is off until an admin switches it on
 }
 
 
@@ -99,6 +101,10 @@ class Features:
     @property
     def demo_account(self) -> bool:
         return bool(self.get("demo_account.enabled"))
+
+    @property
+    def vision(self) -> bool:
+        return bool(self.get("vision.enabled"))
 
     @property
     def lookup(self) -> bool:

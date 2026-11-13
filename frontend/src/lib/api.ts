@@ -1,6 +1,7 @@
 // API client. All paths are relative (`api/v1/...`) so the app works below any path prefix.
 import type {
   Account, ActivityDayOut, CookidooAccount, CookidooBulkPreview, CookidooBulkRun, CookidooBulkScope, CookidooPicturePreview, RecipeGroup, CookidooScope, YazioPreview, YazioRun, YazioState, AccessToken, AuthStatus, AccessTokenCreated, AdminOverview, AdminUser, DemoAccountState, Badges, CatalogItem, Connector, CookidooCollection, CookidooPlanDay, CookidooPreview, RefreshState, TokenScope, Webhook, WebhookCreated, WebhookDelivery, WebhookIn, FoodDetail, FoodList, FoodSort, Granularity, NutrientCurve, DemoResult, IngredientMatches, Day, Entry, Fast, Fasting, Food, FoodIn, Goal, HistoryDay, ImportBatch, ImportRemoved, Insights, LabelScan, Me, Meal, NutrientInfo, RecentFood, Recipe, RecipeIn, Review, Settings, SettingsPatch, SuggestFocus, Suggestions, Template, WebPreview, WebPreviewIn, WeightPoint, Workout, WorkoutIn,
+  Account, ActivityDayOut, CookidooAccount, CookidooBulkPreview, CookidooBulkRun, CookidooBulkScope, CookidooPicturePreview, RecipeGroup, CookidooScope, YazioPreview, YazioRun, YazioState, AccessToken, AuthStatus, AccessTokenCreated, AdminOverview, AdminUser, DemoAccountState, Badges, CatalogItem, Connector, CookidooCollection, CookidooPlanDay, CookidooPreview, RefreshState, TokenScope, Webhook, WebhookCreated, WebhookDelivery, WebhookIn, FoodDetail, FoodList, FoodSort, Granularity, NutrientCurve, DemoResult, Day, Entry, Fast, Fasting, Food, FoodIn, Goal, HistoryDay, ImportBatch, ImportRemoved, Insights, LabelScan, Me, Meal, NutrientInfo, RecentFood, Recipe, RecipeIn, Review, Settings, SettingsPatch, SuggestFocus, Suggestions, Template, WebPreview, WebPreviewIn, WeightPoint, Workout, WorkoutIn, VisionMeal, VisionRecipe, VisionState,
 } from './types';
 
 export class ApiError extends Error {
@@ -151,6 +152,11 @@ export const api = {
   cookidooRemoveAccount: (scope: CookidooScope) => request<CookidooAccount>('DELETE', cookidooPath(scope)),
   cookidooCheck: (scope: CookidooScope) => request<{ ok: boolean }>('POST', `${cookidooPath(scope)}/check`),
   labelScan: (image: Blob) => request<LabelScan>('POST', 'label-scans', undefined, image),
+  visionStatus: () => request<VisionState>('GET', 'vision/status'),
+  /** Photo of a meal -> recognised parts with estimated amounts (the image as the body; `lang`: language of the names). Nothing is stored. */
+  visionMeal: (image: Blob, lang: 'de' | 'en') => request<VisionMeal>('POST', `vision/meal?lang=${lang}`, undefined, image),
+  /** Photo of a recipe -> name, portions and ingredient lines. Nothing is stored. */
+  visionRecipe: (image: Blob, lang: 'de' | 'en') => request<VisionRecipe>('POST', `vision/recipe?lang=${lang}`, undefined, image),
 
   day: (day: string) => request<Day>('GET', `diary/${day}`),
   addEntry: (day: string, entry: { food_id: number; meal: Meal; amount: number }) =>

@@ -108,6 +108,10 @@ proxy with a valid certificate. Append `?engine=wasm` to the URL to force the bu
 - **Recipes from any web page (optional).** Paste the link of a recipe: the server reads the nutrition values the page
   publishes (schema.org, one page, public sites only) and, after a preview, takes over name, portions, values per portion and the
   link. No texts are kept; the page's picture only when an admin switches "Store recipe pictures" on. Off by default, see [Recipes from web pages](docs/integrations.md#recipes-from-web-pages).
+- **Photo recognition (optional).** A photo of a meal becomes a list of parts with estimated amounts and values, a photo of a recipe
+  becomes name, portions and ingredient lines, through an image model you configure (a local one such as Ollama, or any OpenAI-compatible
+  provider). Photos are shrunk and stripped of location data first, nothing is stored, the results are estimates to check. Off by default,
+  see [Photo recognition](docs/integrations.md#photo-recognition).
 - **What still fits today.** Recipes (own, Cookidoo, web) that suit the rest of the day: from your goal, what you ate and when
   you last ate each recipe, with an amount and a reason in words. A quiet card on the day view (switchable) and a section on the
   Recipes page. Worked out on your server, nothing is sent anywhere.
@@ -353,6 +357,7 @@ Mahlwerk makes no connection that you did not switch on or ask for, and has no a
 | **Recipes from web pages** (off by default) | the site a person pastes the link of | a person previews or takes over a link (once per address and 5 minutes) | an ordinary `GET` of that page (up to 10 seconds, 3 MB): the address, a `User-Agent` with the project name and `MAHLWERK_CONTACT`, no cookies, no `Referer`, nothing about the person or the diary |
 | **Recipe pictures, Cookidoo** (off by default, own switch) | the picture host Cookidoo names in the recipe details | a recipe is taken over or reloaded, or the catch-up run is started | an ordinary `GET` of that one picture address (public addresses only, up to 10 seconds, 6 MB), same `User-Agent`, no cookies, no `Referer` |
 | **Recipe pictures, web** (off by default, own switch) | the host of the picture a recipe page names | a recipe is taken over or reloaded | the same, for that one picture |
+| **Photo recognition** (off by default, needs a model you configure) | the image model at `MAHLWERK_VISION_URL`: a local one or a provider you chose | a person sends a photo of a meal or a recipe | the photo (shrunk, as a new JPEG without EXIF or location) and a fixed prompt; nothing about the person or the diary; nothing is stored here |
 | Own recipe photos | nobody | – | nothing: the photo goes from your browser to your server only |
 | What still fits today | nobody | – | nothing: it is computed on the server from your own data |
 
@@ -387,6 +392,9 @@ All settings are environment variables (see `.env.example`). The Docker image se
 | `MAHLWERK_OFF_COUNTRIES` | `en:germany` | Countries of the catalogue refresh in the admin area. |
 | `MAHLWERK_WEB_RECIPES` | off | `on` / `off` fixes the switch of the connector "Recipes from web pages" (the admin area shows it as fixed). Without it the admin decides; default off. The fetch sends `MAHLWERK_CONTACT` in its `User-Agent`. |
 | `MAHLWERK_WEB_RECIPES_BLOCKED_HOSTS` | – | Comma separated names the web-recipe fetch must never contact; an entry blocks the name and all subdomains. The host of `MAHLWERK_PUBLIC_URL` and the names in `MAHLWERK_ALLOWED_HOSTS` are blocked automatically. **List your own domains before you switch the connector on** (a public name can lead back into your network through the router). |
+| `MAHLWERK_VISION` | off | `on` / `off` fixes the switch of the connector "Photo recognition" (the admin area shows it as fixed). Without it the admin decides; default off. |
+| `MAHLWERK_VISION_URL`, `MAHLWERK_VISION_MODEL`, `MAHLWERK_VISION_KEY` | – | The image model: the base address of an OpenAI-compatible API (e.g. `http://127.0.0.1:11434/v1`), the model name and, optionally, a key (sent as a Bearer token, never shown). An internal address is allowed on purpose. See [Photo recognition](docs/integrations.md#photo-recognition). |
+| `MAHLWERK_VISION_PER_HOUR` | `30` | Photos per person and hour for photo recognition. |
 | `MAHLWERK_COOKIDOO` | off | `on` / `off` fixes the Cookidoo connector switch (the admin area shows it as fixed). Without it the admin decides; default off. |
 | `MAHLWERK_COOKIDOO_IMAGES` | off | `on` / `off` fixes the switch "Store recipe pictures" of the Cookidoo connector. Without it the admin decides; default off. |
 | `MAHLWERK_WEB_RECIPES_IMAGES` | off | The same for recipes from web pages. |

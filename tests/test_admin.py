@@ -123,12 +123,12 @@ def connectors(client) -> dict:
 def test_connector_list(client):
     c = connectors(client)
     assert list(c) == ["openfoodfacts_lookup", "openfoodfacts_catalog", "bls", "cookidoo", "web_recipes", "yazio_import", "yazio_login",
-                       "label_reader",
+                       "vision", "label_reader",
                        "demo_data", "demo_account", "access_tokens", "webhooks"]
     kinds = {k: v["kind"] for k, v in c.items()}
     assert kinds["openfoodfacts_lookup"] == kinds["bls"] == "source" and kinds["yazio_import"] == "import"
     assert kinds["access_tokens"] == kinds["webhooks"] == "interface"
-    assert {k for k, v in c.items() if v["configurable"]} == {"openfoodfacts_lookup", "openfoodfacts_catalog", "cookidoo", "web_recipes", "yazio_login", "demo_account", "access_tokens", "webhooks"}
+    assert {k for k, v in c.items() if v["configurable"]} == {"openfoodfacts_lookup", "openfoodfacts_catalog", "cookidoo", "web_recipes", "yazio_login", "demo_account", "vision", "access_tokens", "webhooks"}
     assert c["openfoodfacts_lookup"]["enabled"] is True and c["openfoodfacts_catalog"]["status"] == "empty"
     assert c["openfoodfacts_catalog"]["config"] == {"countries": ["en:germany"]}
     assert c["webhooks"]["config"] == {"hosts": []} and c["access_tokens"]["info"] == {"active": 0}

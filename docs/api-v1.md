@@ -917,6 +917,32 @@ What is read, what is kept: see integrations. Nutrition values are read from `nu
 ("4 Portionen", "Serves 4"), list or `QuantitativeValue`. **Assumption: the values are per serving** (schema.org defines them for
 `servingSize`), unless the person says "whole recipe" (they are then divided by the portions).
 
+## Photo recognition
+
+Optional connector (admin switch `vision`, environment `MAHLWERK_VISION`, **off by default**; needs `MAHLWERK_VISION_URL` and
+`MAHLWERK_VISION_MODEL`), see [integrations.md](integrations.md#photo-recognition). Nothing is stored: no photo, no answer. All routes need a
+normal sign-in (an access token gets **403**; the demo account gets **403**) and the `X-Mahlwerk-Request` header.
+
+| Method and path | Returns | Notes |
+| --- | --- | --- |
+| `GET /vision/status` | VisionState | `{enabled, configured, ready, per_hour}`; no address, no key. For the interface to show or hide the capture buttons. |
+| `POST /vision/meal` | MealResult | The image is the request body (JPEG, PNG or WebP, at most 8 MB and 24 megapixels), like `POST /label-scans`. Query `lang`: `de` or `en` (default `en`), the language of the names. |
+| `POST /vision/recipe` | RecipeResult | The same for a photo of a recipe. |
+
+`MealResult`: `{items: [{name, grams, kcal, protein_g, fat_g, carbs_g, confidence}], note}`: at most 30 items; every number except
+`name` may be `null`; `grams` 0 to 5000, `kcal` 0 to 5000, the macros 0 to 1000 for **that amount** (not per 100 g), `confidence` 0 to 1; `name` at most
+120 characters, `note` at most 300. An empty `items` means no food was recognised. **All values are estimates.**
+
+`RecipeResult`: `{name, portions, ingredients: [text], nutrition_per_portion: {kcal, protein_g, fat_g, carbs_g} | null, note}`:
+`name` may be `null`, `portions` 0.25 to 100 or `null`, 1 to 80 `ingredients` of at most 300 characters (`200 g flour`),
+`nutrition_per_portion` only when the page shows a table. No preparation text is returned.
+
+Answers: **404** the connector is switched off; **409** not configured; **413** the image is over 8 MB or 24 megapixels; **422** empty body or not a
+JPEG, PNG or WebP picture, or `lang` is neither `de` nor `en`; **429** (with `Retry-After`) the brake: `per_hour` photos per person and hour, two runs at the same
+time on the whole server, or the picture worker is busy; **502** the model could not be reached or refused the request, or its answer could not be used
+(neutral texts, never the model's own text); **504** the model took longer than 90 seconds. The admin card is `vision` in `GET /admin/connectors`
+(`status` `off`, `not_configured` or `ready`; `info`: `model` (the name only), `per_hour`, `env`).
+
 ## Suggestions: what still fits today
 
 `GET /recipes/suggestions?date=&limit=5&group=&focus=balanced&anyway=false` ranks the recipes (own, Cookidoo and web ones) by how

@@ -17,7 +17,7 @@ from ..catalog import Catalog
 from ..db import Store
 from ..deps import get_catalog, get_store
 from ..features import ENV, Features
-from .. import yazio_live
+from .. import vision, yazio_live
 from .cookidoo import shared_access
 
 router = APIRouter(prefix="/api/v1/admin", dependencies=[Depends(require_admin)])
@@ -77,6 +77,17 @@ def _demo_account_connector(request: Request) -> dict:
             "locked": _locked(features, "demo_account.enabled"), "config": {}, "info": info}
 
 
+def _vision_connector(request: Request) -> dict:
+    """The card of photo recognition: switch, whether the operator configured a model, its name (never the address or the key)."""
+    features: Features = request.app.state.features
+    settings = vision.settings_from_env()
+    return {"key": "vision", "kind": "source", "enabled": features.vision,
+            "status": "not_configured" if settings is None else "ready" if features.vision else "off", "configurable": True,
+            "locked": _locked(features, "vision.enabled"), "config": {},
+            "info": {"model": settings.model if settings else None, "per_hour": vision.per_hour_from_env(),
+                     "env": "MAHLWERK_VISION_URL, MAHLWERK_VISION_MODEL, MAHLWERK_VISION_KEY"}}
+
+
 def connector_list(request: Request) -> list[dict]:
     app = request.app
     features: Features = app.state.features
@@ -112,6 +123,7 @@ def connector_list(request: Request) -> list[dict]:
          "status": ("not_configured" if yazio_live.app_identity() is None else "ready" if features.yazio_login else "off"),
          "configurable": True, "locked": _locked(features, "yazio_login.enabled"), "config": {},
          "info": {"unofficial": True, "env": "MAHLWERK_YAZIO_CLIENT_ID, MAHLWERK_YAZIO_CLIENT_SECRET"}},
+        _vision_connector(request),
         {"key": "label_reader", "kind": "import", "enabled": label.available(),
          "status": "ok" if label.available() else "unavailable", "configurable": False, "locked": [], "config": {},
          "info": {}},
@@ -153,7 +165,7 @@ def patch_connector(key: str, body: ConnectorPatch, request: Request, store: Sto
     features: Features = request.app.state.features
     switch = {"openfoodfacts_lookup": "openfoodfacts_lookup.enabled", "access_tokens": "access_tokens.enabled",
               "webhooks": "webhooks.enabled", "cookidoo": "cookidoo.enabled", "web_recipes": "web_recipes.enabled", "yazio_login": "yazio_login.enabled",
-              "demo_account": "demo_account.enabled"}
+              "demo_account": "demo_account.enabled", "vision": "vision.enabled"}
     listing = {"openfoodfacts_catalog": ("openfoodfacts_catalog.countries", "countries", COUNTRY, _country),
                "webhooks": ("webhooks.hosts", "hosts", HOST, lambda v: v)}
     known = {c["key"] for c in connector_list(request)}

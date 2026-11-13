@@ -362,6 +362,71 @@ curl -s -H 'X-Mahlwerk-Request: 1' -H 'Content-Type: application/json' \
   -d '{"url": "https://recipes.example.org/lentil-salad"}' https://mahlwerk.example.org/api/v1/web-recipes/preview
 ```
 
+## Photo recognition
+
+Two functions on one connector: a photo of a **meal** becomes a list of recognised parts with estimated amounts and nutrition
+values, and a photo of a **recipe** (book page, print-out, screen) becomes a name, a number of portions and ingredient lines.
+It uses an image model that **you** configure. Off by default: an admin switches it on in the admin area (card "Photo
+recognition") or with `MAHLWERK_VISION=on`, and it works only once the model is configured. This page describes the server side
+(routes, card, settings); the capture screens of the web interface are separate.
+
+**Protocol.** One general one, the widely implemented OpenAI-compatible `POST {base}/chat/completions` with one user message made
+of a text and an `image_url` (`data:image/jpeg;base64,...`). It covers local servers (Ollama, LM Studio, llama.cpp) and hosted
+providers alike. There is no provider library: the call is plain `httpx` (`src/mahlwerk/vision.py`). The model must reply with one
+JSON object (the prompt says so; the shapes are in api-v1.md).
+
+| Variable | Meaning |
+| --- | --- |
+| `MAHLWERK_VISION_URL` | The base address of the API, normally ending in `/v1`, e.g. `http://127.0.0.1:11434/v1`. `/chat/completions` is added. `http` or `https`, no user name in it. |
+| `MAHLWERK_VISION_MODEL` | The name of a model that can read images (a "vision" model). |
+| `MAHLWERK_VISION_KEY` | Optional. Sent as `Authorization: Bearer ...`. |
+| `MAHLWERK_VISION` | `on` / `off` fixes the switch (the admin area shows it as fixed). Without it the admin decides; default off. |
+| `MAHLWERK_VISION_PER_HOUR` | Photos per person and hour, default 30 (1 to 10000). |
+
+An internal address is allowed here **on purpose**: a local model lives in your network, and only the operator can set the
+environment (unlike webhook hosts or recipe links, which people name). The card shows the name of the model, never the address
+or the key.
+
+Example for a local model with [Ollama](https://ollama.com) on the same machine (any vision model you have pulled; from a
+container use the host's address instead of `127.0.0.1`):
+
+```sh
+ollama pull <a-vision-model>
+MAHLWERK_VISION=on
+MAHLWERK_VISION_URL=http://127.0.0.1:11434/v1
+MAHLWERK_VISION_MODEL=<a-vision-model>
+```
+
+**Privacy.** The photo goes to whatever you configured. With a local model nothing leaves your network; with a hosted provider the
+photo (shrunk, see below) and your prompt go to that provider and its terms apply: say so to the people who use your server. Before
+sending, the server decodes the photo in the picture child process (see SECURITY.md), turns it as the camera meant, shrinks it to
+at most 1568 pixels on the long edge and writes a **new JPEG from the pixels alone**: no EXIF, so no GPS position, no camera or
+time data, no comment, no embedded profile. **Nothing is stored**: not the photo, not the answer; no log line holds anything of
+either (only the kind of a failure and an HTTP status). Recipe photos: only name, portions, ingredients and, if the page has a
+table, the values per portion are read; **the method text is neither requested nor kept**.
+
+**The answer is not trusted.** Text inside a photo can steer a model ("ignore your instructions..."), and a model can write
+nonsense. So the answer is read strictly: JSON only (also from a fenced block), only the known fields, texts cleaned (no control
+characters, no markup) and cut (name 120 characters, at most 30 meal parts or 80 ingredient lines of at most 300 characters), numbers
+checked and clamped to sensible ranges, `NaN` and `Infinity` refused. An answer that does not fit is a **502** with a neutral
+text; the raw text of the model is never passed on.
+
+**Limits and brakes.** Photos: 8 MB, JPEG, PNG or WebP, at most 24 megapixels (like the label reader). Connection 5 seconds,
+whole call 90 seconds, answer at most 256 KB, redirects are not followed. Per person `MAHLWERK_VISION_PER_HOUR` photos an hour and
+**two runs at the same time** on the whole server; beyond that **429** with `Retry-After`. Only signed-in people (no access keys),
+never the demo account.
+
+**Limits of the result.** Amounts and nutrition values of a meal are **estimates** from a picture: portion sizes, hidden fat and
+sauces are guesses, and models differ a lot. The interface shows them as suggestions to check before anything is booked. Small
+local models are often much worse at this than large hosted ones; try yours with photos you know.
+
+```sh
+curl -s -H 'X-Mahlwerk-Request: 1' -H 'Authorization: ...' --data-binary @meal.jpg \
+  'https://mahlwerk.example.org/api/v1/vision/meal?lang=en'
+```
+
+(The session cookie of a browser sign-in is used the same way; an access key is refused with 403.)
+
 ## Recipe pictures
 
 A recipe can have a picture: large in its detail, small in the list, tiny among the suggestions.

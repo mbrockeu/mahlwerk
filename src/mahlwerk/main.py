@@ -27,12 +27,12 @@ import json
 from .features import Features
 from .jobs import CatalogRefresh
 from .webhooks import Dispatcher
-from . import webrecipes
+from . import vision, webrecipes
 from .imagestore import ImageStore
 from .recipeimages import RecipeImages
 from .nutrition import valid_gtin  # noqa: F401  (kept importable from here)
 from .routes import yazio as yazio_routes
-from .routes import activity as activity_routes, admin, badges, catalog, cookidoo as cookidoo_routes, diary, fasting, foods, insights, nutrients, profile, recipe_groups, recipes, summary, suggestions, templates, tokens, water, web_recipes, images as image_routes
+from .routes import activity as activity_routes, admin, badges, catalog, cookidoo as cookidoo_routes, diary, fasting, foods, insights, nutrients, profile, recipe_groups, recipes, summary, suggestions, templates, tokens, water, web_recipes, images as image_routes, vision as vision_routes
 from .routes import auth as auth_routes
 from .routes import demo_view as demo_view_routes
 from .routes import oidc as oidc_routes
@@ -67,8 +67,9 @@ def create_app(
     oidc_transport: httpx.BaseTransport | None = None,
     yazio_transport: httpx.AsyncBaseTransport | None = None,
     web_transport: httpx.BaseTransport | None = None,
+    vision_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
-    """`password_cost` (scrypt N, r, p), `clock` and `oidc_transport` (a stand-in for the provider) and `yazio_transport` (a stand-in for Yazio) and `web_transport` (a stand-in for the web pages of recipes) exist for the tests only: there is deliberately no environment
+    """`password_cost` (scrypt N, r, p), `clock` and `oidc_transport` (a stand-in for the provider) and `yazio_transport` (a stand-in for Yazio) and `web_transport` (a stand-in for the web pages of recipes) and `vision_transport` (a stand-in for the image model) exist for the tests only: there is deliberately no environment
     variable that could weaken password hashing in production."""
     contact = os.environ.get("MAHLWERK_CONTACT", "no-contact-configured")
 
@@ -78,6 +79,7 @@ def create_app(
         app.state.webhooks.stop()  # finish or drop running deliveries; nothing is left behind
         await app.state.cookidoo_runs.shutdown()  # a run that takes over many recipes ends; what it saved stays
         await app.state.cookidoo.aclose()
+        app.state.vision.client.close()
         if app.state.oidc is not None:
             app.state.oidc.close()
 
@@ -131,6 +133,7 @@ def create_app(
     app.state.cookidoo_runs = BulkRuns(
         app.state.cookidoo, app.state.store, lambda: app.state.features.cookidoo, clock=clock,
         images=app.state.images, fetcher=app.state.web_fetcher, images_on=lambda: app.state.features.cookidoo_images)
+    app.state.vision = vision.Vision(clock, vision_transport)
     app.state.web_brake = webrecipes.Brake(clock)
     app.state.web_cache = webrecipes.Cache(clock)
     app.state.image_brake = webrecipes.Brake(clock, per_user=30, total=120)  # fetches of Cookidoo pictures
@@ -164,7 +167,7 @@ def create_app(
     app.include_router(oidc_routes.router)
     app.include_router(demo_view_routes.router)
     for module in (profile, catalog, foods, diary, insights, nutrients, templates, suggestions, recipes, recipe_groups, badges, water, fasting,
-                   summary, tokens, webhook_routes, admin, activity_routes, cookidoo_routes, web_recipes, image_routes):
+                   summary, tokens, webhook_routes, admin, activity_routes, cookidoo_routes, web_recipes, image_routes, vision_routes):
         app.include_router(module.router)
     app.include_router(yazio_routes.router)
     app.include_router(cookidoo_routes.admin_router)

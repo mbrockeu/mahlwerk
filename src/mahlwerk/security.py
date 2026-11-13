@@ -23,7 +23,8 @@ INLINE_SCRIPT = re.compile(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", re.S |
 # sync (400 days with up to 50 workouts a day of about 300 bytes each) stays below 6 MB, so 8 MB is the ceiling there.
 LIMIT_DEFAULT = 1 * 1024 * 1024
 LIMIT_UPLOAD = 8 * 1024 * 1024
-LIMITS = {"/api/v1/label-scans": LIMIT_UPLOAD, "/api/v1/health/sync": LIMIT_UPLOAD}
+LIMITS = {"/api/v1/label-scans": LIMIT_UPLOAD, "/api/v1/health/sync": LIMIT_UPLOAD,
+          "/api/v1/vision/meal": LIMIT_UPLOAD, "/api/v1/vision/recipe": LIMIT_UPLOAD}
 # The Yazio export (days.json of a few years of entries) is big; this route has its own, larger limit (as sent: the
 # browser packs large files with gzip first). Its decompressed size is limited again in yazio_stage.
 LIMIT_YAZIO = 24 * 1024 * 1024
