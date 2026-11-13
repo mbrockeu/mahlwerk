@@ -238,10 +238,12 @@
   /* wide panel: the values on the left, the right column holds the picture card (as high as the values) and below it the source or the ingredients */
   .lower.grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: 'nut src' 'ext .'; }
   .lower.grid.pic { grid-template-areas: 'nut pic' 'ext src'; }
-  .nut { grid-area: nut; }
-  .src { grid-area: src; }
-  .ext { grid-area: ext; }
-  .card.pcard { grid-area: pic; align-self: stretch; position: relative; padding: 0; min-height: 240px; overflow: hidden; margin: 0; background: var(--green-deep); border-radius: 28px 28px 8px 28px; }
+  /* only in the wide grid: a named area without a template makes Safari place the cards on top of each other */
+  .lower.grid .nut { grid-area: nut; }
+  .lower.grid .src { grid-area: src; }
+  .lower.grid .ext { grid-area: ext; }
+  .lower.grid .card.pcard { grid-area: pic; }
+  .card.pcard { align-self: stretch; position: relative; padding: 0; min-height: 240px; overflow: hidden; margin: 0; background: var(--green-deep); border-radius: 28px 28px 8px 28px; }
   .card.pcard img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
   .card.pcard figcaption { position: absolute; left: 14px; bottom: 12px; max-width: calc(100% - 28px); padding: 3px 10px; border-radius: 10px 10px 10px 4px; background: var(--paper); color: var(--text); font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.06em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   @media (min-width: 1800px) {
