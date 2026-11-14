@@ -771,6 +771,30 @@ _PREPARED.discard("deep")
 _DISH_WORDS = {"suppe", "soup", "salat", "salad", "sauce", "sosse", "soße", "soße", "kuchen", "cake", "torte", "eintopf", "stew", "auflauf", "pie", "pizza", "burger"}
 
 
+def _is_dish(token: str) -> bool:
+    """A dish word or a compound that ends in one (Baumkuchen, Nudelsalat); soups count as the food they are made of."""
+    if token in ("suppe", "soup"):
+        return False
+    return token in _DISH_WORDS or any(len(d) >= 5 and token.endswith(d) and len(token) - len(d) >= 3 for d in _DISH_WORDS - {"suppe"})
+
+
+_NAME_SPLIT = re.compile(r"[\s\-/&+]+")
+
+
+def _names_only(name: str, words: list[str], context: set[str]) -> bool:
+    """For names people typed (own foods, Yazio, products): every noun before the first comma or bracket is one the line asks for.
+    'MILCH Brötchen' is a roll and 'Schoko-Plunder' a pastry, not milk or chocolate; a German name tells its nouns by the capital letter.
+    The word itself must be the noun: unlike the catalogue (Speisesalz for Salz) the end of a compound is not enough here."""
+    nouns = [w for w in _NAME_SPLIT.split(re.split(r"[,(;]", name, maxsplit=1)[0]) if w[:1].isupper()]
+    for noun in nouns:
+        tokens = _tokens(noun)
+        if not tokens or all(t in _ADJECTIVES or t in _STOP or t in _PREP or t in _PREPARED or t in _RAW or t.isdigit() or t in context for t in tokens):
+            continue
+        if not any((c := _word_class(w, tokens)) is not None and c <= 0.5 for w in words):  # 'Kokosmilch' is not milk
+            return False
+    return True
+
+
 def _expand(context: set[str]) -> tuple[set[str], bool]:
     """The words of a line plus every word that says the same about the preparation; and whether the line names a preparation at all."""
     expanded = set(context)
@@ -812,8 +836,10 @@ def _word_class(word: str, tokens: list[str]) -> float | None:
     return best
 
 
-def _score(words: list[str], names: list[str], context: set[str], code: str | None, source: str, said: frozenset[str] = frozenset()) -> tuple[float, bool, bool] | None:
-    """(score, confident, says the preparation of the line) of a food for the search words; smaller is better. None when a word does not occur in any of the names."""
+def _score(words: list[str], names: list[str], context: set[str], code: str | None, source: str, said: frozenset[str] = frozenset(),
+           sure: bool = True) -> tuple[float, bool, bool] | None:
+    """(score, confident, says the preparation of the line) of a food for the search words; smaller is better. None when a word does not occur in any of the names.
+    `sure` False: the search words leave out part of the line, so no food can be a confident match (and own foods get no head start)."""
     best = None
     for name in names:
         tokens = _tokens(name)
@@ -828,14 +854,15 @@ def _score(words: list[str], names: list[str], context: set[str], code: str | No
         penalty += sum(2 for t in tokens if t.endswith("pulver") and t not in _PREPARED and t not in context)  # "Instantpulver": the dry mix
         credit = sum(1 for t in prepared if t in context)
         exact = sum(1 for t in prepared if t in said)  # the very word of the line counts more than one that says the same
-        dish = any(t in _DISH_WORDS and t not in ('suppe', 'soup') and t not in context for t in tokens)  # a soup, a stew, a cake: not the plain food
+        dish = any(_is_dish(t) and t not in context for t in tokens)  # a stew, a cake, a Baumkuchen: not the plain food
         raw = -2.0 if any(t in _RAW for t in tokens) else 0.0
         base = -1.0 if source == "bls" and code and code.endswith("00") else 0.0
         extra = max(0, len(tokens) - len(words)) * 0.2
         first = -1.0 if any(tokens[0] == w or (tokens[0].startswith(w) and len(tokens[0]) - len(w) <= 3) for w in words) else 0.0  # the food comes first in its name
         score = 2 * cls + 3 * penalty - 4 * credit - 3 * exact + raw + base + extra + first
         if best is None or score < best[0]:
-            best = (score, cls <= GOOD_LIMIT * len(words) and not dish, credit > 0)
+            confident = sure and cls <= GOOD_LIMIT * len(words) and not dish and (source == "bls" or _names_only(name, words, context))
+            best = (score, confident, credit > 0)
     if best is None:
         return None
     return (best[0] - (USER_BONUS if source in _USER_SOURCES and best[1] else 0.0), best[1], best[2])
@@ -852,11 +879,22 @@ def _colour(token: str) -> str | None:
     return None
 
 
+def _core(full: list[str]) -> list[str]:
+    """The words of a name that say what the food is: without numbers, filler words, cutting and preparation words, adjectives."""
+    core = [w for w in full if not w.isdigit() and w not in _STOP and w not in _PREP and w not in _ADJECTIVES] or [w for w in full if not w.isdigit() and w not in _STOP]
+    return [w for w in core if w not in _PREPARED] or core
+
+
+def _covers(tokens: list[str], core: list[str]) -> bool:
+    """Whether the search words still stand for every word of the name ('schoko' alone does not stand for 'Schoko-Cerealien')."""
+    return all(any(t == w or w.startswith(t) or t.startswith(w) for t in tokens) for w in core)
+
+
 def variants(name: str) -> list[list[str]]:
     """What to look for, most specific first: all words, then fewer (from the end, then from the front), then single words, each also
     without a plural ending. Numbers and filler words ('Typ 405', 'extra') are left out of every variant but the first."""
     full = _tokens(name)
-    core = [w for w in full if not w.isdigit() and w not in _STOP and w not in _PREP and w not in _ADJECTIVES] or [w for w in full if not w.isdigit() and w not in _STOP]
+    core = _core(full)
     result: list[list[str]] = []
 
     def add(tokens: list[str]) -> None:
@@ -867,7 +905,6 @@ def variants(name: str) -> list[list[str]]:
     coloured = [_colour(w) or w for w in full if not w.isdigit() and w not in _STOP and w not in _PREP and w not in _PREPARED]
     if any(_colour(w) for w in full):  # "grüne Bohnen" -> "grun bohnen" before the colour is dropped
         add(coloured)
-    core = [w for w in core if w not in _PREPARED] or core
     add(core)
     for n in range(len(core) - 1, 0, -1):
         add(core[:n])
@@ -909,13 +946,13 @@ def _from_item(item: dict, good: bool = True) -> Candidate:
     return Candidate(source=item["source"], code=item["code"], name=item["name"], brand=item.get("brand"), unit=item["unit"], per_100=item["per_100"], good=good)
 
 
-def _packaged(catalog: Any, tokens: list[str], limit: int, skip: Any, context: set[str]) -> list[Candidate]:
+def _packaged(catalog: Any, tokens: list[str], limit: int, skip: Any, context: set[str], sure: bool = True) -> list[Candidate]:
     query = " ".join(tokens)
     if len(query) < 2:
         return []
     result = []
     for item in catalog.search(query, limit, "openfoodfacts", skip=skip):
-        hit = _score(tokens, [item["name"]], context, item["code"], "openfoodfacts")
+        hit = _score(tokens, [item["name"]], context, item["code"], "openfoodfacts", sure=sure)
         result.append(_from_item(item, hit is not None and hit[1]))
     return result
 
@@ -949,12 +986,14 @@ def candidates(name: str, own_foods: list[dict], catalog: Any, skip: Any = None,
         steps.append(usual_words)
         table_steps = 1
     steps += [t for t in variants(name) if t not in steps]
+    core = _core(name_tokens)
+    sure = [i < table_steps or _covers(tokens, core) for i, tokens in enumerate(steps)]
 
     def stored(tokens: list[str]) -> list[tuple[float, int, Candidate]]:
         found = []
         for index, food in enumerate(own_foods):
             data = food["data"]
-            if (hit := _score(tokens, [data.get("name") or ""], context_words, food.get("code"), food["source"], said)) is not None:
+            if (hit := _score(tokens, [data.get("name") or ""], context_words, food.get("code"), food["source"], said, sure[steps.index(tokens)])) is not None:
                 found.append((hit[0], index, _from_food(food, hit[1] and (hit[2] or not says_prepared))))
         return found
 
@@ -966,7 +1005,7 @@ def candidates(name: str, own_foods: list[dict], catalog: Any, skip: Any = None,
         loose = position >= table_steps and bool(colours) and not colours & set(tokens)  # "grüne Bohnen" found as "Bohnen", "Chicken soup" as "Chicken": no sure match
         if len(" ".join(tokens)) >= 2:
             for index, item in enumerate(catalog.search(" ".join(tokens), BASIC_POOL, "bls", skip=skip), start=len(own_foods)):
-                if (hit := _score(tokens, [item["name"], item.get("name_en") or ""], context_words, item["code"], "bls", said)) is not None:
+                if (hit := _score(tokens, [item["name"], item.get("name_en") or ""], context_words, item["code"], "bls", said, sure[position])) is not None:
                     scored.append((hit[0], index, _from_item(item, hit[1] and (hit[2] or not says_prepared))))
         if len(scored) > len(own_hits) or (own_hits and tokens is steps[-1]):
             found = [c for _, _, c in sorted(scored, key=lambda r: (r[0], r[1]))][:MAX_CANDIDATES]
@@ -974,11 +1013,11 @@ def candidates(name: str, own_foods: list[dict], catalog: Any, skip: Any = None,
                 for c in found:
                     c.good = False
             if len(found) < MAX_CANDIDATES and not found[0].good:  # packaged products only where the basic foods give no confident answer
-                found += _packaged(catalog, tokens, MAX_CANDIDATES - len(found), skip, context_words)
+                found += _packaged(catalog, tokens, MAX_CANDIDATES - len(found), skip, context_words, sure[position])
             return found
     if own_hits:
         return [c for _, _, c in sorted(own_hits, key=lambda r: (r[0], r[1]))][:MAX_CANDIDATES]
     for tokens in steps:
-        if packaged := _packaged(catalog, tokens, MAX_CANDIDATES, skip, context_words):
+        if packaged := _packaged(catalog, tokens, MAX_CANDIDATES, skip, context_words, sure[steps.index(tokens)]):
             return packaged
     return []

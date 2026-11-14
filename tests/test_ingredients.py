@@ -508,6 +508,7 @@ TRICKY_ROWS = [  # names as the BLS writes them, with the neighbours that fool a
     ["V416172", "Hähnchen Brustfilet, gegrillt", "Chicken breast fillet, grilled", "140", "30", "2", "0"],
     ["D610500", "Zimtsterne (Eiklarmasse)", "Cinnamon stars (meringue)", "430", "7", "17", "60"],
     ["S111100", "Puderzucker", "Icing sugar", "400", "0", "0", "100"],
+    ["M111100", "Vollmilch frisch, 3,5 % Fett, pasteurisiert", "Whole milk fresh, 3.5 % fat, pasteurised", "64", "3.3", "3.5", "4.8"],
 ]
 TRICKY_CASES = [  # (line, the name that must be suggested; None: nothing may be suggested)
     ("200 g Butter", "Butter mild gesäuert"), ("100 g butter", "Butter mild gesäuert"),
@@ -573,6 +574,20 @@ def test_own_foods_still_come_first_and_a_stored_basic_food_is_ranked_like_the_o
     (line,) = match(client, "100 g Butter")["lines"]
     assert line["suggestion"]["name"] == "Butter mild gesäuert"  # the adopted "Butter gesalzen" does not jump the queue
     assert adopted["id"] in [c["food_id"] for c in line["candidates"]]
+
+
+def test_own_foods_that_only_mention_the_word_are_no_suggestion(client, tricky):
+    """A photo of cereal with milk: imported foods like 'MILCH Brötchen' or 'Baumkuchen Vollmilch' must not win over the milk itself,
+    and 'Schoko-Cerealien' found only as 'Schoko' must not suggest a chocolate pastry."""
+    for name in ("MILCH Brötchen", "Baumkuchen Vollmilch", "Kokosmilch", "Schoko-Plunder"):
+        own(client, name, 300)
+    for text in ("150 g Milch", "150 g Vollmilch"):
+        (line,) = match(client, text)["lines"]
+        assert line["suggestion"]["name"] == "Vollmilch frisch, 3,5 % Fett, pasteurisiert", [c["name"] for c in line["candidates"]]
+    (line,) = match(client, "50 g Schoko-Cerealien")["lines"]
+    assert line["suggestion"] is None and "Schoko-Plunder" in [c["name"] for c in line["candidates"]]
+    (line,) = match(client, "60 g Schoko-Plunder")["lines"]
+    assert line["suggestion"]["name"] == "Schoko-Plunder"  # asked for by name, the own food still comes first
 
 
 def test_hit_rate_against_a_real_catalogue():
