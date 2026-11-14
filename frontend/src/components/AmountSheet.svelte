@@ -67,6 +67,18 @@
     return list;
   });
 
+  // − and + beside the field: one serving (two slices of toast), half a portion of a recipe, else 10 g/ml
+  const serving = byPortion ? null : (food?.serving_quantity ?? null);
+  const step = byPortion ? 0.5 : (serving ?? 10);
+  const round = (v: number) => Math.round(v * 1000) / 1000;
+  function stepBy(dir: 1 | -1) {
+    const now = valid ? (amount as number) : 0;
+    const n = dir > 0 ? Math.floor(now / step + 1e-9) + 1 : Math.ceil(now / step - 1e-9) - 1;  // the next whole step
+    text = inputNumber(round(Math.max(1, n) * step));
+  }
+  const servings = $derived(serving && valid ? round((amount as number) / serving) : null);
+  const stepText = byPortion ? t('portionsN', { n: fmt(step, 1) }) : `${fmt(step, 1)} ${unit}`;
+
   const close = () => { ui.amount = null; };
   const failMsg = (err: unknown) => t('saveFailed', { reason: err instanceof ApiError ? err.status || err.message : 'error' });
 
@@ -127,7 +139,12 @@
       <input inputmode="decimal" autocomplete="off" bind:value={text} aria-invalid={!valid && text !== ''}
         onfocus={(e) => e.currentTarget.select()} onkeydown={(e) => e.key === 'Enter' && save()} />
     </label>
+    <button class="step" onclick={() => stepBy(-1)} disabled={!valid || (amount as number) <= step} aria-label={t('stepLess', { s: stepText })}>−</button>
+    <button class="step" onclick={() => stepBy(1)} aria-label={t('stepMore', { s: stepText })}>+</button>
   </div>
+  {#if servings != null && servings !== 1 && Number.isInteger(servings * 2)}
+    <p class="note">= {t('portionsN', { n: fmt(servings, 1) })}</p>
+  {/if}
   <div class="quick">
     {#each quick as q}
       <button class="chip" class:on={amount === q.value} onclick={() => (text = inputNumber(q.value))}>{q.label}</button>
@@ -157,6 +174,9 @@
   .meals .chip { justify-content: center; }
   .quick { display: flex; flex-wrap: wrap; gap: 8px; }
   .grow { flex: 1; }
+  .amountrow { display: flex; align-items: flex-end; gap: 8px; }
+  .step { flex-shrink: 0; width: 48px; height: 48px; border-radius: 50%; border: 2px solid var(--field-line); background: var(--paper); color: inherit; font-size: 26px; line-height: 1; }
+  .step:disabled { opacity: 0.4; }
   .result { background: var(--deep); color: var(--on-deep); border-radius: 28px 28px 28px 8px; padding: 16px 20px; display: flex; flex-direction: column; gap: 4px; }
   .big { font-size: 44px; line-height: 1; }
   .unit { margin-left: 6px; font-size: 14px; font-weight: 500; letter-spacing: 0; }

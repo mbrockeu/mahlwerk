@@ -34,7 +34,7 @@ const en = {
   lastTime: 'last {amount}', yourProducts: 'Your products', basicFoods: 'Basic foods', moreProducts: 'More products',
 
   // amount sheet
-  amount: 'Amount', amountEdit: 'Change entry', portion: '1 portion ({s})', hundred: '100 {unit}', lastAmount: 'last time {a} {unit}',
+  amount: 'Amount', amountEdit: 'Change entry', portion: '1 portion ({s})', stepLess: 'Less ({s})', stepMore: 'More ({s})', hundred: '100 {unit}', lastAmount: 'last time {a} {unit}',
   noEnergy: 'This product has no energy value. The entry will not count towards the goal.',
   saveToDiary: 'Add to diary', saveChange: 'Save change', deleteEntry: 'Delete entry', confirmDelete: 'Really delete?',
   added: 'Added: {name}', changed: 'Entry updated', deleted: 'Entry deleted', saveFailed: 'Saving failed ({reason}).',
@@ -679,7 +679,7 @@ const de: Record<Key, string> = {
   noRecent: 'Noch nichts eingetragen. Scanne oder suche zuerst ein Produkt.', searching: 'Suche …',
   lastTime: 'zuletzt {amount}', yourProducts: 'Deine Produkte', basicFoods: 'Grundnahrungsmittel', moreProducts: 'Weitere Produkte',
 
-  amount: 'Menge', amountEdit: 'Eintrag ändern', portion: '1 Portion ({s})', hundred: '100 {unit}', lastAmount: 'zuletzt {a} {unit}',
+  amount: 'Menge', amountEdit: 'Eintrag ändern', portion: '1 Portion ({s})', stepLess: 'Weniger ({s})', stepMore: 'Mehr ({s})', hundred: '100 {unit}', lastAmount: 'zuletzt {a} {unit}',
   noEnergy: 'Für dieses Produkt fehlt der Energiewert. Der Eintrag zählt nicht zum Ziel.',
   saveToDiary: 'Ins Tagebuch', saveChange: 'Änderung speichern', deleteEntry: 'Eintrag löschen', confirmDelete: 'Wirklich löschen?',
   added: 'Eingetragen: {name}', changed: 'Eintrag geändert', deleted: 'Eintrag gelöscht', saveFailed: 'Speichern fehlgeschlagen ({reason}).',
