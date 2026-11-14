@@ -12,12 +12,16 @@
   import ScanPane from './ScanPane.svelte';
   import Sheet from './Sheet.svelte';
 
-  let { meal: initialMeal, day, tab: initialTab }: { meal: Meal; day: string; tab: AddTab } = $props();
+  let { meal: initialMeal, day, tab: initialTab, query: initialQuery = '' }: { meal: Meal; day: string; tab: AddTab; query?: string } = $props();
 
   // svelte-ignore state_referenced_locally
   let meal = $state<Meal>(initialMeal);
   // svelte-ignore state_referenced_locally
   let tab = $state<AddTab>(initialTab);
+  // svelte-ignore state_referenced_locally
+  let query = $state(initialQuery);
+  // kept in ui.add, so that "Back" in the amount dialog brings the sheet back as it was
+  $effect(() => { const add = ui.add; if (add) { add.meal = meal; add.tab = tab; add.query = query; } });
 
   if (!ui.me) void loadMe();
   void loadVision();
@@ -157,7 +161,7 @@
     {/if}
     <!-- the search stays mounted while another tab is shown, so the typed text survives a look at "Recent" -->
     {#if tab === 'search'}{@render photoButton()}{/if}
-    <div class="pane" hidden={tab !== 'search'}><FoodSearch onpick={(f) => pick(f)} onnew={newProduct} active={tab === 'search'} /></div>
+    <div class="pane" hidden={tab !== 'search'}><FoodSearch onpick={(f) => pick(f)} onnew={newProduct} active={tab === 'search'} bind:query /></div>
     {#if tab === 'recent'}
       {#if recent === null}
         <p class="note">{t('searching')}</p>

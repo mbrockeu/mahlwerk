@@ -76,7 +76,7 @@
 <Nav />
 <PullRefresh />
 
-{#if ui.add}{#key ui.add}<AddSheet meal={ui.add.meal} day={ui.add.day} tab={ui.add.tab} />{/key}{/if}
+{#if ui.add}{#key ui.add}<AddSheet meal={ui.add.meal} day={ui.add.day} tab={ui.add.tab} query={ui.add.query} />{/key}{/if}
 {#if ui.amount}{#key ui.amount}<AmountSheet req={ui.amount} />{/key}{/if}
 {#if ui.recipe}{#key ui.recipe}<RecipeEditor req={ui.recipe} />{/key}{/if}
 {#if ui.editor}{#key ui.editor}<ProductEditor req={ui.editor} />{/key}{/if}

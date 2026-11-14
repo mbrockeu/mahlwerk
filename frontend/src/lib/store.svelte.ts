@@ -15,7 +15,10 @@ export interface AmountRequest {
   lastAmount?: number;
   /** The amount the dialog starts with, in grams/millilitres as booked (a suggestion's recommended amount). */
   amount?: number;
+  /** The add sheet it was opened from (meal, tab, search text): "Back" returns there instead of closing everything. */
+  back?: AddState;
 }
+export interface AddState { meal: Meal; day: string; tab: AddTab; query?: string }
 export interface EditorRequest {
   food: Food | null;
   code?: string | null;
@@ -49,7 +52,7 @@ export interface ToastAction {
 export const ui = $state({
   day: today(),
   today: today(),
-  add: null as null | { meal: Meal; day: string; tab: AddTab },
+  add: null as null | AddState,
   amount: null as null | AmountRequest,
   editor: null as null | EditorRequest,
   recipe: null as null | RecipeRequest,
@@ -75,7 +78,13 @@ export function mealByTime(date = new Date()): Meal {
 
 export const openAdd = (meal: Meal, day = ui.day, tab: AddTab = 'search') => { ui.add = { meal, day, tab }; };
 export const closeAdd = () => { ui.add = null; };
-export const openAmount = (req: AmountRequest) => { ui.add = null; ui.amount = req; };
+export const openAmount = (req: AmountRequest) => {
+  const back = ui.add ? { ...ui.add } : undefined;  // the add sheet keeps its meal, tab and search text up to date in ui.add
+  ui.add = null;
+  ui.amount = { back, ...req };
+};
+/** From the amount dialog back to the add sheet it came from (a wrong pick), as it was. */
+export const backToAdd = () => { const back = ui.amount?.back; ui.amount = null; if (back) ui.add = back; };
 /** True while an admin looks at the built-in demo account: shared products and recipes are read-only there (the server says no as well). */
 export const viewingDemo = () => ui.me?.demo_account?.viewing === true;
 export const openEditor = (req: EditorRequest) => { if (viewingDemo()) { toast(t('demoAcctBlocked')); return; } ui.editor = req; };

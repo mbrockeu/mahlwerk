@@ -5,8 +5,8 @@
   import { dragOffset, swipeDecision } from '../lib/sheetSwipe';
   import Icon from './Icon.svelte';
 
-  let { title, onclose, children, tall = false, label }:
-    { title: string; onclose: () => void; children: Snippet; tall?: boolean; label?: string } = $props();
+  let { title, onclose, onback, children, tall = false, label }:
+    { title: string; onclose: () => void; onback?: () => void; children: Snippet; tall?: boolean; label?: string } = $props();
 
   let sheet: HTMLDivElement;
   let backdrop: HTMLDivElement;
@@ -155,6 +155,7 @@
     <div class="zone" bind:this={zone} onpointerdown={zoneDown} onpointermove={zoneMove} onpointerup={zoneUp} onpointercancel={zoneUp}>
       <div class="grip" aria-hidden="true"></div>
       <header>
+        {#if onback}<button class="round" onclick={onback} aria-label={t('back')}><Icon name="left" size={22} /></button>{/if}
         <h2>{title}</h2>
         <button class="round" onclick={onclose} aria-label={t('close')}><Icon name="close" size={22} /></button>
       </header>
@@ -177,6 +178,7 @@
   .zone { touch-action: none; user-select: none; -webkit-user-select: none; }
   .grip { width: 44px; height: 5px; border-radius: 3px; background: var(--hairline); margin: 0 auto 6px; }
   header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; }
+  header h2 { flex: 1; }
   h2 { font-family: var(--f-display); font-weight: 800; font-size: 26px; letter-spacing: -0.03em; line-height: 1.05; min-width: 0; }
   .body { overflow-y: auto; overscroll-behavior: contain; padding: 4px 0 calc(24px + var(--safe-b)); display: flex; flex-direction: column; gap: 14px; flex: 1; }
   @keyframes rise { from { transform: translateY(100%); } to { transform: none; } }

@@ -3,7 +3,7 @@
   import { api, ApiError } from '../lib/api';
   import { fmt, inputNumber, parseNumber, t } from '../lib/i18n';
   import { isPortionEntry, isPortionFood, PORTION_GRAMS } from '../lib/portion';
-  import { changed, toast, ui, type AmountRequest } from '../lib/store.svelte';
+  import { backToAdd, changed, toast, ui, type AmountRequest } from '../lib/store.svelte';
   import { MEALS, type Meal } from '../lib/types';
   import Sheet from './Sheet.svelte';
 
@@ -79,7 +79,8 @@
   const servings = $derived(serving && valid ? round((amount as number) / serving) : null);
   const stepText = byPortion ? t('portionsN', { n: fmt(step, 1) }) : `${fmt(step, 1)} ${unit}`;
 
-  const close = () => { ui.amount = null; };
+  // came from the add sheet: closing (swipe down, ✕, a tap beside) goes back there, like a step back on a phone
+  const close = () => { if (req.back) backToAdd(); else ui.amount = null; };
   const failMsg = (err: unknown) => t('saveFailed', { reason: err instanceof ApiError ? err.status || err.message : 'error' });
 
   async function save() {
@@ -121,7 +122,7 @@
   }
 </script>
 
-<Sheet title={entry ? t('amountEdit') : t('amount')} onclose={close} label={title}>
+<Sheet title={entry ? t('amountEdit') : t('amount')} onclose={close} onback={req.back ? backToAdd : undefined} label={title}>
   <div class="who">
     <h3>{title}</h3>
     <p class="note">{[brand, p100.kcal != null ? t(byPortion ? 'perPortionShort' : 'per100Short', { kcal: fmt(p100.kcal, 0), unit }) : null].filter(Boolean).join(' · ')}</p>

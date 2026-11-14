@@ -8,9 +8,9 @@
   import SearchField from './SearchField.svelte';
 
   // The search shared by the add sheet and the recipe editor: products stored here, then the basic foods (BLS) and packaged products of the local catalogue.
-  let { onpick, onnew, active = true }: { onpick: (food: Food) => void; onnew?: () => void; active?: boolean } = $props();
+  let { onpick, onnew, active = true, query = $bindable('') }:
+    { onpick: (food: Food) => void; onnew?: () => void; active?: boolean; query?: string } = $props();
 
-  let query = $state('');
   let results = $state<Food[]>([]);
   let searching = $state(false);
   let searchError = $state('');
