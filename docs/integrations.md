@@ -163,6 +163,10 @@ of the server also works (for example `http://192.168.1.20:8110`); away from hom
 If a reverse proxy does the login, let it pass `/api/` requests that carry `Authorization: Bearer mw_` through (see
 "Access keys").
 
+Ready-made shortcut: `scripts/apple-shortcut/README.md` describes a generator (`build_shortcut.py`) and a ready-made
+file that does the steps below for the last days (steps, active energy, weight); only the address and the access key
+are asked for on import. The instructions below remain as the alternative if you prefer to build it by hand.
+
 Build the shortcut (names are those of the German Shortcuts app; the English ones are in brackets). The simplest form
 sends today only and runs in the evening; only `day` is required, every other value may be left out.
 

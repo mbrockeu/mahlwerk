@@ -5,6 +5,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Ready-made Apple Shortcut for Apple Health (`scripts/apple-shortcut/`): a generator script (`build_shortcut.py`, standard library only, `--days N`) and the built, unsigned `Mahlwerk Health Sync.shortcut` that sends steps, active energy and weight of the last days to `POST /api/v1/health/sync`, with a README (signing on a Mac, import, automation). Address and access key are asked for on import.
+
+### Fixed
+
+- Number fields no longer save when they are only tapped and left: on the activity card this marked the day as typed in by hand (and an empty active energy as 0), so the Apple Health shortcut skipped it.
+
 ## [0.2.0] - 2026-11-14
 
 ### Added
