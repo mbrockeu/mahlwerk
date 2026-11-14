@@ -163,33 +163,36 @@ of the server also works (for example `http://192.168.1.20:8110`); away from hom
 If a reverse proxy does the login, let it pass `/api/` requests that carry `Authorization: Bearer mw_` through (see
 "Access keys").
 
-Build the shortcut (names are those of the German Shortcuts app; the English ones are in brackets):
+Build the shortcut (names are those of the German Shortcuts app; the English ones are in brackets). The simplest form
+sends today only and runs in the evening; only `day` is required, every other value may be left out.
 
-1. **Datum** (Date) with "Aktuelles Datum" (Current Date), then **Datum anpassen** (Adjust Date): subtract 2 days. Call it
-   `Start`. The shortcut repeats the next steps for the days 0, 1 and 2 days ago: use **Wiederholen** (Repeat) with 3
-   repetitions, and in each round **Datum anpassen** with "Wiederholungsindex" (Repeat Index) minus 1 days from now, then
-   **Datum formatieren** (Format Date) with the custom format `yyyy-MM-dd` (variable `Tag`). Also format the start of that
-   day and the start of the next day as ISO 8601 if you want to filter workouts.
-2. **Health-Messwerte suchen** (Find Health Samples) for **Schritte** (Steps): filter "Startdatum ist heute" (use "ist im
-   Zeitraum" with the day's start and end), then **Statistik berechnen** (Calculate Statistics) with "Summe" (Sum). Variable
-   `Schritte`.
-3. The same for **Aktive Energie** (Active Energy) with "Summe" (variable `Energie`) and for **Gehen und Laufen: Distanz**
-   (Walking + Running Distance) with "Summe" in metres (variable `Strecke`; leave this out if you do not need it).
-4. **Health-Messwerte suchen** for **Gewicht** (Weight), filter the day, sort by "Startdatum" newest first, limit 1 (variable
-   `Gewicht`, unit kilograms). Without a measurement that day the value stays empty: leave it out of the dictionary then.
-5. For workouts: **Trainings suchen** (Find Workouts) of that day. For each one add a **Wörterbuch** (Dictionary) with
-   `external_id` (the workout's ID or, if there is none, its start date as text), `kind` (the workout type as text, for
-   example "Running"), `started_at` (start date as **Zeitstempel** / Unix time), `minutes` (duration in minutes), `kcal`
-   (active energy) and `distance_m`. Collect the dictionaries in a **Liste** (List).
-6. **Wörterbuch** (Dictionary) for the day: `day` = `Tag`, `steps` = `Schritte`, `active_kcal` = `Energie`, `distance_m` =
-   `Strecke`, `weight_kg` = `Gewicht`, `workouts` = the list from step 5. Add each day's dictionary to a list `Tage`
-   (**Zur Variable hinzufügen**, Add to Variable). Make sure the numbers are numbers, not text (set the value type to
-   "Zahl" / Number in the dictionary editor).
-7. A last **Wörterbuch** with the key `days` = `Tage`.
-8. **Inhalte von URL abrufen** (Get Contents of URL): URL `https://mahlwerk.example.org/api/v1/health/sync`, open the
-   details: **Methode** (Method) `POST`, **Header** `Authorization` = `Bearer mw_...` (your key) and `Content-Type` =
-   `application/json`, **Anfragetext** (Request Body) `JSON` with the dictionary of step 7 (or "Datei" with the dictionary).
-9. Optional: **Benachrichtigung anzeigen** (Show Notification) with the answer, to see the counters while testing.
+1. **Aktuelles Datum** (Current Date), then **Datum formatieren** (Format Date): custom format `yyyy-MM-dd`, time format
+   "Ohne" (None). **Variable festlegen** (Set Variable) `Tag`.
+2. **Health-Messwerte suchen** (Find Health Samples): **Schritte** (Steps), start date is today. **Statistiken berechnen**
+   (Calculate Statistics): "Summe" (Sum). **Zahl runden** (Round Number) to a whole number, then **Variable festlegen**
+   `Schritte`. Steps must be a whole number: `5230,0` or `5.230` makes the server answer 422.
+3. The same for **Aktive Energie** (Active Energy), rounded, variable `Energie` (leave it out if you only want steps).
+   Round it: an iPhone set to German writes `180,5` with a comma, which is no JSON number.
+4. **Text**: write the JSON and insert the variables where the brackets are (tap, choose the variable):
+   `{"days":[{"day":"[Tag]","steps":[Schritte],"active_kcal":[Energie]}]}` - only the day is in quotes.
+   **Variable festlegen** `Daten`. Building the body as text is easier than the JSON fields of the next action, which
+   cannot take a variable as a whole list.
+5. **Inhalte von URL abrufen** (Get Contents of URL): URL `https://mahlwerk.example.org/api/v1/health/sync`, open the
+   details: **Methode** (Method) `POST`, **Header** `Authorization` = `Bearer mw_...` (the word `Bearer`, a space, then your
+   key) and `Content-Type` = `application/json`, **Haupttext anfordern** (Request Body) **Datei** (File) with `Daten`.
+   Check that no header row is left empty: an empty header makes the server answer "Invalid HTTP request received" (or
+   nothing at all).
+6. **Ergebnis anzeigen** (Show Result) while testing.
+
+Common answers while building it: `missing X-Mahlwerk-Request header` (403) means the `Authorization` header is missing or
+lacks the word `Bearer`; 422 names the value that does not fit (usually a number written as text or with a comma).
+
+To also catch days the watch synced late, put steps 1 to 6 into **Wiederholen** (Repeat) 3 times and send one request
+per day: before step 1 use **Berechnen** (Calculate) `Wiederholungsindex` (Repeat Index) minus 1 and **Datum anpassen**
+(Adjust Date) to subtract that many days from the current date; filter the Health samples with "Startdatum ist zwischen"
+(Start Date is between) the start of that day and the start of the next (**Datum anpassen**, "Beginn des Tages abrufen" /
+Get Start of Day, and plus 1 day). Sending a day again changes nothing. Weight (`weight_kg`), distance (`distance_m`) and
+workouts (`workouts`, see the example below) are added to the same JSON the same way.
 
 Run it once by hand and look at the answer: `new` counts rows that were created, `updated` changed ones, `unchanged` values
 that were already stored and `skipped` values left alone because you typed them by hand.
