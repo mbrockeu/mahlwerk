@@ -171,10 +171,14 @@ sends today only and runs in the evening; only `day` is required, every other va
 2. **Health-Messwerte suchen** (Find Health Samples): **Schritte** (Steps), start date is today. **Statistiken berechnen**
    (Calculate Statistics): "Summe" (Sum). **Zahl runden** (Round Number) to a whole number, then **Variable festlegen**
    `Schritte`. Steps must be a whole number: `5230,0` or `5.230` makes the server answer 422.
-3. The same for **Aktive Energie** (Active Energy), rounded, variable `Energie` (leave it out if you only want steps).
+3. The same for **Aktive Energie** (Active Energy), then **Zahlen aus Eingabe abrufen** (Get Numbers from Input), which drops
+   the unit ("412,5 kcal"), and **Zahl runden**; variable `Energie` (leave it out if you only want steps). The same for
+   the weight, with **Text ersetzen** (Replace Text) of the comma by a point instead of rounding.
    Round it: an iPhone set to German writes `180,5` with a comma, which is no JSON number.
 4. **Text**: write the JSON and insert the variables where the brackets are (tap, choose the variable):
    `{"days":[{"day":"[Tag]","steps":[Schritte],"active_kcal":[Energie]}]}` - only the day is in quotes.
+   Copy the text rather than typing it: the iPhone keyboard turns `"` into typographic quotes (`„` `“`), which are no
+   JSON (or switch off Settings, General, Keyboard, "Intelligente Satzzeichen" / Smart Punctuation).
    **Variable festlegen** `Daten`. Building the body as text is easier than the JSON fields of the next action, which
    cannot take a variable as a whole list.
 5. **Inhalte von URL abrufen** (Get Contents of URL): URL `https://mahlwerk.example.org/api/v1/health/sync`, open the
