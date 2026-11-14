@@ -5,6 +5,7 @@
   import AmountSheet from './components/AmountSheet.svelte';
   import MoreMenu from './components/MoreMenu.svelte';
   import Nav from './components/Nav.svelte';
+  import PullRefresh from './components/PullRefresh.svelte';
   import Tour from './components/Tour.svelte';
   import ProductEditor from './components/ProductEditor.svelte';
   import RecipeEditor from './components/RecipeEditor.svelte';
@@ -73,6 +74,7 @@
 
 {#if hasMenu}<MoreMenu />{/if}
 <Nav />
+<PullRefresh />
 
 {#if ui.add}{#key ui.add}<AddSheet meal={ui.add.meal} day={ui.add.day} tab={ui.add.tab} />{/key}{/if}
 {#if ui.amount}{#key ui.amount}<AmountSheet req={ui.amount} />{/key}{/if}

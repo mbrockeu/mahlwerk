@@ -642,6 +642,7 @@ const en = {
   admTechDemoAcct: 'The environment variable fixes the switch (on or off) for everyone:',
   usrReserved: 'That user name is reserved.',
   demoViewNow: 'You are now looking at the demo account.', demoViewOwn: 'You are back in your own account.',
+  pullDown: 'Pull to refresh', pullRelease: 'Release to refresh', pullBusy: 'Refreshing …', refreshed: 'Updated',
 } as const;
 
 type Key = keyof typeof en;
@@ -1281,6 +1282,7 @@ const de: Record<Key, string> = {
   admTechDemoAcct: 'Die Umgebungsvariable legt den Schalter (an oder aus) für alle fest:',
   usrReserved: 'Dieser Benutzername ist reserviert.',
   demoViewNow: 'Du siehst jetzt das Demo-Konto.', demoViewOwn: 'Du bist wieder in deinem Konto.',
+  pullDown: 'Zum Aktualisieren ziehen', pullRelease: 'Loslassen zum Aktualisieren', pullBusy: 'Aktualisiere …', refreshed: 'Aktualisiert',
 };
 
 export type Lang = 'de' | 'en';

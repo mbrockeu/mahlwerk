@@ -27,7 +27,7 @@
       error = t('loadFailed', { reason: err instanceof ApiError ? err.status || err.message : 'error' });
     }
   }
-  $effect(() => { untrack(() => { void load(); }); });
+  $effect(() => { ui.version; untrack(() => { void load(); }); });
 
   async function save(event: SubmitEvent) {
     event.preventDefault();

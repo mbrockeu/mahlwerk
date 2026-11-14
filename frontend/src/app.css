@@ -106,6 +106,8 @@ body {
   font-family: var(--f-body); font-size: 15px; line-height: 1.35; -webkit-text-size-adjust: 100%;
 }
 body.locked { overflow: hidden; }
+/* Home-screen app: no rubber band at the page's ends; the pull to refresh (PullRefresh) draws its own indicator. */
+@media (display-mode: standalone) { html { overscroll-behavior-y: contain; } }
 h1, h2, h3, p { margin: 0; }
 button, input, select { font: inherit; color: inherit; }
 /* An app, not a document: no double-tap zoom, and no zoom when a field gets focus (iOS zooms below 16px). */

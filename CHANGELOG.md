@@ -7,6 +7,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Pull to refresh in the home-screen app: pulling down at the top of a page loads its data again (not the whole page); only in the installed app, since Safari has its own in the browser. The weight view now also reloads after changes elsewhere.
 - Ready-made Apple Shortcut for Apple Health (`scripts/apple-shortcut/`): a generator script (`build_shortcut.py`, standard library only, `--days N`) and the built, unsigned `Mahlwerk Health Sync.shortcut` that sends steps, active energy and weight of the last days to `POST /api/v1/health/sync`, with a README (signing on a Mac, import, automation). Address and access key are asked for on import.
 
 ### Fixed
