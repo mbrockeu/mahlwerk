@@ -1,7 +1,8 @@
 <script lang="ts">
   import { fmt, inputNumber, parseNumber } from '../lib/i18n';
 
-  // A number that is shown formatted (2.100) and typed as plain digits. Commits on Enter or blur.
+  // A number that is shown formatted (2.100) and typed as plain digits. Commits on Enter or blur, but only what was changed:
+  // tapping into the field and leaving it again saves nothing (a save marks values as typed in by hand).
   let { value, min, max, label, onset, onbad, digits = 0, grouping = true, class: klass = '' }: {
     value: number; min: number; max: number; label: string; onset: (v: number) => void; onbad?: () => void;
     digits?: number; grouping?: boolean; class?: string;
@@ -9,17 +10,19 @@
 
   let editing = $state(false);
   let text = $state('');
+  let start = '';
   const shown = $derived(editing ? text : grouping ? fmt(value, digits) : inputNumber(value));
 
   function focus(e: FocusEvent) {
     editing = true;
-    text = inputNumber(value);
+    text = start = inputNumber(value);
     const el = e.currentTarget as HTMLInputElement;
     queueMicrotask(() => el.select());
   }
   function commit() {
     if (!editing) return;
     editing = false;
+    if (text.trim() === start) return;
     const v = parseNumber(text);
     if (v == null) return;
     if (Number.isNaN(v) || v < min || v > max) { onbad?.(); return; }
