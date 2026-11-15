@@ -303,3 +303,27 @@ def test_playful_off_gives_empty_lists_and_tracks_nothing(client, dense):
     assert sqlite3.connect(path).execute("SELECT count(*) FROM badge_earned").fetchone()[0] == 0
     client.patch("/api/v1/me/settings", json={"playful": True})
     assert earned(client) == {"first_entry"}
+
+
+def test_home_layout_setting(duo):
+    ann, ben = duo
+    assert ann.get("/api/v1/me").json()["settings"]["home"] is None  # default layout
+    layout = [{"id": "weight", "hidden": False, "wide": True}, {"id": "ring", "hidden": True, "wide": False}]
+    assert ann.patch("/api/v1/me/settings", json={"home": layout}).json()["home"] == layout
+    assert ann.get("/api/v1/me").json()["settings"]["home"] == layout
+    assert ann.patch("/api/v1/me/settings", json={"playful": False}).json()["home"] == layout  # other patches keep it
+    assert ben.get("/api/v1/me").json()["settings"]["home"] is None  # per user
+    assert ann.patch("/api/v1/me/settings", json={"home": None}).json()["home"] is None  # reset
+
+
+def test_home_layout_is_validated(duo):
+    ann, _ = duo
+    bad = [
+        [{"id": "nope", "hidden": False, "wide": False}],
+        [{"id": "ring", "hidden": False, "wide": False}, {"id": "ring", "hidden": True, "wide": False}],
+        [{"id": "ring"}] * 10,
+        "ring",
+    ]
+    for home in bad:
+        assert ann.patch("/api/v1/me/settings", json={"home": home}).status_code == 422
+    assert ann.get("/api/v1/me").json()["settings"]["home"] is None

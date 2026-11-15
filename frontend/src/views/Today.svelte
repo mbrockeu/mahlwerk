@@ -11,7 +11,9 @@
   import WeightTile from '../components/WeightTile.svelte';
   import { api, ApiError } from '../lib/api';
   import { fromDay, isoWeek, shiftDay, shortDate, weekdayLong } from '../lib/date';
+  import { defaultHome, move, normalize, sameHome, toggleHidden, toggleWide, type HomeCard, type HomeId } from '../lib/homeLayout';
   import { fmt, t } from '../lib/i18n';
+  import { reducedMotion } from '../lib/motion.svelte';
   import { directory, ensureNutrients } from '../lib/nutrients.svelte';
   import { entryAmount } from '../lib/portion';
   import { navigate } from '../lib/router.svelte';
@@ -74,8 +76,9 @@
 
   // swipe left/right to change the day
   let sx = 0, sy = 0;
-  const touchStart = (e: TouchEvent) => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; };
+  const touchStart = (e: TouchEvent) => { if (editing) return; sx = e.touches[0].clientX; sy = e.touches[0].clientY; };
   const touchEnd = (e: TouchEvent) => {
+    if (editing) return;
     const dx = e.changedTouches[0].clientX - sx;
     const dy = e.changedTouches[0].clientY - sy;
     if (Math.abs(dx) > 70 && Math.abs(dy) < 45) ui.day = shiftDay(ui.day, dx < 0 ? 1 : -1);
@@ -165,6 +168,71 @@
 
   const fastingOn = $derived(ui.me?.settings?.fasting?.enabled === true && ui.day === ui.today);
 
+  // ---- the arrangement of the cards (settings.home): shown from the server value, edited in place on this page ----
+  let editing = $state(false);
+  let draft = $state<HomeCard[]>([]);
+  let saving = $state(false);
+  let dragging = $state<HomeId | null>(null);
+  const stored = $derived(normalize(ui.me?.settings?.home));
+  const layout = $derived(editing ? draft : stored);
+  // a card that has nothing to show right now (fasting off, no micros, ideas off) is not drawn, also not while editing
+  const available = (id: HomeId) => id === 'fasting' ? fastingOn : id === 'micros' ? micros.length > 0 : id === 'suggestions' ? ideasOn : true;
+  const shown = $derived(layout.filter((c) => available(c.id) && (editing || !c.hidden)));
+  const calm = $derived(reducedMotion());
+
+  function startEdit() { draft = stored.map((c) => ({ ...c })); editing = true; }
+  const cancelEdit = () => { editing = false; dragging = null; };
+  async function finishEdit() {
+    if (saving) return;
+    if (sameHome(draft, stored)) { cancelEdit(); return; }
+    saving = true;
+    try {
+      const home = sameHome(draft, defaultHome()) ? null : draft;
+      const settings = await api.setSettings({ home });
+      if (ui.me) ui.me.settings = settings;
+      cancelEdit();
+    } catch (err) {
+      toast(t('homeSaveFailed', { reason: err instanceof ApiError ? err.status || err.message : 'error' }));
+    } finally {
+      saving = false;
+    }
+  }
+  // one step up or down among the cards that are drawn
+  function step(id: HomeId, dir: -1 | 1) {
+    const at = shown.findIndex((c) => c.id === id);
+    const other = shown[at + dir];
+    if (!other) return;
+    draft = move(draft, draft.findIndex((c) => c.id === id), draft.findIndex((c) => c.id === other.id));
+  }
+  const cardName = (id: HomeId) => t(`homeCard_${id}`);
+
+  let lastOver: HomeId | null = null;
+  function dragStart(e: PointerEvent, id: HomeId) {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    dragging = id;
+    lastOver = id;
+  }
+  function dragMove(e: PointerEvent) {
+    if (!dragging) return;
+    // near the top or bottom edge the page scrolls along
+    if (e.clientY < 90) window.scrollBy(0, -14);
+    else if (e.clientY > window.innerHeight - 90) window.scrollBy(0, 14);
+    const over = (document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-card]') as HTMLElement | null)?.dataset.card as HomeId | undefined;
+    if (!over || over === lastOver) return;
+    lastOver = over;
+    if (over === dragging) return;
+    draft = move(draft, draft.findIndex((c) => c.id === dragging), draft.findIndex((c) => c.id === over));
+  }
+  function dragEnd(e: PointerEvent) {
+    if (!dragging) return;
+    const el = e.currentTarget as HTMLElement;
+    if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+    dragging = null;
+    lastOver = null;
+  }
+
   const streakText = $derived(!data ? '' : data.streak === 0 ? t('noStreak') : t(data.streak === 1 ? 'streak1' : 'streakN', { n: data.streak }));
 </script>
 
@@ -183,6 +251,9 @@
       <button class="round" onclick={() => (ui.day = shiftDay(ui.day, 1))} aria-label={t('nextDay')}><Icon name="right" size={22} /></button>
       {#if ui.day !== ui.today}
         <button class="chip" onclick={() => (ui.day = ui.today)}>{t('today')}</button>
+      {/if}
+      {#if data && !editing}
+        <button class="round" onclick={startEdit} aria-label={t('homeEdit')} title={t('homeEdit')}><Icon name="sliders" size={22} /></button>
       {/if}
     </div>
     {#if data}
@@ -204,6 +275,17 @@
     {/if}
   </div>
 
+  {#if editing}
+    <div class="editbar" role="group" aria-label={t('homeEdit')} data-no-pull>
+      <p class="hint">{t('homeHint')}</p>
+      <div class="ebtns">
+        <button type="button" class="btn primary" onclick={finishEdit} disabled={saving}>{t('homeDone')}</button>
+        <button type="button" class="btn" onclick={() => (draft = defaultHome())} disabled={saving}>{t('homeReset')}</button>
+        <button type="button" class="btn quiet-btn" onclick={cancelEdit} disabled={saving}>{t('homeCancel')}</button>
+      </div>
+    </div>
+  {/if}
+
   {#if !data && error}
     <div class="error-box">
       <p>{t('loadFailed', { reason: error })}</p>
@@ -215,16 +297,6 @@
     {#if showReview && review}
       <ReviewCard {review} ondismiss={dismissReview} />
     {/if}
-    <div class="today-grid">
-    <div class="col-a">
-    <section class="hero on-dark" data-tour="ring" aria-label={t('today')}>
-      <Ring {eaten} goal={kcalGoal} day={data.day} />
-      <div class="stats">
-        <div><span class="micro lab">{t('eaten')}</span><span class="val">{fmt(eaten)}</span></div>
-        <div><span class="micro lab">{t('goal')}</span><span class="val">{kcalGoal != null ? fmt(kcalGoal) : '–'}</span>{#if bonus > 0}<span class="incl mono">{t('actInclActive', { n: fmt(bonus) })}</span>{/if}</div>
-      </div>
-    </section>
-
     {#if !goal}
       <section class="nogoal">
         <div><strong>{t('noGoalTitle')}</strong><p>{t('noGoalText')}</p></div>
@@ -232,99 +304,130 @@
       </section>
     {/if}
 
-    <section class="tiles" data-tour="macros">
-      {#each tiles as tile}
-        <div class="tile" style="background:{tile.bg}; border-radius:{tile.radius}">
-          <span class="tl">{tile.label}</span>
-          <span class="tv display">{fmt(tile.value)}{#if tile.goal}<span class="mono unit"> /{fmt(tile.goal)} g</span>{:else}<span class="mono unit"> g</span>{/if}</span>
-          <TickBar value={tile.value} goal={tile.goal} track={tile.track}
-            label={tile.goal ? t('macroAria', { value: fmt(tile.value), goal: fmt(tile.goal) }) : t('macroAriaNoGoal', { value: fmt(tile.value) })} />
-        </div>
-      {/each}
-    </section>
-    </div>
-
-    <div class="extras" class:withfast={fastingOn}>
-      {#if fastingOn}<div class="x-fast"><FastCard /></div>{/if}
-      <div class="x-water"><WaterRow day={data.day} ml={data.water?.ml ?? 0} goalMl={data.water?.goal_ml ?? 2000} /></div>
-      <div class="x-act"><ActivityCard day={data.day} activity={data.activity} /></div>
-      <div class="x-weight"><WeightTile /></div>
-    </div>
-
-    <section class="rows col-b">
-      {#each MEALS as m, mi}
-        {@const meal = data.meals[m]}
-        {@const has = meal.entries.length > 0}
-        {@const cta = suggested === m && !has}
-        <div class="meal" data-tour={mi === 0 ? 'meal' : undefined} class:cta class:open={expanded[m]}>
-          <div class="head">
-            {#if has}
-              <button class="main" aria-expanded={!!expanded[m]} onclick={() => (expanded[m] = !expanded[m])}>
-                <span class="t"><strong>{mealName(m)}</strong><small>{summary(m)}</small></span>
-                <span class="v">{fmt(Math.round(meal.kcal))}</span>
+    <div class="grid" class:editing data-no-pull={editing ? '' : undefined}>
+      {#each shown as c (c.id)}
+        {@const id = c.id}
+        <div class="card x-{id}" class:wide={c.wide} class:ghost={c.hidden} class:lifted={dragging === id} class:calm data-card={id}>
+          {#if editing}
+            <div class="tools" data-no-pull>
+              <button type="button" class="tb grip" onpointerdown={(e) => dragStart(e, id)} onpointermove={dragMove} onpointerup={dragEnd} onpointercancel={dragEnd}
+                aria-label={t('homeDrag', { card: cardName(id) })}><Icon name="grip" size={22} /></button>
+              <span class="cname">{cardName(id)}</span>
+              <button type="button" class="tb" onclick={() => step(id, -1)} disabled={shown[0].id === id} aria-label={t('homeUp', { card: cardName(id) })}><Icon name="up" size={22} /></button>
+              <button type="button" class="tb" onclick={() => step(id, 1)} disabled={shown[shown.length - 1].id === id} aria-label={t('homeDown', { card: cardName(id) })}><Icon name="down" size={22} /></button>
+              <button type="button" class="tb wtoggle" onclick={() => (draft = toggleWide(draft, id))} aria-pressed={c.wide}
+                aria-label={t(c.wide ? 'homeNarrow' : 'homeWide', { card: cardName(id) })}><Icon name={c.wide ? 'narrow' : 'wide'} size={22} /></button>
+              <button type="button" class="tb" onclick={() => (draft = toggleHidden(draft, id))} aria-pressed={c.hidden}
+                aria-label={t(c.hidden ? 'homeShow' : 'homeHide', { card: cardName(id) })}><Icon name={c.hidden ? 'eyeoff' : 'eye'} size={22} /></button>
+            </div>
+          {/if}
+          <div class="body" inert={editing}>
+            {#if id === 'ring'}
+          <section class="hero on-dark" data-tour="ring" aria-label={t('today')}>
+            <Ring {eaten} goal={kcalGoal} day={data.day} />
+            <div class="stats">
+              <div><span class="micro lab">{t('eaten')}</span><span class="val">{fmt(eaten)}</span></div>
+              <div><span class="micro lab">{t('goal')}</span><span class="val">{kcalGoal != null ? fmt(kcalGoal) : '–'}</span>{#if bonus > 0}<span class="incl mono">{t('actInclActive', { n: fmt(bonus) })}</span>{/if}</div>
+            </div>
+          </section>
+            {:else if id === 'macros'}
+          <section class="tiles" data-tour="macros">
+            {#each tiles as tile}
+              <div class="tile" style="background:{tile.bg}; border-radius:{tile.radius}">
+                <span class="tl">{tile.label}</span>
+                <span class="tv display">{fmt(tile.value)}{#if tile.goal}<span class="mono unit"> /{fmt(tile.goal)} g</span>{:else}<span class="mono unit"> g</span>{/if}</span>
+                <TickBar value={tile.value} goal={tile.goal} track={tile.track}
+                  label={tile.goal ? t('macroAria', { value: fmt(tile.value), goal: fmt(tile.goal) }) : t('macroAriaNoGoal', { value: fmt(tile.value) })} />
+              </div>
+            {/each}
+          </section>
+            {:else if id === 'fasting'}
+              <FastCard />
+            {:else if id === 'water'}
+              <WaterRow day={data.day} ml={data.water?.ml ?? 0} goalMl={data.water?.goal_ml ?? 2000} />
+            {:else if id === 'activity'}
+              <ActivityCard day={data.day} activity={data.activity} />
+            {:else if id === 'weight'}
+              <WeightTile />
+            {:else if id === 'meals'}
+              <section class="rows meals">
+        {#each MEALS as m, mi}
+          {@const meal = data.meals[m]}
+          {@const has = meal.entries.length > 0}
+          {@const cta = suggested === m && !has}
+          <div class="meal" data-tour={mi === 0 ? 'meal' : undefined} class:cta class:open={expanded[m]}>
+            <div class="head">
+              {#if has}
+                <button class="main" aria-expanded={!!expanded[m]} onclick={() => (expanded[m] = !expanded[m])}>
+                  <span class="t"><strong>{mealName(m)}</strong><small>{summary(m)}</small></span>
+                  <span class="v">{fmt(Math.round(meal.kcal))}</span>
+                </button>
+              {:else}
+                <button class="main" onclick={() => openAdd(m, ui.day, 'search')}>
+                  <span class="t"><strong>{mealName(m)}</strong><small>{cta && ui.day === ui.today ? t('whatsFor') : t('emptyMeal')}</small></span>
+                </button>
+              {/if}
+              <button class="plus" onclick={() => openAdd(m, ui.day, 'search')} aria-label={t('addTo', { meal: mealName(m) })}>
+                <Icon name="plus" size={20} stroke={2.4} />
               </button>
-            {:else}
-              <button class="main" onclick={() => openAdd(m, ui.day, 'search')}>
-                <span class="t"><strong>{mealName(m)}</strong><small>{cta && ui.day === ui.today ? t('whatsFor') : t('emptyMeal')}</small></span>
+            </div>
+            {#if !has && data.yesterday?.[m]}
+              <button class="again" onclick={() => copyYesterday(m)} disabled={copying}>
+                <Icon name="repeat" size={20} />
+                <span class="t"><strong>{t('sameAsYesterday')}</strong><small>{preview(m)}</small></span>
               </button>
             {/if}
-            <button class="plus" onclick={() => openAdd(m, ui.day, 'search')} aria-label={t('addTo', { meal: mealName(m) })}>
-              <Icon name="plus" size={20} stroke={2.4} />
-            </button>
+            {#if has && expanded[m]}
+              <ul class="entries">
+                {#each meal.entries as e (e.id)}
+                  <li>
+                    <button onclick={() => openAmount({ entry: e, meal: e.meal, day: ui.day })}
+                      aria-label={t('entryAria', { name: e.name ?? '?', amount: entryAmount(e), kcal: e.kcal == null ? '–' : fmt(Math.round(e.kcal)) })}>
+                      <span class="t"><strong>{e.name || '?'}</strong><small>{entryLine(e)}</small></span>
+                      <span class="v">{e.kcal == null ? '–' : fmt(Math.round(e.kcal))}</span>
+                    </button>
+                  </li>
+                {/each}
+              </ul>
+              {#if templating === m}
+                <form class="tplform" onsubmit={(e) => saveTemplate(e, m)}>
+                  <label class="field"><span>{t('templateName')}</span>
+                    <input bind:value={tplName} maxlength="80" autocomplete="off" aria-invalid={tplError ? 'true' : undefined} />
+                  </label>
+                  {#if tplError}<p class="note warn" role="alert">{tplError}</p>{/if}
+                  <div class="tplbtns">
+                    <button class="btn primary" disabled={tplBusy}>{t('save')}</button>
+                    <button type="button" class="btn" onclick={() => (templating = null)}>{t('cancel')}</button>
+                  </div>
+                </form>
+              {:else}
+                <button class="astpl" onclick={() => startTemplate(m)}><Icon name="bookmark" size={18} />{t('saveAsTemplate')}</button>
+              {/if}
+            {/if}
           </div>
-          {#if !has && data.yesterday?.[m]}
-            <button class="again" onclick={() => copyYesterday(m)} disabled={copying}>
-              <Icon name="repeat" size={20} />
-              <span class="t"><strong>{t('sameAsYesterday')}</strong><small>{preview(m)}</small></span>
-            </button>
-          {/if}
-          {#if has && expanded[m]}
-            <ul class="entries">
-              {#each meal.entries as e (e.id)}
-                <li>
-                  <button onclick={() => openAmount({ entry: e, meal: e.meal, day: ui.day })}
-                    aria-label={t('entryAria', { name: e.name ?? '?', amount: entryAmount(e), kcal: e.kcal == null ? '–' : fmt(Math.round(e.kcal)) })}>
-                    <span class="t"><strong>{e.name || '?'}</strong><small>{entryLine(e)}</small></span>
-                    <span class="v">{e.kcal == null ? '–' : fmt(Math.round(e.kcal))}</span>
-                  </button>
-                </li>
-              {/each}
-            </ul>
-            {#if templating === m}
-              <form class="tplform" onsubmit={(e) => saveTemplate(e, m)}>
-                <label class="field"><span>{t('templateName')}</span>
-                  <input bind:value={tplName} maxlength="80" autocomplete="off" aria-invalid={tplError ? 'true' : undefined} />
-                </label>
-                {#if tplError}<p class="note warn" role="alert">{tplError}</p>{/if}
-                <div class="tplbtns">
-                  <button class="btn primary" disabled={tplBusy}>{t('save')}</button>
-                  <button type="button" class="btn" onclick={() => (templating = null)}>{t('cancel')}</button>
-                </div>
-              </form>
-            {:else}
-              <button class="astpl" onclick={() => startTemplate(m)}><Icon name="bookmark" size={18} />{t('saveAsTemplate')}</button>
+        {/each}
+              </section>
+            {:else if id === 'micros'}
+        <div class="micros" class:open={microsOpen}>
+        <button class="main" aria-expanded={microsOpen} onclick={() => (microsOpen = !microsOpen)}>
+          <span class="t"><strong>{t('microsToday')}</strong><small>{micros.length}</small></span>
+          <span class="chev" aria-hidden="true"><Icon name="down" size={18} /></span>
+        </button>
+        {#if microsOpen}
+          <p class="note">{t('microNoteToday')}</p>
+          <ul class="mlist">
+            {#each micros as m (m.key)}
+              <MicroRow key={m.key} unit={m.unit} amount={m.amount} nrv={m.nrv} coverage={m.coverage} />
+            {/each}
+          </ul>
+        {/if}
+      </div>
+            {:else if id === 'suggestions'}
+              <Suggestions day={ui.day} variant="card" />
             {/if}
-          {/if}
+          </div>
         </div>
       {/each}
-      {#if micros.length}
-        <div class="micros" class:open={microsOpen}>
-          <button class="main" aria-expanded={microsOpen} onclick={() => (microsOpen = !microsOpen)}>
-            <span class="t"><strong>{t('microsToday')}</strong><small>{micros.length}</small></span>
-            <span class="chev" aria-hidden="true"><Icon name="down" size={18} /></span>
-          </button>
-          {#if microsOpen}
-            <p class="note">{t('microNoteToday')}</p>
-            <ul class="mlist">
-              {#each micros as m (m.key)}
-                <MicroRow key={m.key} unit={m.unit} amount={m.amount} nrv={m.nrv} coverage={m.coverage} />
-              {/each}
-            </ul>
-          {/if}
-        </div>
-      {/if}
-      {#if ideasOn}<Suggestions day={ui.day} variant="card" />{/if}
-    </section>
     </div>
   {/if}
 </div>
@@ -360,9 +463,11 @@
   .tv { font-size: 26px; line-height: 1; white-space: nowrap; }
   .unit { font-size: 12px; font-weight: 500; letter-spacing: 0; }
 
-  .today-grid, .col-a, .extras { display: contents; }
-  /* phone: hero, fasting card, macro tiles, water, meals */
-  .hero { order: 1; } .nogoal { order: 2; } .x-fast { order: 3; } .tiles { order: 4; } .x-water { order: 5; } .x-weight { order: 6; } .x-act { order: 7; } .col-b { order: 8; }
+  /* one grid for all cards, in the order of the layout: a single column on the phone, two on wide screens (`wide` spans both) */
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .card { display: flex; flex-direction: column; min-width: 0; }
+  .body { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .body > :global(*) { flex: 1; }
   .rows { gap: 6px; }
   .meal { background: var(--paper); border-radius: 20px; overflow: hidden; }
   .meal.cta { background: var(--deep); color: var(--on-deep); border-radius: 20px 20px 20px 8px; --focus: var(--lime); }
@@ -404,27 +509,49 @@
   .micros .note { padding: 0 18px; animation: unfold 220ms ease-out; }
   .mlist { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px 40px; padding: 12px 18px 18px; animation: unfold 220ms ease-out; }
   @keyframes unfold { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  .meals { display: flex; flex-direction: column; }
+  .micros { margin-top: 0; }
+
+  /* edit mode: every card carries its toolbar, the content is inert */
+  .editbar {
+    position: sticky; top: calc(var(--safe-t) + 8px); z-index: 30; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
+    padding: 10px 12px 10px 16px; border-radius: 24px 24px 24px 8px; background: var(--deep); color: var(--on-deep); --focus: var(--lime);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  }
+  .editbar .hint { font-size: 13px; flex: 1 1 200px; }
+  .ebtns { display: flex; flex-wrap: wrap; gap: 8px; }
+  .editbar .btn.quiet-btn { color: var(--on-deep); }
+  .editbar .btn:not(.primary):not(.quiet-btn) { background: transparent; color: var(--on-deep); border-color: #5b6b61; }
+  .grid.editing .card { outline: 2px dashed var(--hairline); outline-offset: 3px; border-radius: 20px; }
+  .tools { display: flex; align-items: center; gap: 2px; padding: 2px 4px; margin-bottom: 6px; background: var(--paper); border-radius: 22px; }
+  .cname { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px; }
+  .tb { width: 44px; height: 44px; min-width: 44px; border-radius: 22px; display: inline-flex; align-items: center; justify-content: center; color: var(--text); flex-shrink: 0; }
+  .tb[disabled] { opacity: 0.35; }
+  .tb[aria-pressed='true'] { background: var(--sel-bg); color: var(--sel-fg); }
+  .grip { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .lifted .grip { cursor: grabbing; }
+  .wtoggle { display: none; }
+  .card.ghost .body { opacity: 0.4; }
+  .card:not(.calm) { transition: transform 140ms, box-shadow 140ms; }
+  .card.lifted { transform: scale(1.015); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3); z-index: 5; position: relative; outline-style: solid; outline-color: var(--lime); }
+  @media (prefers-reduced-motion: reduce) { .card { transition: none !important; } }
+
   @media (min-width: 900px) {
-    /* ring and totals on the green block, the macro tiles stacked beside it, the meals in two columns below */
-    .today-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
-    .hero, .nogoal, .tiles, .x-fast, .x-water, .x-act, .x-weight, .col-b { order: 0; }
-    .col-a { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 12px; align-items: stretch; }
-    .extras { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
-    .extras.withfast .x-act { grid-column: 1 / -1; }
-    .x-weight { grid-column: 1 / -1; }
-    .x-fast, .x-water, .x-act { display: flex; flex-direction: column; }
-    .x-fast > :global(*), .x-water > :global(*), .x-act > :global(*) { flex: 1; }
+    .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
+    .card.wide { grid-column: 1 / -1; }
+    .wtoggle { display: inline-flex; }
+    .nogoal { flex-direction: row; align-items: center; justify-content: space-between; }
+    /* the macro tiles stack when the card is half wide, and sit side by side when it is full wide */
+    .card:not(.wide) .tiles { grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .card:not(.wide) .tile { height: auto; min-height: 88px; padding: 14px 18px; }
+    .card.wide .tiles { gap: 12px; }
+    .card:not(.wide) .tv { font-size: 30px; }
+    .card.wide .meals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; align-items: start; }
+    .mlist { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .hero { min-height: 300px; padding: 28px 40px; justify-content: space-around; gap: 32px; }
     .stats { flex-grow: 0; gap: 26px; min-width: 190px; }
     .stats div { gap: 4px; }
     .val { font-family: var(--f-display); font-weight: 800; letter-spacing: -0.04em; font-size: clamp(44px, 5vw, 60px); line-height: 0.95; }
-    .nogoal { grid-column: 1 / -1; grid-row: 2; flex-direction: row; align-items: center; justify-content: space-between; }
-    .tiles { grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 10px; }
-    .tile { height: auto; min-height: 88px; padding: 14px 18px; }
-    .tv { font-size: 30px; }
-    .col-b { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; align-items: start; }
-    .micros { grid-column: 1 / -1; }
-    .mlist { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .skeleton { height: 300px; }
   }
   @media (max-width: 359px) { .hero { flex-direction: column; padding: 20px; } .stats { flex-direction: row; } }

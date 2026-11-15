@@ -1,6 +1,6 @@
 <script lang="ts">
   type Name = 'home' | 'bars' | 'list' | 'trend' | 'scan' | 'plus' | 'left' | 'right' | 'down' | 'close' | 'camera' | 'user' | 'check' | 'search' | 'clock' | 'more' | 'repeat' | 'bookmark' | 'edit' | 'drop' | 'shield' | 'copy' | 'pot' | 'medal' | 'logout'
-    | 'steps' | 'flame' | 'walk' | 'run' | 'bike' | 'mountain' | 'swim' | 'dumbbell' | 'lotus' | 'bolt' | 'stairs' | 'ball' | 'music' | 'folder' | 'up';
+    | 'steps' | 'flame' | 'walk' | 'run' | 'bike' | 'mountain' | 'swim' | 'dumbbell' | 'lotus' | 'bolt' | 'stairs' | 'ball' | 'music' | 'folder' | 'up' | 'grip' | 'eye' | 'eyeoff' | 'sliders' | 'wide' | 'narrow';
   let { name, size = 24, stroke = 2.2 }: { name: Name; size?: number; stroke?: number } = $props();
 </script>
 
@@ -45,6 +45,12 @@
   {:else if name === 'ball'}<circle cx="12" cy="12" r="8" /><path d="M5.2 6.8c4.2 2.2 4.2 8.2 0 10.4M18.8 6.8c-4.2 2.2-4.2 8.2 0 10.4" />
   {:else if name === 'folder'}<path d="M3.5 7.5a1.5 1.5 0 0 1 1.5-1.5h4l2 2.2h8a1.5 1.5 0 0 1 1.5 1.5v8.3a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5z" />
   {:else if name === 'up'}<path d="M5 14.5l7-7 7 7" />
+  {:else if name === 'grip'}<g fill="currentColor" stroke="none"><circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" /><circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" /><circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" /></g>
+  {:else if name === 'eye'}<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx="12" cy="12" r="2.8" />
+  {:else if name === 'eyeoff'}<path d="M4 4l16 16M9.6 6c.8-.3 1.6-.5 2.4-.5 6 0 9.5 6.5 9.5 6.5s-1 1.9-2.8 3.5M6.3 7.7C3.9 9.4 2.5 12 2.5 12s3.5 6.5 9.5 6.5c1.4 0 2.7-.4 3.8-.9M10.2 10.2a2.8 2.8 0 0 0 3.6 3.6" />
+  {:else if name === 'sliders'}<path d="M4 7h9M17 7h3M4 17h3M11 17h9" /><circle cx="15" cy="7" r="2" /><circle cx="9" cy="17" r="2" />
+  {:else if name === 'wide'}<rect x="3.5" y="7" width="17" height="10" rx="2" />
+  {:else if name === 'narrow'}<rect x="3.5" y="7" width="7.5" height="10" rx="2" /><rect x="13" y="7" width="7.5" height="10" rx="2" />
   {:else if name === 'music'}<path d="M9 18V6.5l10-2V16M9 18a2.4 2.4 0 1 1-2.4-2.4A2.4 2.4 0 0 1 9 18zM19 16a2.4 2.4 0 1 1-2.4-2.4A2.4 2.4 0 0 1 19 16z" />
   {/if}
 </svg>

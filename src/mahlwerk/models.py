@@ -157,12 +157,34 @@ class ActivitySettings(BaseModel):
         False, description="the day's active energy is added to its calorie goal (day view, kcal left, insights, badges)")
 
 
+HOME_CARDS = ("ring", "macros", "fasting", "water", "activity", "weight", "meals", "micros", "suggestions")
+
+
+class HomeCard(BaseModel):
+    id: Literal["ring", "macros", "fasting", "water", "activity", "weight", "meals", "micros", "suggestions"]
+    hidden: bool = False
+    wide: bool = Field(False, description="full width on wide screens (half otherwise); ignored on phones")
+
+
+def _home_layout(value: list[HomeCard] | None) -> list[HomeCard] | None:
+    if value is not None:
+        if len(value) > len(HOME_CARDS):
+            raise ValueError("at most %d cards" % len(HOME_CARDS))
+        ids = [c.id for c in value]
+        if len(set(ids)) != len(ids):
+            raise ValueError("a card id appears twice")
+    return value
+
+
 class Settings(BaseModel):
     playful: bool = Field(True, description="badges, celebration moment and weekly review card on the day view")
     fasting: FastingSettings = Field(default_factory=FastingSettings)
     activity: ActivitySettings = Field(default_factory=ActivitySettings)
     tour_seen: bool = Field(False, description="the first-run tour of the day view was shown (or skipped) for this user")
     suggestions: bool = Field(True, description="the day view shows the card \"what still fits today\" (suggestions from the recipes; the API answers either way)")
+    home: list[HomeCard] | None = Field(None, description="order, visibility and width of the cards on the day view; null = default layout")
+
+    _check_home = field_validator("home")(_home_layout)
 
 
 class SettingsPatch(BaseModel):
@@ -171,6 +193,9 @@ class SettingsPatch(BaseModel):
     activity: ActivitySettings | None = None
     tour_seen: bool | None = None
     suggestions: bool | None = None
+    home: list[HomeCard] | None = Field(None, description="replaces the whole layout; null resets to the default")
+
+    _check_home = field_validator("home")(_home_layout)
 
 
 class MeFeatures(BaseModel):

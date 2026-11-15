@@ -609,6 +609,7 @@ function foodStats(from: string, to: string) {
 let playful = true;
 let tourSeen = ['demoacct', 'demoview'].includes(new URLSearchParams(location.search).get('mock') ?? ''); // the demo-account screens start without the tour
 let suggestionsOn = true;
+let homeLayout: { id: string; hidden: boolean; wide: boolean }[] | null = null;
 const earnedAt = new Map<BadgeCode, number>();
 const seenBadges = new Set<string>();
 const longestRun = (nums: number[]) => {
@@ -1132,16 +1133,17 @@ export async function mockRequest(method: string, path: string, body?: unknown, 
     mockOwnName = clean || null;
   }
   if (p === 'me') {
-    return mockDemoMe({ username: localMock ? mockAuth.user : 'me', display_name: mockOwnName ?? mockProviderName(), display_name_custom: mockOwnName !== null, provider_name: mockOwnName !== null && mockProviderName() !== mockOwnName ? mockProviderName() : null, goal: clone(goal), settings: { playful, fasting: { ...fastSettings }, activity: { ...activitySettings }, tour_seen: tourSeen, suggestions: suggestionsOn }, demo: { available: true, entries: demoEntryIds.size, weights: demoWeightDays.size, water: demoWaterDays.size, activity: demoActivityDays.size, workouts: demoWorkoutIds.size }, catalog: { products: catalog.length, updated_at: catalogUpdatedAt, bls: { products: basics.length, updated_at: catalogUpdatedAt } }, is_admin: localMock ? (mockAccounts.find((a) => a.username === mockAuth.user)?.admin ?? false) : true, features: { access_tokens: mockConnectors.find((c) => c.key === 'access_tokens')!.enabled, webhooks: mockConnectors.find((c) => c.key === 'webhooks')!.enabled, cookidoo: mockConnectors.find((c) => c.key === 'cookidoo')!.enabled, web_recipes: mockConnectors.find((c) => c.key === 'web_recipes')!.enabled } });
+    return mockDemoMe({ username: localMock ? mockAuth.user : 'me', display_name: mockOwnName ?? mockProviderName(), display_name_custom: mockOwnName !== null, provider_name: mockOwnName !== null && mockProviderName() !== mockOwnName ? mockProviderName() : null, goal: clone(goal), settings: { playful, fasting: { ...fastSettings }, activity: { ...activitySettings }, tour_seen: tourSeen, suggestions: suggestionsOn, home: clone(homeLayout) }, demo: { available: true, entries: demoEntryIds.size, weights: demoWeightDays.size, water: demoWaterDays.size, activity: demoActivityDays.size, workouts: demoWorkoutIds.size }, catalog: { products: catalog.length, updated_at: catalogUpdatedAt, bls: { products: basics.length, updated_at: catalogUpdatedAt } }, is_admin: localMock ? (mockAccounts.find((a) => a.username === mockAuth.user)?.admin ?? false) : true, features: { access_tokens: mockConnectors.find((c) => c.key === 'access_tokens')!.enabled, webhooks: mockConnectors.find((c) => c.key === 'webhooks')!.enabled, cookidoo: mockConnectors.find((c) => c.key === 'cookidoo')!.enabled, web_recipes: mockConnectors.find((c) => c.key === 'web_recipes')!.enabled } });
   }
   if (p === 'me/settings' && method === 'PATCH') {
-    const b = body as { playful?: boolean; tour_seen?: boolean; suggestions?: boolean; fasting?: Partial<typeof fastSettings>; activity?: Partial<typeof activitySettings> };
+    const b = body as { playful?: boolean; tour_seen?: boolean; suggestions?: boolean; home?: typeof homeLayout; fasting?: Partial<typeof fastSettings>; activity?: Partial<typeof activitySettings> };
     if (typeof b.playful === 'boolean') playful = b.playful;
     if (typeof b.tour_seen === 'boolean') tourSeen = b.tour_seen;
     if (typeof b.suggestions === 'boolean') suggestionsOn = b.suggestions;
+    if ('home' in b) homeLayout = clone(b.home ?? null);
     if (b.fasting) Object.assign(fastSettings, b.fasting);
     if (b.activity) Object.assign(activitySettings, b.activity);
-    return { playful, fasting: { ...fastSettings }, activity: { ...activitySettings }, tour_seen: tourSeen, suggestions: suggestionsOn };
+    return { playful, fasting: { ...fastSettings }, activity: { ...activitySettings }, tour_seen: tourSeen, suggestions: suggestionsOn, home: clone(homeLayout) };
   }
   if (p === 'badges' && method === 'GET') return badgesView();
   if (p === 'badges/seen' && method === 'POST') {

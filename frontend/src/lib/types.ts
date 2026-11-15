@@ -1,5 +1,7 @@
 // Types of the API v1 contract (docs/api-v1.md).
 
+import type { HomeCard } from './homeLayout';
+
 export type Meal = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export const MEALS: Meal[] = ['breakfast', 'lunch', 'snack', 'dinner'];
 
@@ -205,12 +207,15 @@ export interface Settings {
   tour_seen: boolean;
   /** The day view shows the card "what still fits today" (the API answers either way). */
   suggestions: boolean;
+  /** Order, visibility and width of the cards on the day view; null = the default layout. */
+  home: HomeCard[] | null;
 }
 
 export interface SettingsPatch {
   playful?: boolean;
   tour_seen?: boolean;
   suggestions?: boolean;
+  home?: HomeCard[] | null;
   fasting?: Partial<FastingSettings>;
   activity?: Partial<ActivitySettings>;
 }

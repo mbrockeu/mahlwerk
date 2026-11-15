@@ -3,6 +3,12 @@
 const en = {
   appName: 'Mahlwerk',
   navToday: 'Today', navHistory: 'Insights', navProducts: 'Products', navWeight: 'Weight', navScan: 'Scan barcode',
+  homeEdit: 'Customise this page', homeDone: 'Done', homeReset: 'Reset', homeCancel: 'Cancel', homeHint: 'Drag a card by its handle, or use the arrows.',
+  homeSaveFailed: 'Could not save the layout ({reason}).',
+  homeCard_ring: 'Calories', homeCard_macros: 'Protein, carbs, fat', homeCard_fasting: 'Fasting', homeCard_water: 'Water', homeCard_activity: 'Activity',
+  homeCard_weight: 'Weight', homeCard_meals: 'Meals', homeCard_micros: 'Vitamins and minerals', homeCard_suggestions: 'What still fits',
+  homeDrag: 'Move {card}: drag', homeUp: 'Move {card} up', homeDown: 'Move {card} down', homeHide: 'Hide {card}', homeShow: 'Show {card}',
+  homeWide: 'Make {card} full width', homeNarrow: 'Make {card} half width',
   today: 'Today', yesterday: 'Yesterday', tomorrow: 'Tomorrow', prevDay: 'Previous day', nextDay: 'Next day',
   profile: 'Profile and goals', back: 'Back', close: 'Close', cancel: 'Cancel', save: 'Save', delete: 'Delete',
   streak1: '{n} day in a row', streakN: '{n} days in a row', noStreak: 'A fresh start',
@@ -653,6 +659,12 @@ type Key = keyof typeof en;
 const de: Record<Key, string> = {
   appName: 'Mahlwerk',
   navToday: 'Heute', navHistory: 'Auswertung', navProducts: 'Produkte', navWeight: 'Gewicht', navScan: 'Barcode scannen',
+  homeEdit: 'Seite anpassen', homeDone: 'Fertig', homeReset: 'Zurücksetzen', homeCancel: 'Abbrechen', homeHint: 'Karten am Griff ziehen oder mit den Pfeilen verschieben.',
+  homeSaveFailed: 'Die Anordnung konnte nicht gespeichert werden ({reason}).',
+  homeCard_ring: 'Kalorien', homeCard_macros: 'Eiweiß, Kohlenhydrate, Fett', homeCard_fasting: 'Fasten', homeCard_water: 'Wasser', homeCard_activity: 'Aktivität',
+  homeCard_weight: 'Gewicht', homeCard_meals: 'Mahlzeiten', homeCard_micros: 'Vitamine und Mineralstoffe', homeCard_suggestions: 'Was noch passt',
+  homeDrag: '{card} verschieben: ziehen', homeUp: '{card} nach oben', homeDown: '{card} nach unten', homeHide: '{card} ausblenden', homeShow: '{card} einblenden',
+  homeWide: '{card} auf volle Breite', homeNarrow: '{card} auf halbe Breite',
   today: 'Heute', yesterday: 'Gestern', tomorrow: 'Morgen', prevDay: 'Vorheriger Tag', nextDay: 'Nächster Tag',
   profile: 'Profil und Ziele', back: 'Zurück', close: 'Schließen', cancel: 'Abbrechen', save: 'Speichern', delete: 'Löschen',
   streak1: '{n} Tag in Folge', streakN: '{n} Tage in Folge', noStreak: 'Ein frischer Start',
@@ -1317,7 +1329,7 @@ export function setLangPref(pref: LangPref) {
 
 const dict: Record<Lang, Record<string, string>> = { en, de };
 
-export function t(key: Key | `w_${string}` | `hint_${string}` | `hintT_${string}` | `n_${string}` | `rev_${string}` | `badge_${string}` | `badgeCond_${string}` | `badgeProg_${string}` | `adm_${string}` | `cn_${string}` | `cnD_${string}` | `ev_${string}` | `wk_${string}` | `cbCnt_${string}` | `cbErr_${string}` | `cbReason_${string}`, vars: Record<string, string | number> = {}): string {
+export function t(key: Key | `homeCard_${string}` | `w_${string}` | `hint_${string}` | `hintT_${string}` | `n_${string}` | `rev_${string}` | `badge_${string}` | `badgeCond_${string}` | `badgeProg_${string}` | `adm_${string}` | `cn_${string}` | `cnD_${string}` | `ev_${string}` | `wk_${string}` | `cbCnt_${string}` | `cbErr_${string}` | `cbReason_${string}`, vars: Record<string, string | number> = {}): string {
   const text = dict[lang][key] ?? dict.en[key] ?? key;
   return text.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ''));
 }

@@ -127,6 +127,8 @@ def patch_settings(body: SettingsPatch, user: dict = Depends(current_user), stor
         if key in ("fasting", "activity"):  # only the given fields change
             value = {**getattr(user_settings(store, user["id"]), key).model_dump(), **value}
         store.set_setting(user["id"], key, value)
+    if "home" in body.model_fields_set and body.home is None:  # explicit null: back to the default layout
+        store.set_setting(user["id"], "home", None)
     return user_settings(store, user["id"])
 
 

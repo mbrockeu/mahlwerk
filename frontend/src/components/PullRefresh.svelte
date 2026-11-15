@@ -23,7 +23,7 @@
   /** The touch starts somewhere that has its own touch behaviour: a field, or something that scrolls. */
   function blocked(el: Element | null): boolean {
     for (let n: Element | null = el; n && n !== document.body; n = n.parentElement) {
-      if (n.matches('input, textarea, select, [contenteditable], [role="slider"]')) return true;
+      if (n.matches('input, textarea, select, [contenteditable], [role="slider"], [data-no-pull]')) return true;
       const s = getComputedStyle(n);
       if (/(auto|scroll)/.test(s.overflowY) && n.scrollHeight > n.clientHeight + 1) return true;
       if (/(auto|scroll)/.test(s.overflowX) && n.scrollWidth > n.clientWidth + 1) return true;
