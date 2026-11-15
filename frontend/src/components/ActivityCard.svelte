@@ -49,7 +49,11 @@
 <section class="act" aria-labelledby="act-title">
   <div class="top">
     <h2 id="act-title" class="micro lab"><Icon name="steps" size={15} stroke={2.4} />{t('actTitle')}</h2>
-    {#if sourceText}<span class="src mono" title={t('actSource', { source: sourceText })}>{sourceText}</span>{/if}
+    <div class="tr">
+      {#if sourceText}<span class="src mono" title={t('actSource', { source: sourceText })}>{sourceText}</span>{/if}
+      <!-- wide screens: the add button moves up here, so the card is not much taller than the water card beside it -->
+      <button class="addw-s" onclick={() => openWorkout({ day, workout: null })}><Icon name="plus" size={16} stroke={2.6} />{t('actAddWorkout')}</button>
+    </div>
   </div>
 
   <div class="steps">
@@ -78,7 +82,7 @@
   </dl>
   {#if activity.steps == null && activity.active_kcal == null && !activity.workouts.length}<p class="note">{t('actNoValue')}</p>{/if}
 
-  <ul class="workouts" aria-label={t('actWorkoutsToday')}>
+  {#if activity.workouts.length}<ul class="workouts" aria-label={t('actWorkoutsToday')}>
     {#each activity.workouts as w (w.id)}
       <li>
         <button class="wrow" onclick={() => openWorkout({ day, workout: w })}
@@ -89,7 +93,7 @@
         </button>
       </li>
     {/each}
-  </ul>
+  </ul>{/if}
   <button class="addw" onclick={() => openWorkout({ day, workout: null })}>
     <Icon name="plus" size={20} stroke={2.4} />{t('actAddWorkout')}
   </button>
@@ -126,6 +130,18 @@
     display: flex; align-items: center; justify-content: center; gap: 8px; --focus: var(--focus-base); margin-right: 4px;
   }
   .wrow:active, .addw:active { transform: scale(0.985); }
-  @media (min-width: 900px) { .act { padding: 18px 18px 18px 22px; } }
-  @media (prefers-reduced-motion: reduce) { .wrow:active, .addw:active { transform: none; } }
+  .tr { display: flex; align-items: center; gap: 8px; }
+  .addw-s {
+    display: none; min-height: 36px; padding: 0 14px 0 10px; border-radius: 18px 18px 18px 6px; background: var(--deep); color: var(--on-deep);
+    font-weight: 600; font-size: 13px; align-items: center; gap: 6px; white-space: nowrap; --focus: var(--focus-base);
+  }
+  .addw-s:active { transform: scale(0.97); }
+  @media (min-width: 900px) {
+    .act { padding: 18px 18px 18px 22px; gap: 10px; }
+    .num { font-size: 40px; }
+    .addw { display: none; }
+    .addw-s { display: inline-flex; }
+    .fact dd, .fact dd :global(.edit) { min-height: 36px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .wrow:active, .addw:active, .addw-s:active { transform: none; } }
 </style>
