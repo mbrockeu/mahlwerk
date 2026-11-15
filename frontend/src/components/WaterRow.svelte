@@ -82,5 +82,6 @@
   .minus { padding: 0 14px; border: 2px solid var(--hairline); color: var(--text); font-family: var(--f-mono); font-size: 13px; }
   .btns button:active:not([disabled]) { transform: scale(0.97); }
   .btns button[disabled] { opacity: 0.45; cursor: default; }
-  @media (min-width: 900px) { .water { justify-content: center; gap: 16px; padding: 18px 18px 18px 22px; } .glasses { height: 44px; } }
+  /* beside the taller activity card the glasses take the free height, the buttons stay at the bottom */
+  @media (min-width: 900px) { .water { gap: 16px; padding: 18px 18px 18px 22px; } .glasses { flex: 1 1 auto; height: auto; min-height: 44px; max-height: 160px; } .btns { margin-top: auto; } }
 </style>

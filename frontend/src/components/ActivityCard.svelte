@@ -104,14 +104,14 @@
   .steps { display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
   .numline { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
   .num { font-size: 48px; line-height: 1; letter-spacing: -0.04em; }
-  .num :global(.edit) { min-height: 44px; padding: 0 6px; margin-left: -6px; display: inline-flex; align-items: center; border-radius: 10px; box-shadow: inset 0 -2px 0 var(--hairline); }
+  .num :global(.edit) { padding: 4px 0 2px; border-bottom: 3px dotted var(--green-tick); border-radius: 0; }
   .of { font-size: 13px; color: var(--quiet); }
   .done { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; background: var(--lime); color: var(--on-lime); border-radius: 10px 10px 10px 4px; padding: 2px 9px; }
 
   .facts { display: flex; flex-wrap: wrap; gap: 4px 28px; padding-right: 4px; }
   .fact { display: flex; flex-direction: column; gap: 0; min-width: 0; }
   .fact dd { margin: 0; min-height: 44px; font-size: 20px; font-weight: 600; display: flex; align-items: center; }
-  .fact dd :global(.edit) { min-height: 44px; padding: 0 6px; margin-left: -6px; display: inline-flex; align-items: center; border-radius: 10px; box-shadow: inset 0 -2px 0 var(--hairline); }
+  .fact dd :global(.edit) { padding: 8px 0 1px; border-bottom: 2px dotted var(--hairline); border-radius: 0; }
   .u { font-size: 12px; font-weight: 500; color: var(--quiet); margin-left: 2px; }
 
   .workouts { display: flex; flex-direction: column; gap: 6px; }
