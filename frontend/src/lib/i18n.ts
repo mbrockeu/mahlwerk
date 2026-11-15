@@ -204,6 +204,9 @@ const en = {
   importText: 'Data that was brought in from another app. Removing an import deletes what it added and you have not changed since; everything else stays.',
   importYazio: 'Yazio import', importCounts: '{entries} entries on {days} days · {foods} foods · {weights} weights',
   importRemove: 'Remove import', importConfirm: 'Really remove?', importRemoved: 'Import removed: {entries} entries',
+  exTitle: 'Export my data', exText: 'Download everything you have stored here: diary, weight, water, activity, workouts, fasting, goals, templates and your recipes. Nothing of other people, no passwords or access keys.',
+  exPeriod: 'Period', exAll: 'Everything', exYear: 'Last year', exCustom: 'Custom period', exBad: 'Pick two days where the end is not before the start.',
+  exButton: 'Download ZIP', exHint: 'CSV for Excel/Numbers, plus a complete JSON file.',
 
   // additional nutrients
   grp_fat: 'Fats', grp_carb: 'Carbohydrates', grp_mineral: 'Minerals', grp_vitamin: 'Vitamins', grp_other: 'Other',
@@ -844,6 +847,9 @@ const de: Record<Key, string> = {
   importText: 'Daten, die aus einer anderen App übernommen wurden. „Import entfernen“ löscht, was er hinzugefügt hat und du seither nicht verändert hast; alles andere bleibt.',
   importYazio: 'Yazio-Import', importCounts: '{entries} Einträge an {days} Tagen · {foods} Lebensmittel · {weights} Gewichte',
   importRemove: 'Import entfernen', importConfirm: 'Wirklich entfernen?', importRemoved: 'Import entfernt: {entries} Einträge',
+  exTitle: 'Meine Daten exportieren', exText: 'Lade alles herunter, was hier von dir gespeichert ist: Tagebuch, Gewicht, Wasser, Aktivität, Training, Fasten, Ziele, Vorlagen und deine Rezepte. Nichts von anderen Personen, keine Passwörter oder Zugangsschlüssel.',
+  exPeriod: 'Zeitraum', exAll: 'Alles', exYear: 'Letztes Jahr', exCustom: 'Eigener Zeitraum', exBad: 'Bitte zwei Tage wählen, bei denen das Ende nicht vor dem Beginn liegt.',
+  exButton: 'ZIP herunterladen', exHint: 'CSV für Excel/Numbers, dazu eine vollständige JSON-Datei.',
 
   // zusätzliche Nährwerte
   grp_fat: 'Fette', grp_carb: 'Kohlenhydrate', grp_mineral: 'Mineralstoffe', grp_vitamin: 'Vitamine', grp_other: 'Sonstiges',

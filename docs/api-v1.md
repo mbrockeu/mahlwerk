@@ -166,6 +166,7 @@ Editing or deleting the food later does not change past days; deleting sets `foo
 | PATCH | `/api/v1/me` | `{display_name: string\|null}` | `Me` (same as GET) | Chooses the display name: trimmed, blanks collapsed, 1-60 characters, no control characters or line breaks (Unicode and emojis are fine), else `422`. Empty or `null` goes back to the provider's name (proxy header, OIDC claim, local account) or the user name. The chosen name wins in every sign-in mode and is **not** overwritten by proxy headers or later OIDC sign-ins; it shows in `/me`, `/auth/status`, the login answer and `/admin/users`. `username` never changes. Stored as the user setting `display_name` (no schema change). Needs a write token like `PATCH /me/settings` (`read` scope: `403`) |
 | GET | `/api/v1/me/imports` | – | ImportBatch[] | this user's import batches, newest first, see Importing from Yazio |
 | DELETE | `/api/v1/me/imports/{id}` | – | `{entries, weights, water, activity, workouts, foods:int, goal:bool}` | takes back one of the user's own batches (404 for an unknown or foreign one); the numbers are what was removed |
+| GET | `/api/v1/me/export?from=&to=&lang=` | – | ZIP (`application/zip`) | the caller's own data, see Personal data export; `from`/`to` (`YYYY-MM-DD`, inclusive) limit the day-based data, an invalid date or `from` after `to` → 422; works with a read key |
 | PUT | `/api/v1/me/goal` | Goal | Goal | kcal 500–10000, macros 0–1000, water_ml 500–6000 |
 | PATCH | `/api/v1/me/settings` | `{playful?:bool, fasting?:{enabled?:bool, target_hours?:number}, activity?:{add_to_goal?:bool}, tour_seen?:bool, suggestions?:bool}` | `{playful, fasting, activity, tour_seen, suggestions}` | per-user settings, `playful` defaults to true, `fasting` to `{enabled:false, target_hours:16}` (hours 8–72), `activity` to `{add_to_goal:false}`, `tour_seen` to false (set once the first-run tour of the day view was shown or skipped; the profile can reset it), `suggestions` to true (the day view shows the card "what still fits today"; `GET /recipes/suggestions` answers either way); fields left out stay as they are, also inside `fasting` and `activity` |
 | GET | `/api/v1/badges` | – | Badges | see Playful feedback; empty lists while `playful` is false |
@@ -222,6 +223,29 @@ Editing or deleting the food later does not change past days; deleting sets `foo
 | POST | `/api/v1/health/sync` | HealthSync | counts per kind | bulk interface for Apple Health, needs a write key, see Activity |
 | POST | `/api/v1/me/demo-data` | `{days?:int}` | `{entries, weights, water, activity, workouts, foods, goal_set:bool}` | see Demo data; 404 when switched off |
 | DELETE | `/api/v1/me/demo-data` | – | `{entries, weights, water, activity, workouts, foods}` | see Demo data; 404 when switched off |
+
+## Personal data export
+
+`GET /api/v1/me/export` gives every user a download of all their own data (profile card "Export my data"). There is no export of the whole
+database and no route for an admin to take other people's data: the caller is always the owner. A `read` access key may use it.
+
+- **Parameters.** `from` and `to` (`YYYY-MM-DD`, both optional, inclusive) limit the day-based files: diary, weight, activity, workouts,
+  water and fasting (a fast belongs to the day it started, local time of the server). Goal, settings, templates, recipes and badges are
+  always complete. An invalid date or `from` after `to` answers **422**. `lang` (`de`|`en`) chooses the CSV format; the language is kept
+  on the device, so the interface sends it, and without it the `Accept-Language` header decides (default `en`).
+- **Answer.** `application/zip`, `Content-Disposition: attachment; filename="mahlwerk-export-<username>-<YYYY-MM-DD>.zip"`, built in memory.
+  Entries: `diary.csv`, `weight.csv`, `activity.csv`, `workouts.csv`, `water.csv`, `fasting.csv`, `mahlwerk-export.json`.
+- **CSV.** UTF-8 with a byte order mark (Excel), CRLF lines, readable headers in the chosen language. `de`: delimiter `;` and decimal comma;
+  `en`: `,` and decimal point. `diary.csv` has day, meal, name, brand, amount, unit and the nutrients for that amount (energy, protein,
+  carbohydrates, fat, saturated fat, sugars, fibre, salt, plus a column for every other nutrient some entry knows). Times are ISO 8601 in
+  the server's local time zone. A text that starts with `=`, `+`, `-` or `@` gets a leading `'` so that a spreadsheet does not run it.
+- **JSON.** `mahlwerk-export.json` holds `format_version` (1), `exported_at`, `app_version`, `range` (`from`/`to`, null when open) and the
+  sections `account` (user name, display name, creation time), `goal`, `settings`, `diary` (with the values per 100 g/ml and the
+  nutrients for the amount), `weight`, `activity`, `workouts`, `water`, `fasting`, `templates` (with items), `recipes` (the recipes the
+  user created, with ingredients), `badges` and `webhooks` (name, host, events, switch only).
+- **Never included.** Password hash, sign-in sessions, access keys, webhook secrets and addresses beyond the host, stored connector
+  secrets, the identity at a sign-in provider, other users' data. Demo rows (test data of the own account) are left out; the demo account
+  itself exports its sample data.
 
 ## Additional nutrients
 

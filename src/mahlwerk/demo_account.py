@@ -65,6 +65,7 @@ _classify(
     "GET /diary/{day}", "GET /history", "GET /insights", "GET /insights/nutrient", "GET /insights/foods", "GET /insights/foods/detail",
     "GET /review", "GET /nutrients", "GET /templates", "GET /recipes/suggestions", "GET /recipes", "GET /recipes/{recipe_id}",
     "GET /recipe-groups", "GET /badges", "GET /fasting", "GET /summary/today", "GET /activity", "GET /images/{digest}/{size}",
+    "GET /me/export",  # the demo account's own sample data, nothing else
 )
 _classify(
     "own",  # these write only rows of the signed-in user, which for a demo request is the demo account

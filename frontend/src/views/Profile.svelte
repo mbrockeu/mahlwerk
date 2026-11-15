@@ -5,6 +5,7 @@
   import AccountCard from '../components/AccountCard.svelte';
   import CookidooAccount from '../components/CookidooAccount.svelte';
   import YazioImport from '../components/YazioImport.svelte';
+  import DataExport from '../components/DataExport.svelte';
   import TokenCard from '../components/TokenCard.svelte';
   import WebhookCard from '../components/WebhookCard.svelte';
   import Icon from '../components/Icon.svelte';
@@ -557,6 +558,8 @@
             {#if importError}<p class="note warn" role="alert">{importError}</p>{/if}
           </section>
         {/if}
+
+        {#if !viewingDemo() && !import.meta.env.VITE_DEMO}<DataExport />{/if}
 
         <section class="card" aria-labelledby="cat-title">
           <h2 id="cat-title" class="micro quiet">{t('gpCatalog')}</h2>

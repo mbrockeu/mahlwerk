@@ -32,7 +32,7 @@ from .imagestore import ImageStore
 from .recipeimages import RecipeImages
 from .nutrition import valid_gtin  # noqa: F401  (kept importable from here)
 from .routes import yazio as yazio_routes
-from .routes import activity as activity_routes, admin, badges, catalog, cookidoo as cookidoo_routes, diary, fasting, foods, insights, nutrients, profile, recipe_groups, recipes, summary, suggestions, templates, tokens, water, web_recipes, images as image_routes, vision as vision_routes
+from .routes import activity as activity_routes, admin, badges, catalog, cookidoo as cookidoo_routes, diary, export as export_routes, fasting, foods, insights, nutrients, profile, recipe_groups, recipes, summary, suggestions, templates, tokens, water, web_recipes, images as image_routes, vision as vision_routes
 from .routes import auth as auth_routes
 from .routes import demo_view as demo_view_routes
 from .routes import oidc as oidc_routes
@@ -166,7 +166,7 @@ def create_app(
     app.include_router(auth_routes.admin_router)
     app.include_router(oidc_routes.router)
     app.include_router(demo_view_routes.router)
-    for module in (profile, catalog, foods, diary, insights, nutrients, templates, suggestions, recipes, recipe_groups, badges, water, fasting,
+    for module in (profile, export_routes, catalog, foods, diary, insights, nutrients, templates, suggestions, recipes, recipe_groups, badges, water, fasting,
                    summary, tokens, webhook_routes, admin, activity_routes, cookidoo_routes, web_recipes, image_routes, vision_routes):
         app.include_router(module.router)
     app.include_router(yazio_routes.router)

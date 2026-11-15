@@ -7,6 +7,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Personal data export: every user can download all their own data (profile card "Export my data", `GET /api/v1/me/export`, also with a read access key). A ZIP with `diary.csv`, `weight.csv`, `activity.csv`, `workouts.csv`, `water.csv`, `fasting.csv` (UTF-8 with BOM; `;` and decimal comma for German, `,` and point otherwise) and a complete `mahlwerk-export.json` (also goal, settings, templates, own recipes, badges, account basics). Optional period (`from`/`to`; everything, last year or custom in the interface). There is no export of the whole database; passwords, sessions, access keys, webhook secrets, other users' data and demo rows are never part of it. No schema change.
 - Pull to refresh in the home-screen app: pulling down at the top of a page loads its data again (not the whole page); only in the installed app, since Safari has its own in the browser. The weight view now also reloads after changes elsewhere.
 - Ready-made Apple Shortcut for Apple Health (`scripts/apple-shortcut/`): a generator script (`build_shortcut.py`, standard library only, `--days N`) and the built, unsigned `Mahlwerk Health Sync.shortcut` that sends steps, active energy and weight of the last days to `POST /api/v1/health/sync`, with a README (signing on a Mac, import, automation). Address and access key are asked for on import.
 

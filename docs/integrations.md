@@ -268,7 +268,12 @@ curl -s -X PUT -H "Authorization: Bearer $KEY" -H 'Content-Type: application/jso
      -d '{"kg": 79.4}' $BASE/weights/2026-11-12
 curl -s -X POST -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
      -d '{"add_ml": 250}' $BASE/water/2026-11-12
+
+# all of your own data as a ZIP (CSV files and a JSON file); a read key is enough
+curl -s -H "Authorization: Bearer $KEY" -o mahlwerk-export.zip "$BASE/me/export?from=2026-01-01&lang=en"
 ```
+
+The same download is in the profile (card "Export my data"); see "Personal data export" in `api-v1.md`.
 
 ## Cookidoo
 

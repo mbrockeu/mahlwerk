@@ -2214,3 +2214,92 @@ class Store:
                 (now,),
             ).fetchall()
         return [dict(r) for r in rows]
+
+    # personal data export (see export.py): the rows of ONE user, selected explicitly column by column so that no secret can
+    # slip in with a `SELECT *`. `first` and `last` are days (inclusive); `demo` False leaves out rows with the demo flag.
+
+    def export_account(self, user_id: int) -> dict | None:
+        """The account basics: user name, name as stored and creation time. Never the password hash or a provider identity."""
+        with self._connect() as con:
+            row = con.execute("SELECT username, display_name, created_at FROM user WHERE id = ?", (user_id,)).fetchone()
+        return dict(row) if row else None
+
+    def _export_days(self, table: str, columns: str, user_id: int, first: str, last: str, demo: bool, order: str) -> list[dict]:
+        """`table` and `columns` are fixed names of the callers below, never user input."""
+        with self._connect() as con:
+            rows = con.execute(
+                f"SELECT {columns} FROM {table} WHERE user_id = ? AND day BETWEEN ? AND ? AND (? OR demo = 0) ORDER BY {order}",
+                (user_id, first, last, int(demo)),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def export_diary(self, user_id: int, first: str, last: str, demo: bool) -> list[dict]:
+        rows = self._export_days("diary_entry", "id, day, meal, name, brand, amount, unit, per_100, extra, created_at",
+                                 user_id, first, last, demo, "day, id")
+        return [{**r, "per_100": json.loads(r["per_100"]), "extra": json.loads(r["extra"] or "{}")} for r in rows]
+
+    def export_weights(self, user_id: int, first: str, last: str, demo: bool) -> list[dict]:
+        return self._export_days("weight", "day, kg", user_id, first, last, demo, "day")
+
+    def export_water(self, user_id: int, first: str, last: str, demo: bool) -> list[dict]:
+        return self._export_days("water", "day, ml", user_id, first, last, demo, "day")
+
+    def export_activity(self, user_id: int, first: str, last: str, demo: bool) -> list[dict]:
+        return self._export_days("activity_day", "day, steps, active_kcal, distance_m, source", user_id, first, last, demo, "day")
+
+    def export_workouts(self, user_id: int, first: str, last: str, demo: bool) -> list[dict]:
+        return self._export_days("workout", "day, started_at, kind, name, minutes, kcal, distance_m, steps, note, source",
+                                 user_id, first, last, demo, "day, COALESCE(started_at, 0), id")
+
+    def export_fasts(self, user_id: int, first: str, last: str) -> list[dict]:
+        """Fasts that started on a day of the range (local time, like the days of everything else); the open one included."""
+        with self._connect() as con:
+            rows = con.execute(
+                "SELECT started_at, ended_at, target_hours FROM fast WHERE user_id = ? "
+                "AND date(started_at, 'unixepoch', 'localtime') BETWEEN ? AND ? ORDER BY started_at",
+                (user_id, first, last),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def export_templates(self, user_id: int) -> list[dict]:
+        """The user's meal templates with their items (oldest first)."""
+        with self._connect() as con:
+            rows = con.execute("SELECT id, name, created_at FROM template WHERE user_id = ? ORDER BY id", (user_id,)).fetchall()
+            out = []
+            for row in rows:
+                items = con.execute(
+                    "SELECT name, brand, amount, unit, per_100, extra FROM template_item WHERE template_id = ? ORDER BY id", (row["id"],)
+                ).fetchall()
+                out.append({"name": row["name"], "created_at": row["created_at"], "items": [self._export_item(i) for i in items]})
+        return out
+
+    @staticmethod
+    def _export_item(row: sqlite3.Row) -> dict:
+        return {**dict(row), "per_100": json.loads(row["per_100"]), "extra": json.loads(row["extra"] or "{}")}
+
+    def export_recipes(self, user_id: int, demo: bool) -> list[dict]:
+        """Recipes this user created (the household shares recipes, but only the author's own are theirs to take away)."""
+        hide = "" if demo else " AND NOT COALESCE(json_extract(food.data, '$.demo') = 1, 0)"
+        with self._connect() as con:
+            rows = con.execute(
+                "SELECT recipe.id, recipe.portions, recipe.total_weight, recipe.updated_at, food.data AS data FROM recipe "
+                f"JOIN food ON food.id = recipe.food_id WHERE recipe.created_by = ?{hide} ORDER BY recipe.id", (user_id,)
+            ).fetchall()
+            out = []
+            for row in rows:
+                items = con.execute(
+                    "SELECT name, brand, amount, unit, per_100, extra FROM recipe_item WHERE recipe_id = ? ORDER BY position", (row["id"],)
+                ).fetchall()
+                data = json.loads(row["data"]) if row["data"] else {}
+                out.append({"name": data.get("name"), "portions": row["portions"], "total_weight": row["total_weight"],
+                            "updated_at": row["updated_at"], "per_100": data.get("per_100"),
+                            "items": [self._export_item(i) for i in items]})
+        return out
+
+    def export_badges(self, user_id: int, demo: bool) -> list[dict]:
+        return [{"code": b["code"], "earned_at": b["earned_at"]} for b in self.badges_earned(user_id) if demo or not b["demo"]]
+
+    def export_webhooks(self, user_id: int) -> list[dict]:
+        """Name, events and switch of the hooks. The address is only partly given (see export.py) and the secret never."""
+        return [{"name": h["name"], "url": h["url"], "events": h["events"], "enabled": h["enabled"], "created_at": h["created_at"]}
+                for h in self.list_webhooks(user_id)]
