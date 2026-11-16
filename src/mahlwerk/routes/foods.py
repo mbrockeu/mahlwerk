@@ -129,7 +129,7 @@ def food_by_barcode(code: str, request: Request, user: dict = Depends(current_us
     # the local catalogue comes before the live lookup: faster, and works while Open Food Facts is down
     if (item := request.app.state.catalog.get(OFF, code)) is not None:
         data = food_data(item)
-        food_id, fetched_at = store.put_food(code, OFF, data, user["id"])
+        food_id, fetched_at = store.put_food(code, OFF, data)
         return build_food({**with_piece(store, food_id), "id": food_id, "code": code, "source": OFF, "data": data, "fetched_at": fetched_at}, user, cached=False)
     if fresh:
         raise HTTPException(404, "unknown barcode")
@@ -144,7 +144,7 @@ def food_by_barcode(code: str, request: Request, user: dict = Depends(current_us
         if cached is not None and cached["found"]:
             return build_food(cached, user, stale=True)
         raise HTTPException(502, f"Open Food Facts unavailable: {exc}") from exc
-    food_id, fetched_at = store.put_food(code, "openfoodfacts", data, user["id"])
+    food_id, fetched_at = store.put_food(code, "openfoodfacts", data)
     if data is None:
         raise HTTPException(404, "unknown barcode")
     return build_food(

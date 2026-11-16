@@ -330,7 +330,7 @@ async def adopt(body: AdoptIn, request: Request, store: Store = Depends(get_stor
         if body.collection and ownership.is_household(user):
             await _group_for(request, access, store, user, body.collection, food_id, False)
     else:
-        food_id, _ = store.put_external_food(external, cookidoo.SOURCE, data, user["id"])
+        food_id, _ = store.put_external_food(external, cookidoo.SOURCE, data)
         if body.collection and ownership.is_household(user):  # the groups made from collections are shared and the household's
             await _group_for(request, access, store, user, body.collection, food_id, True)
     await _picture(request, store, user, food_id, details.image, body.refresh_image)

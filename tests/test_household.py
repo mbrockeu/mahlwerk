@@ -177,11 +177,32 @@ def test_barcode_rule_for_guests(guest, mum, upstream):
     assert guest.put(f"/api/v1/foods/barcode/{UNKNOWN}", json={**FOOD, "name": "Mystery 2"}).json()["name"] == "Mystery 2"
 
 
-def test_a_guest_scan_is_theirs_not_the_households(server, guest, mum):
+def test_what_a_guest_fetches_from_outside_is_the_households(server, guest, mum):
+    """Open Food Facts, the catalogue, web pages and Cookidoo fill shared entries: whoever looks first must not own them."""
     got = guest.get(f"/api/v1/foods/barcode/{NUTELLA}")  # fetched from Open Food Facts by a guest
-    assert got.status_code == 200 and got.json()["can_edit"] is True
-    assert mum.get(f"/api/v1/foods/{got.json()['id']}").json()["can_edit"] is True  # the household may always
-    assert server("gast2", "freunde").put(f"/api/v1/foods/barcode/{NUTELLA}", json=FOOD).status_code == 403
+    assert got.status_code == 200 and got.json()["can_edit"] is False
+    fid = got.json()["id"]
+    assert guest.put(f"/api/v1/foods/{fid}", json=FOOD).status_code == 403
+    assert guest.delete(f"/api/v1/foods/{fid}").status_code == 403
+    assert guest.put(f"/api/v1/foods/barcode/{NUTELLA}", json=FOOD).status_code == 403
+    assert server.app.state.store.get_food(fid)["owner"] is None
+    assert mum.get(f"/api/v1/foods/{fid}").json()["can_edit"] is True  # the household may always
+
+
+def test_a_guest_catalogue_adoption_is_the_households(server, guest, monkeypatch):
+    class Cat:
+        def get(self, source, code):
+            return {"source": "openfoodfacts", "code": NUTELLA, "name": "Nutella", "brand": None, "quantity": None, "serving_size": None,
+                    "serving_quantity": None, "unit": "g", "per_100": {"kcal": 539, "fat": 30.9, "carbs": 57.5, "protein": 6.3}, "extra": {}, "complete": True}
+    from mahlwerk.deps import get_catalog
+    server.app.dependency_overrides[get_catalog] = lambda: Cat()
+    try:
+        r = guest.post("/api/v1/catalog/adopt", json={"source": "openfoodfacts", "code": NUTELLA})
+    finally:
+        server.app.dependency_overrides.clear()
+    assert r.status_code == 201 and r.json()["can_edit"] is False
+    assert server.app.state.store.get_food(r.json()["id"])["owner"] is None
+    assert guest.put(f"/api/v1/foods/{r.json()['id']}", json=FOOD).status_code == 403
 
 
 def test_a_stale_household_barcode_refetched_by_a_guest_stays_the_households(server, guest, mum, upstream):
@@ -303,11 +324,12 @@ def test_guest_does_not_get_the_household_cookidoo_account(cook):
     assert mum.post("/api/v1/cookidoo/adopt", json={"recipe": "r100001"}).status_code == 200
 
 
-def test_guest_with_an_own_cookidoo_account_adopts_for_themself_only(cook):
+def test_guest_with_an_own_cookidoo_account_adopts_for_the_household(cook):
     mum, guest, fake = cook
     assert guest.put("/api/v1/me/cookidoo-account", json={"email": "g@example.invalid", "password": "pw-not-real-1"}).status_code == 200
     adopted = guest.post("/api/v1/cookidoo/adopt", json={"recipe": "r100001", "collection": "c1"})
-    assert adopted.status_code == 200 and adopted.json()["can_edit"] is True
+    assert adopted.status_code == 200 and adopted.json()["can_edit"] is False  # an external entry belongs to the household
+    assert guest.put(f"/api/v1/foods/{adopted.json()['id']}", json=FOOD).status_code == 403
     assert mum.get("/api/v1/recipe-groups").json() == []  # no shared collection group made by a guest
     # a recipe the household took over is theirs: the guest cannot renew it
     assert mum.post("/api/v1/cookidoo/adopt", json={"recipe": "r100001"}).status_code == 200  # the household may renew a guest's

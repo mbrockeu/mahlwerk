@@ -50,11 +50,11 @@ def adopt(
         raise HTTPException(404, "unknown catalogue item")
     data = food_data(item)
     if item["source"] == BLS:
-        food_id, fetched_at = store.put_external_food(external_id(BLS, item["code"]), BLS, data, user["id"])
-        return build_food({"id": food_id, "code": None, "source": BLS, "data": data, "fetched_at": fetched_at, "created_by": user["id"]}, user)
+        food_id, fetched_at = store.put_external_food(external_id(BLS, item["code"]), BLS, data)
+        return build_food({"id": food_id, "code": None, "source": BLS, "data": data, "fetched_at": fetched_at}, user)
     existing = store.get_food_by_code(item["code"])
     if existing is not None and existing["found"]:
         response.status_code = 200
         return build_food(existing, user)
-    food_id, fetched_at = store.put_food(item["code"], item["source"], data, user["id"])
-    return build_food({"id": food_id, "code": item["code"], "source": item["source"], "data": data, "fetched_at": fetched_at, "created_by": user["id"]}, user)
+    food_id, fetched_at = store.put_food(item["code"], item["source"], data)
+    return build_food({"id": food_id, "code": item["code"], "source": item["source"], "data": data, "fetched_at": fetched_at}, user)

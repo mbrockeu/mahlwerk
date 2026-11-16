@@ -10,7 +10,7 @@ NOT_YOURS = "this was made by somebody else: guests may change only what they ma
 
 
 def is_household(user: dict) -> bool:
-    return bool(user.get("household", True))
+    return bool(user.get("household", False))
 
 
 def can_edit(user: dict, owner: int | None) -> bool:

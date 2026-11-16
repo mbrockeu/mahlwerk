@@ -857,7 +857,7 @@ def test_n5_the_cache_does_not_serve_a_name_that_was_blocked_later(client, web, 
     assert preview(client).status_code == 502
 
 
-def test_guest_owns_what_they_take_over_but_cannot_renew_the_households(tmp_path, monkeypatch, web):
+def test_guest_takes_pages_over_but_owns_nothing_of_them(tmp_path, monkeypatch, web):
     monkeypatch.setenv("MAHLWERK_WEB_RECIPES", "1")
     monkeypatch.setenv("MAHLWERK_AUTH", "proxy")
     monkeypatch.setenv("MAHLWERK_TRUSTED_PROXIES", "10.0.0.5")
@@ -875,7 +875,10 @@ def test_guest_owns_what_they_take_over_but_cannot_renew_the_households(tmp_path
     assert guest.post("/api/v1/web-recipes", json={"url": PAGE}).status_code == 403  # would renew the household's recipe
     assert guest.post(f"/api/v1/web-recipes/{household.json()['id']}/reload").status_code == 403
     mine = guest.post("/api/v1/web-recipes", json={"url": other})
-    assert mine.status_code == 200 and mine.json()["can_edit"] is True
-    assert guest.post(f"/api/v1/web-recipes/{mine.json()['id']}/reload").status_code == 200
+    # a page is a shared, external entry: whoever takes it over first does not own it
+    assert mine.status_code == 200 and mine.json()["can_edit"] is False
+    assert app.state.store.get_food(mine.json()["id"])["owner"] is None
+    assert guest.post(f"/api/v1/web-recipes/{mine.json()['id']}/reload").status_code == 403
+    assert guest.put(f"/api/v1/foods/{mine.json()['id']}", json={"name": "x", "per_100": {"kcal": 1}}).status_code == 403
     group = mum.post("/api/v1/recipe-groups", json={"name": "Salads"}).json()
     assert guest.post("/api/v1/web-recipes", json={"url": other, "group_id": group["id"]}).status_code == 403  # a group of the household

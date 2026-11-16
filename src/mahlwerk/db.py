@@ -1788,7 +1788,7 @@ class Store:
             needed = list(dict.fromkeys(
                 [e["food_key"] for e in entries if e["food_key"]] + (list(plan["foods"]) if plan["all_products"] else [])
             ))
-            ids, created, reused = self._import_foods(con, plan["foods"], needed, batch_id, now, user_id)
+            ids, created, reused = self._import_foods(con, plan["foods"], needed, batch_id, now)
             con.executemany(
                 "INSERT INTO diary_entry (user_id, day, meal, food_id, amount, unit, name, brand, per_100, extra, "
                 "created_at, external_id, import_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",

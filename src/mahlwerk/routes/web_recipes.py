@@ -147,8 +147,8 @@ def _save(request: Request, store: Store, user: dict, address: str, final: str, 
         fetched_at = store.update_food(known["id"], webrecipes.SOURCE, data)
         food_id, row = known["id"], {**known, "source": webrecipes.SOURCE, "data": data, "fetched_at": fetched_at}
     else:
-        food_id, fetched_at = store.put_external_food(external, webrecipes.SOURCE, data, user["id"])
-        row = {"id": food_id, "code": None, "source": webrecipes.SOURCE, "data": data, "fetched_at": fetched_at, "external_id": external, "created_by": user["id"]}
+        food_id, fetched_at = store.put_external_food(external, webrecipes.SOURCE, data)
+        row = {"id": food_id, "code": None, "source": webrecipes.SOURCE, "data": data, "fetched_at": fetched_at, "external_id": external, "created_by": None}
     if group_id is not None:
         store.add_to_group(group_id, [food_id])
     _picture(request, store, food_id, webrecipes.image_address(parsed.image, final), user, force)

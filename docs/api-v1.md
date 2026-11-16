@@ -1110,13 +1110,13 @@ Who is a guest (`GET /me` has `household: bool`; an admin is always `true`):
 `MAHLWERK_HOUSEHOLD_GROUPS` unset: everybody is household and nothing changes (proxy and oidc). The demo view behaves as before.
 
 Owner: `food.created_by` (new in version 16; `NULL` = the household), `recipe.created_by`, `recipe_group.created_by`. The owner of a
-recipe food is the recipe's author. Taking over from the catalogue, Open Food Facts, a web page or Cookidoo, an own barcode entry and
-a Yazio import set `created_by` to the person who did it (a remembered miss for an unknown barcode has no owner). `Food.can_edit`,
+recipe food is the recipe's author. Own entries (`POST /foods`, an own barcode entry, `POST /recipes`, own groups) set `created_by` to the person who made them. Entries from
+external sources (Open Food Facts, catalogue, web pages, Cookidoo, Yazio import) are always the household's (no owner), whoever fetched them first (a remembered miss for an unknown barcode has no owner either). `Food.can_edit`,
 `Recipe.can_edit` and `RecipeGroup.can_edit` tell the caller whether the rules allow changing it (an absent field means yes).
 
 | Route | Household | Guest |
 |---|---|---|
-| `POST /foods`, `POST /recipes`, `POST /recipe-groups`, `POST /catalog/adopt`, `GET /foods/barcode/{code}` (stores what it fetches) | yes | yes, owner is the guest |
+| `POST /foods`, `POST /recipes`, `POST /recipe-groups`, `POST /catalog/adopt`, `GET /foods/barcode/{code}` (stores what it fetches) | yes | `POST /foods`, `POST /recipes`, `POST /recipe-groups`: yes, owner is the guest. The other two fill shared entries from outside (Open Food Facts, catalogue): allowed, but the entry belongs to the household |
 | `PUT` / `DELETE /foods/{id}`, `PUT` / `DELETE /foods/{id}/piece` | yes | only own |
 | `PUT /foods/barcode/{code}` | yes | only while the barcode has no entry (a remembered miss does not count) or the entry is the guest's own; an entry of the household, also one fetched from Open Food Facts, is never replaced (`403`) |
 | `PUT` / `DELETE /foods/{id}/image`, `POST /foods/{id}/image/restore` | yes | only own recipes |
@@ -1125,8 +1125,8 @@ a Yazio import set `created_by` to the person who did it (a remembered miss for 
 | `PUT /recipe-groups/foods/{food_id}` | yes | may change the membership in own groups only; the list must keep the recipe in all other groups it is in and add it to none, else `403` |
 | `PUT /recipe-groups/order` | yes | `403` (the order is shared) |
 | Deleting a group made from a Cookidoo collection (remembered in `recipe_group_dismissed`) | yes | `403` |
-| `POST /web-recipes`, `POST /web-recipes/{id}/reload` | yes | new recipes are the guest's own; renewing a recipe of the household is `403`; `group_id` must be an own group |
-| `POST /cookidoo/adopt` | yes | needs an own Cookidoo account; new recipes are the guest's own, no collection group is made; renewing a recipe of the household is `403` |
+| `POST /web-recipes`, `POST /web-recipes/{id}/reload` | yes | taking a page over is allowed, but the recipe belongs to the household (no owner): a guest cannot renew or change it (`403`); `group_id` must be an own group |
+| `POST /cookidoo/adopt` | yes | needs an own Cookidoo account; taking a recipe over is allowed, but it belongs to the household (no owner): a guest cannot renew or change it (`403`); no collection group is made |
 | `POST /cookidoo/import`, `POST /cookidoo/images` | yes | `403` |
 | `GET /cookidoo/status`, `/week`, `/collections`, `/recipe` | household account, or the own one | **only an own account**: the shared household account is never used for a guest (`409` "not set up for you") |
 | Own accounts `/me/cookidoo-account`, admin routes | as before | as before (admin routes: admin only) |
