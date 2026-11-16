@@ -129,6 +129,8 @@ def patch_settings(body: SettingsPatch, user: dict = Depends(current_user), stor
         store.set_setting(user["id"], key, value)
     if "home" in body.model_fields_set and body.home is None:  # explicit null: back to the default layout
         store.set_setting(user["id"], "home", None)
+    if "water_glasses" in body.model_fields_set and body.water_glasses is None:  # explicit null: back to the default glasses
+        store.set_setting(user["id"], "water_glasses", None)
     return user_settings(store, user["id"])
 
 

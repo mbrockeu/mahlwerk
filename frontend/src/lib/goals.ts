@@ -4,6 +4,9 @@
 export const KCAL_LIMITS = { min: 500, max: 10000 } as const;
 export const MACRO_LIMITS = { min: 0, max: 1000 } as const;
 export const WATER_LIMITS = { min: 500, max: 6000 } as const;
+/** Glass sizes of the water card's quick buttons: the default and what the server accepts (1-3 sizes, no doubles). */
+export const DEFAULT_GLASSES: readonly number[] = [250, 500];
+export const GLASS_LIMITS = { min: 50, max: 1000, count: 3 } as const;
 export const STEPS_LIMITS = { min: 1000, max: 50000, step: 500 } as const;
 /** The part of the calorie range the scale shows; typing reaches the rest. */
 export const SCALE = { min: 1200, max: 4000, step: 50 } as const;

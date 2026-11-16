@@ -3,7 +3,7 @@
 import unicodedata
 from typing import Annotated, Literal, get_args
 
-from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
+from pydantic import BaseModel, Field, StrictInt, StringConstraints, field_validator, model_validator
 
 from . import activity, ingredients, nutrients
 
@@ -192,6 +192,18 @@ def _home_layout(value: list[HomeCard] | None) -> list[HomeCard] | None:
     return value
 
 
+def _water_glasses(value: list[StrictInt] | None) -> list[StrictInt] | None:
+    if value is not None:
+        if not 1 <= len(value) <= 3:
+            raise ValueError("1 to 3 glass sizes")
+        if any(not 50 <= v <= 1000 for v in value):
+            raise ValueError("a glass holds 50-1000 ml")
+        if len(set(value)) != len(value):
+            raise ValueError("a glass size appears twice")
+        return sorted(value)
+    return value
+
+
 class Settings(BaseModel):
     playful: bool = Field(True, description="badges, celebration moment and weekly review card on the day view")
     fasting: FastingSettings = Field(default_factory=FastingSettings)
@@ -199,8 +211,10 @@ class Settings(BaseModel):
     tour_seen: bool = Field(False, description="the first-run tour of the day view was shown (or skipped) for this user")
     suggestions: bool = Field(True, description="the day view shows the card \"what still fits today\" (suggestions from the recipes; the API answers either way)")
     home: list[HomeCard] | None = Field(None, description="order, visibility and width of the cards on the day view; null = default layout")
+    water_glasses: list[StrictInt] | None = Field(None, description="the glass sizes in ml (1-3, 50-1000 each, ascending) of the quick buttons on the water card; null = default [250, 500]")
 
     _check_home = field_validator("home")(_home_layout)
+    _check_glasses = field_validator("water_glasses")(_water_glasses)
 
 
 class SettingsPatch(BaseModel):
@@ -210,8 +224,10 @@ class SettingsPatch(BaseModel):
     tour_seen: bool | None = None
     suggestions: bool | None = None
     home: list[HomeCard] | None = Field(None, description="replaces the whole layout; null resets to the default")
+    water_glasses: list[StrictInt] | None = Field(None, description="replaces the glass sizes; null resets to the default")
 
     _check_home = field_validator("home")(_home_layout)
+    _check_glasses = field_validator("water_glasses")(_water_glasses)
 
 
 class MeFeatures(BaseModel):

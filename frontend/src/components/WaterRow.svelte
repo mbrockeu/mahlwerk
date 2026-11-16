@@ -2,9 +2,10 @@
   import { untrack } from 'svelte';
   import Icon from './Icon.svelte';
   import { api, ApiError } from '../lib/api';
+  import { DEFAULT_GLASSES } from '../lib/goals';
   import { fmt, t } from '../lib/i18n';
   import { Tweened, easeOut } from '../lib/motion.svelte';
-  import { toast } from '../lib/store.svelte';
+  import { toast, ui } from '../lib/store.svelte';
 
   // Water of one day as a row of glass strokes (one stroke = one glass), with quick buttons.
   let { day, ml: serverMl, goalMl }: { day: string; ml: number; goalMl: number } = $props();
@@ -15,9 +16,12 @@
   let busy = $state(false);
   const fill = new Tweened();
   let lastDay = '';
+  const sizes = $derived(ui.me?.settings?.water_glasses ?? [...DEFAULT_GLASSES]);
+  let lastAdded = $state(0); // the glass added most recently in this card; the minus button takes that one back
+  const back = $derived(lastAdded > 0 ? lastAdded : sizes[0]);
 
   // a new day or a reload: take over what the server says
-  $effect(() => { const v = serverMl; day; untrack(() => { ml = v; seq += 1; busy = false; }); });
+  $effect(() => { const v = serverMl; day; untrack(() => { ml = v; seq += 1; busy = false; lastAdded = 0; }); });
   $effect(() => {
     const v = ml;
     const d = day;
@@ -31,6 +35,9 @@
   const strokes = $derived(Array.from({ length: count }, (_, i) => Math.max(0, Math.min(1, fill.value / unit - i))));
   const litres = (v: number) => fmt(v / 1000, 2);
   const reached = $derived(ml >= goalMl);
+
+  const pick = (size: number) => { lastAdded = size; return add(size); };
+  const takeBack = () => { lastAdded = 0; return add(-back); };
 
   async function add(delta: number) {
     const next = Math.max(0, Math.min(MAX, ml + delta));
@@ -60,9 +67,10 @@
     {#each strokes as f}<span class="g"><i style="height:{f * 100}%"></i></span>{/each}
   </div>
   <div class="btns">
-    <button class="minus" disabled={ml === 0} onclick={() => add(-250)} aria-label={t('waterTakeBackAria', { n: 250 })}>{t('waterTakeBack', { n: 250 })}</button>
-    <button class="add" onclick={() => add(250)} aria-label={t('waterAddAria', { n: 250 })}>{t('waterAdd', { n: 250 })}</button>
-    <button class="add" onclick={() => add(500)} aria-label={t('waterAddAria', { n: 500 })}>{t('waterAdd', { n: 500 })}</button>
+    <button class="minus" disabled={ml === 0} onclick={takeBack} aria-label={t('waterTakeBackAria', { n: back })}>{t('waterTakeBack', { n: back })}</button>
+    {#each sizes as size (size)}
+      <button class="add" onclick={() => pick(size)} aria-label={t('waterAddAria', { n: size })}>{t(sizes.length > 2 ? 'waterAddShort' : 'waterAdd', { n: size })}</button>
+    {/each}
   </div>
 </section>
 

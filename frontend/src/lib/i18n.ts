@@ -286,7 +286,7 @@ const en = {
   rev_improve_weekend_higher: 'At the weekend you averaged {weekend} kcal, on weekdays {weekday} kcal, so {pct} % more. To even it out, one lighter meal at the weekend does it.',
   rev_quiet: 'A quiet week with {n} days logged. The review starts from 2 days.',
   // water
-  waterTitle: 'Water', waterAria: '{ml} of {goal} litres of water', waterAdd: '+ {n} ml', waterAddAria: 'Add {n} ml of water',
+  waterTitle: 'Water', waterAria: '{ml} of {goal} litres of water', waterAdd: '+ {n} ml', waterAddShort: '+ {n}', waterAddAria: 'Add {n} ml of water',
   waterTakeBack: '− {n}', waterTakeBackAria: 'Take back {n} ml of water', waterFailed: 'Could not save the water ({reason}).',
   waterBad: 'Water goal: 500–6000 ml.', insWater: 'Water per day', waterLitres: '{n} l',
 
@@ -313,6 +313,7 @@ const en = {
   gpAlignHint: 'The gap is more than 10 %. Carbohydrates of {g} g would make it add up.', gpAlignNone: 'The gap is more than 10 %. Protein and fat alone already reach the goal or more.', gpAlign: 'Adjust',
   gpPresets: 'Presets', gpPresetBalanced: 'Balanced', gpPresetProtein: 'More protein', gpPresetLowcarb: 'Fewer carbohydrates',
   gpPresetNote: 'Sets the grams for your current calorie goal.',
+  gpGlassesTitle: 'Your glasses', gpGlassAria: 'Glass size {n} in ml', gpGlassRemove: 'Remove the {n} ml glass', gpGlassAdd: '+ Glass', gpGlassBad: 'A glass holds {min}–{max} ml, and no size twice.', gpGlassFailed: 'Could not save the glasses ({reason}).', gpGlassesNote: 'Up to {n} sizes for the quick buttons on the water card.',
   gpWaterAria: 'Water goal in ml', gpWaterGlasses: 'Water goal: {ml} ml, about {n} glasses',
   gpCalcOpen: 'Work out a suggestion', gpCalcTitle: 'Suggestion for your goal',
   gpSex: 'Sex used in the formula', gpSexF: 'Female', gpSexM: 'Male', gpSexX: 'No answer',
@@ -941,7 +942,7 @@ const de: Record<Key, string> = {
   rev_quiet: 'Eine ruhige Woche mit {n} erfassten Tagen. Die Bilanz gibt es ab 2 Tagen.',
 
   // water
-  waterTitle: 'Wasser', waterAria: '{ml} von {goal} Litern Wasser', waterAdd: '+ {n} ml', waterAddAria: '{n} ml Wasser hinzufügen',
+  waterTitle: 'Wasser', waterAria: '{ml} von {goal} Litern Wasser', waterAdd: '+ {n} ml', waterAddShort: '+ {n}', waterAddAria: '{n} ml Wasser hinzufügen',
   waterTakeBack: '− {n}', waterTakeBackAria: '{n} ml Wasser zurücknehmen', waterFailed: 'Wasser konnte nicht gespeichert werden ({reason}).',
   waterBad: 'Wasserziel: 500–6000 ml.', insWater: 'Wasser Ø je Tag', waterLitres: '{n} l',
 
@@ -968,6 +969,7 @@ const de: Record<Key, string> = {
   gpAlignHint: 'Die Abweichung beträgt mehr als 10 %. Mit {g} g Kohlenhydraten ginge es auf.', gpAlignNone: 'Die Abweichung beträgt mehr als 10 %. Eiweiß und Fett allein erreichen das Ziel schon oder übersteigen es.', gpAlign: 'Angleichen',
   gpPresets: 'Vorgaben', gpPresetBalanced: 'Ausgewogen', gpPresetProtein: 'Mehr Eiweiß', gpPresetLowcarb: 'Weniger Kohlenhydrate',
   gpPresetNote: 'Setzt die Gramm passend zum aktuellen Kalorienziel.',
+  gpGlassesTitle: 'Deine Gläser', gpGlassAria: 'Glasgröße {n} in ml', gpGlassRemove: 'Das {n}-ml-Glas entfernen', gpGlassAdd: '+ Glas', gpGlassBad: 'Ein Glas fasst {min}–{max} ml, keine Größe doppelt.', gpGlassFailed: 'Gläser konnten nicht gespeichert werden ({reason}).', gpGlassesNote: 'Bis zu {n} Größen für die Schnellknöpfe der Wasserkarte.',
   gpWaterAria: 'Wasserziel in ml', gpWaterGlasses: 'Wasserziel: {ml} ml, etwa {n} Gläser',
   gpCalcOpen: 'Vorschlag berechnen', gpCalcTitle: 'Vorschlag für dein Ziel',
   gpSex: 'Geschlecht für die Formel', gpSexF: 'Weiblich', gpSexM: 'Männlich', gpSexX: 'Keine Angabe',

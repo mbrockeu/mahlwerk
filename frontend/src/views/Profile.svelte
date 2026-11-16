@@ -14,7 +14,7 @@
   import Toggle from '../components/Toggle.svelte';
   import { api, ApiError } from '../lib/api';
   import {
-    KCAL_LIMITS, MACRO_LIMITS, PRESETS, STEPS_LIMITS, WATER_LIMITS, alignCarbs, clamp, macroGap, macroShares, matchingPreset, presetMacros,
+    DEFAULT_GLASSES, GLASS_LIMITS, KCAL_LIMITS, MACRO_LIMITS, PRESETS, STEPS_LIMITS, WATER_LIMITS, alignCarbs, clamp, macroGap, macroShares, matchingPreset, presetMacros,
     type MacroKey, type PresetId,
   } from '../lib/goals';
   import type { ImportBatch } from '../lib/types';
@@ -187,6 +187,28 @@
       playBusy = false;
     }
   }
+
+  // the glass sizes of the water card: saved on their own, as soon as one is changed, added or removed
+  const glassList = $derived(ui.me?.settings?.water_glasses ?? [...DEFAULT_GLASSES]);
+  let glassBusy = $state(false);
+  let glassError = $state('');
+  async function saveGlasses(next: number[]) {
+    if (!ui.me || glassBusy) return;
+    if (new Set(next).size !== next.length) { glassError = t('gpGlassBad', { min: GLASS_LIMITS.min, max: GLASS_LIMITS.max }); return; }
+    glassBusy = true;
+    glassError = '';
+    try {
+      ui.me.settings = await api.setSettings({ water_glasses: next });
+      changed();
+    } catch (err) {
+      glassError = t('gpGlassFailed', { reason: err instanceof ApiError ? err.status || err.message : 'error' });
+    } finally {
+      glassBusy = false;
+    }
+  }
+  const setGlass = (i: number, v: number) => saveGlasses(glassList.map((g, j) => (j === i ? v : g)));
+  const removeGlass = (i: number) => saveGlasses(glassList.filter((_, j) => j !== i));
+  const addGlass = () => saveGlasses([...glassList, [250, 300, 400, 200, 500, 350, 150, 100].find((v) => !glassList.includes(v)) ?? GLASS_LIMITS.max]);
 
   const suggestOn = $derived(ui.me?.settings?.suggestions !== false);
   let sugBusy = $state(false);
@@ -384,6 +406,24 @@
           <div class="btns">
             <button type="button" class="minus" onclick={() => setWater(draft.water - 250)} aria-label={t('waterTakeBackAria', { n: 250 })}>{t('waterTakeBack', { n: 250 })}</button>
             <button type="button" class="add" onclick={() => setWater(draft.water + 250)} aria-label={t('waterAddAria', { n: 250 })}>{t('waterAdd', { n: 250 })}</button>
+          </div>
+          <div class="gl" role="group" aria-labelledby="gp-glasses">
+            <span id="gp-glasses" class="micro lab">{t('gpGlassesTitle')}</span>
+            <div class="chips">
+              {#each glassList as g, i (i)}
+                <span class="gchip">
+                  <NumField class="gv" value={g} min={GLASS_LIMITS.min} max={GLASS_LIMITS.max} label={t('gpGlassAria', { n: g })} grouping={false}
+                    onset={(v) => setGlass(i, v)} onbad={() => (glassError = t('gpGlassBad', { min: GLASS_LIMITS.min, max: GLASS_LIMITS.max }))} /> ml
+                  {#if glassList.length > 1}
+                    <button type="button" class="gx" disabled={glassBusy} onclick={() => removeGlass(i)} aria-label={t('gpGlassRemove', { n: g })}>×</button>
+                  {/if}
+                </span>
+              {/each}
+              {#if glassList.length < GLASS_LIMITS.count}
+                <button type="button" class="chip" disabled={glassBusy} onclick={addGlass}>{t('gpGlassAdd')}</button>
+              {/if}
+            </div>
+            {#if glassError}<p class="note warn" role="alert">{glassError}</p>{:else}<p class="note">{t('gpGlassesNote', { n: GLASS_LIMITS.count })}</p>{/if}
           </div>
         </section>
 
@@ -681,6 +721,12 @@
   .btns .add { flex: 1; background: var(--deep); color: var(--on-deep); }
   .btns .minus { padding: 0 18px; border: 2px solid var(--hairline); font-family: var(--f-mono); font-size: 13px; }
   .btns button:active { transform: scale(0.97); }
+  .gl { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 2px solid var(--hairline); }
+  .gl .lab { color: var(--quiet); }
+  .gchip { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 4px 0 16px; border-radius: 22px 22px 22px 8px; background: var(--stone); font-family: var(--f-mono); font-size: 14px; font-weight: 600; color: var(--quiet); }
+  .gchip :global(.gv) { font-size: 18px; color: var(--text); text-align: right; min-width: 2.2em; }
+  .gx { width: 44px; height: 44px; border-radius: 22px; font-size: 20px; line-height: 1; color: var(--quiet); }
+  .gl button[disabled] { opacity: 0.55; }
 
   .calc-open { width: 100%; min-height: 64px; border-radius: 20px 20px 20px 8px; background: var(--deep); color: var(--on-deep); padding: 8px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; --focus: var(--lime); }
   .calc-open span { display: flex; flex-direction: column; }

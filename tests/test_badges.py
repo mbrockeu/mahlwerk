@@ -327,3 +327,22 @@ def test_home_layout_is_validated(duo):
     for home in bad:
         assert ann.patch("/api/v1/me/settings", json={"home": home}).status_code == 422
     assert ann.get("/api/v1/me").json()["settings"]["home"] is None
+
+
+def test_water_glasses_setting(duo):
+    ann, ben = duo
+    assert ann.get("/api/v1/me").json()["settings"]["water_glasses"] is None  # default glasses
+    assert ann.patch("/api/v1/me/settings", json={"water_glasses": [400, 250, 300]}).json()["water_glasses"] == [250, 300, 400]  # sorted
+    assert ann.get("/api/v1/me").json()["settings"]["water_glasses"] == [250, 300, 400]
+    assert ann.patch("/api/v1/me/settings", json={"playful": False}).json()["water_glasses"] == [250, 300, 400]  # other patches keep it
+    assert ben.get("/api/v1/me").json()["settings"]["water_glasses"] is None  # per user
+    assert ann.patch("/api/v1/me/settings", json={"water_glasses": [50]}).json()["water_glasses"] == [50]
+    assert ann.patch("/api/v1/me/settings", json={"water_glasses": [1000]}).json()["water_glasses"] == [1000]
+    assert ann.patch("/api/v1/me/settings", json={"water_glasses": None}).json()["water_glasses"] is None  # reset
+
+
+def test_water_glasses_are_validated(duo):
+    ann, _ = duo
+    for glasses in ([], [100, 200, 300, 400], [49], [1001], [250, 250], [250.5], ["250"], [True], 250):
+        assert ann.patch("/api/v1/me/settings", json={"water_glasses": glasses}).status_code == 422, glasses
+    assert ann.get("/api/v1/me").json()["settings"]["water_glasses"] is None

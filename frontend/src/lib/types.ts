@@ -217,6 +217,8 @@ export interface Settings {
   suggestions: boolean;
   /** Order, visibility and width of the cards on the day view; null = the default layout. */
   home: HomeCard[] | null;
+  /** Glass sizes in ml (1-3, ascending) of the quick buttons on the water card; null = the default (250, 500). */
+  water_glasses: number[] | null;
 }
 
 export interface SettingsPatch {
@@ -224,6 +226,7 @@ export interface SettingsPatch {
   tour_seen?: boolean;
   suggestions?: boolean;
   home?: HomeCard[] | null;
+  water_glasses?: number[] | null;
   fasting?: Partial<FastingSettings>;
   activity?: Partial<ActivitySettings>;
 }
