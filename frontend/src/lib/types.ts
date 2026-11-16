@@ -75,6 +75,8 @@ export interface Food {
   /** A person took the provider's picture away (it can be restored while the picture switch of the connector is on). */
   image_removed?: boolean;
   piece?: FoodPiece | null;
+  /** Counts towards the daily fluid total: true always, false never, null decides automatically (only for foods in ml). */
+  drink?: boolean | null;
 }
 
 /** A packaged product (Open Food Facts) or basic food (BLS) of the local catalogue; it gets an id once it is adopted as a Food. */
@@ -187,7 +189,7 @@ export interface Day {
   kcal_goal: number | null;
   activity: DayActivity;
   /** Water drunk that day and the daily goal, both in ml. */
-  water: { ml: number; goal_ml: number };
+  water: { ml: number; goal_ml: number; drinks_ml: number };
   totals: Partial<Per100>;
   extra_totals: Record<string, { amount: number; coverage: number }>;
   meals: Record<Meal, { kcal: number; entries: Entry[] }>;
@@ -221,6 +223,8 @@ export interface Settings {
   home: HomeCard[] | null;
   /** Glass sizes in ml (1-3, ascending) of the quick buttons on the water card; null = the default (250, 500). */
   water_glasses: number[] | null;
+  /** Drinks of the diary (entries in ml) are added to the water card as "from drinks". */
+  water_drinks: boolean;
 }
 
 export interface SettingsPatch {
@@ -229,6 +233,7 @@ export interface SettingsPatch {
   suggestions?: boolean;
   home?: HomeCard[] | null;
   water_glasses?: number[] | null;
+  water_drinks?: boolean;
   fasting?: Partial<FastingSettings>;
   activity?: Partial<ActivitySettings>;
 }

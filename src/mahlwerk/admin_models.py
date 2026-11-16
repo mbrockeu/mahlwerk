@@ -88,6 +88,7 @@ class SummaryToday(BaseModel):
     fat: float
     water_ml: int
     water_goal_ml: int
+    water_drinks_ml: int = Field(0, description="water in today's drinks of the diary, not part of water_ml (0 with the setting water_drinks off)")
     steps: int | None = Field(None, description="today's steps, null without a value")
     steps_goal: int = 8000
     active_kcal: float | None = None

@@ -15,7 +15,7 @@ def _json(value) -> str:
     """json.dumps that refuses NaN and infinity: such a value in a food would turn every day sum that uses it into null."""
     return json.dumps(value, allow_nan=False)
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 BASE_TABLES = """
 CREATE TABLE user (
@@ -365,7 +365,12 @@ V16_TABLES = """
 ALTER TABLE user ADD COLUMN household INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE food ADD COLUMN created_by INTEGER REFERENCES user(id);
 """
-TABLES = BASE_TABLES + V4_TABLES + V5_TABLES + V6_TABLES + V7_TABLES + V8_TABLES + V9_TABLES + V10_TABLES + V11_TABLES + V12_TABLES + V13_TABLES + V14_TABLES + V15_TABLES + V16_TABLES
+# Version 17: whether a food counts as a drink for the daily fluid total (see hydration.py). NULL = decide automatically from the
+# water content, 1 = always, 0 = never. A column of its own like the piece: a reload from Open Food Facts must not lose it.
+V17_TABLES = """
+ALTER TABLE food ADD COLUMN drink INTEGER;
+"""
+TABLES = BASE_TABLES + V4_TABLES + V5_TABLES + V6_TABLES + V7_TABLES + V8_TABLES + V9_TABLES + V10_TABLES + V11_TABLES + V12_TABLES + V13_TABLES + V14_TABLES + V15_TABLES + V16_TABLES + V17_TABLES
 DEFAULT_WATER_GOAL = 2000
 MAX_WATER_ML = 10000
 
@@ -416,6 +421,9 @@ MIGRATE_13_TO_14 = V14_TABLES
 # Version 14 had no pieces; two columns are new, nothing existing changes.
 MIGRATE_14_TO_15 = V15_TABLES
 MIGRATE_15_TO_16 = V16_TABLES
+
+# Version 16 had no drink flag; one nullable column is new, nothing existing changes.
+MIGRATE_16_TO_17 = V17_TABLES
 
 # Demo foods are ordinary `food` rows whose JSON `data` carries "demo": true (test-data mode of the own account) or
 # "demo_account": true (the built-in demo account; these are left out of the product list of everybody else).
@@ -511,7 +519,8 @@ class Store:
                 script += (MIGRATE_9_TO_10 if version < 10 else "")
                 script += (MIGRATE_10_TO_11 if version < 11 else "") + (MIGRATE_11_TO_12 if version < 12 else "")
                 script += (MIGRATE_12_TO_13 if version < 13 else "") + (MIGRATE_13_TO_14 if version < 14 else "")
-                script += (MIGRATE_14_TO_15 if version < 15 else "") + MIGRATE_15_TO_16
+                script += (MIGRATE_14_TO_15 if version < 15 else "") + (MIGRATE_15_TO_16 if version < 16 else "")
+                script += MIGRATE_16_TO_17
             script += f"PRAGMA user_version = {SCHEMA_VERSION}; COMMIT;"
             try:
                 con.executescript(script)
@@ -749,6 +758,7 @@ class Store:
             "image_url": row["image_url"],
             "piece_label": row["piece_label"],
             "piece_grams": row["piece_grams"],
+            "drink": None if row["drink"] is None else bool(row["drink"]),
             # who made it (None: the household); an own recipe is its recipe's author's
             "owner": row["created_by"] if row["created_by"] is not None else row["recipe_owner"],
         }
@@ -858,6 +868,24 @@ class Store:
         """Set the piece of a food (both None: remove it). False for an unknown food."""
         with self._connect() as con:
             return con.execute("UPDATE food SET piece_label = ?, piece_grams = ? WHERE id = ?", (label, grams, food_id)).rowcount > 0
+
+    def set_food_drink(self, food_id: int, drink: bool | None) -> bool:
+        """Set whether a food counts as a drink (None: decide automatically). False for an unknown food."""
+        with self._connect() as con:
+            return con.execute("UPDATE food SET drink = ? WHERE id = ?", (None if drink is None else int(drink), food_id)).rowcount > 0
+
+    def drink_entries(self, user_id: int, first: str, last: str) -> list[dict]:
+        """The entries in ml of a period with what hydration.py needs: the entry's own values, and what the food says where the
+        entry has none (water content) or a person decided (`drink`)."""
+        with self._connect() as con:
+            rows = con.execute(
+                "SELECT e.day, e.amount, e.name, e.per_100, e.extra, f.drink, "
+                "json_extract(f.data, '$.extra') AS food_extra FROM diary_entry e LEFT JOIN food f ON f.id = e.food_id "
+                "WHERE e.user_id = ? AND e.day BETWEEN ? AND ? AND e.unit = 'ml' ORDER BY e.id",
+                (user_id, first, last),
+            ).fetchall()
+        return [{**dict(r), "per_100": json.loads(r["per_100"]), "extra": json.loads(r["extra"] or "{}"),
+                 "food_extra": json.loads(r["food_extra"]) if r["food_extra"] else {}} for r in rows]
 
     def delete_food(self, food_id: int) -> bool:
         """Diary entries, template and recipe items keep their copy and lose only the link."""

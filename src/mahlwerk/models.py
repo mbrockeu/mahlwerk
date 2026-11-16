@@ -65,6 +65,12 @@ class FoodPiece(BaseModel):
         return label
 
 
+class FoodDrink(BaseModel):
+    """Whether a food counts towards the daily fluid total (the water card), or "decide automatically"."""
+
+    drink: bool | None = Field(description="`true` always counts, `false` never, `null` decides automatically from the water content (at least 80 %, hardly any alcohol, no soup)")
+
+
 class Food(BaseModel):
     id: int
     code: str | None = None
@@ -90,6 +96,7 @@ class Food(BaseModel):
     can_edit: bool = Field(True, description="the caller may change or delete this food (a guest only what they made themself; the household everything)")
     image_removed: bool = Field(False, description="a person took the provider's picture away (`POST /foods/{id}/image/restore` brings it back when the picture switch is on)")
     piece: FoodPiece | None = Field(None, description="what one piece of this food is (set with `PUT /foods/{id}/piece`; shared by all users, survives a reload from the provider)")
+    drink: bool | None = Field(None, description="counts towards the daily fluid total: `true` always, `false` never, `null` automatically (set with `PUT /foods/{id}/drink`; only for foods in ml, survives a reload)")
 
 
 class FoodIn(BaseModel):
@@ -213,6 +220,7 @@ class Settings(BaseModel):
     suggestions: bool = Field(True, description="the day view shows the card \"what still fits today\" (suggestions from the recipes; the API answers either way)")
     home: list[HomeCard] | None = Field(None, description="order, visibility and width of the cards on the day view; null = default layout")
     water_glasses: list[StrictInt] | None = Field(None, description="the glass sizes in ml (1-3, 50-1000 each, ascending) of the quick buttons on the water card; null = default [250, 500]")
+    water_drinks: bool = Field(True, description="drinks of the diary (entries in ml with at least 80 % water, no soup) are added to the water card as \"from drinks\"")
 
     _check_home = field_validator("home")(_home_layout)
     _check_glasses = field_validator("water_glasses")(_water_glasses)
@@ -226,6 +234,7 @@ class SettingsPatch(BaseModel):
     suggestions: bool | None = None
     home: list[HomeCard] | None = Field(None, description="replaces the whole layout; null resets to the default")
     water_glasses: list[StrictInt] | None = Field(None, description="replaces the glass sizes; null resets to the default")
+    water_drinks: bool | None = None
 
     _check_home = field_validator("home")(_home_layout)
     _check_glasses = field_validator("water_glasses")(_water_glasses)
@@ -421,8 +430,9 @@ class YesterdayMeal(BaseModel):
 
 
 class WaterDay(BaseModel):
-    ml: int = Field(description="water drunk that day")
+    ml: int = Field(description="water drunk that day (the glasses logged, `water` table)")
     goal_ml: int
+    drinks_ml: int = Field(0, description="water in the day's drinks (entries in ml, see \"Drinks count as water\"), computed on read and not part of `ml`; 0 when the setting `water_drinks` is off")
 
 
 class WaterAdd(BaseModel):

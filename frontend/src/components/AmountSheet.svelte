@@ -65,6 +65,26 @@
   // the piece is shared: a guest may set it only on what they made (the server refuses it too)
   // svelte-ignore state_referenced_locally
   let editable = $state(food ? food.can_edit !== false : !entry);
+  // for a drink in ml: does it count towards the day's water? (food setting: null automatic, true yes, false no; shared like the piece)
+  // svelte-ignore state_referenced_locally
+  let drink = $state<boolean | null>(food?.drink ?? null);
+  let drinkBusy = $state(false);
+  const drinkChoices: { value: boolean | null; label: () => string }[] = [
+    { value: null, label: () => t('drinkAuto') }, { value: true, label: () => t('drinkYes') }, { value: false, label: () => t('drinkNo') },
+  ];
+  async function setDrink(next: boolean | null) {
+    if (foodId == null || drinkBusy || next === drink) return;
+    drinkBusy = true;
+    error = '';
+    try {
+      drink = (await api.setFoodDrink(foodId, next)).drink ?? null;
+      if (food) food.drink = drink;
+    } catch (err) {
+      error = failMsg(err);
+    } finally {
+      drinkBusy = false;
+    }
+  }
 
   const amount = $derived(parseNumber(text));
   const valid = $derived(amount != null && !Number.isNaN(amount) && amount > 0 && toBooked(amount) <= 5000);
@@ -74,7 +94,7 @@
   onMount(async () => {
     // an entry brings no piece: ask for the food it came from (the piece is optional, a failure changes nothing)
     if (!food && entry && foodId != null && !byPortion) {
-      api.food(foodId).then((f) => { editable = f.can_edit !== false; if (f.piece && !piece) usePiece(f.piece); }).catch(() => {});
+      api.food(foodId).then((f) => { editable = f.can_edit !== false; drink = f.drink ?? null; if (f.piece && !piece) usePiece(f.piece); }).catch(() => {});
     }
     if (!food || last != null) return;
     try {
@@ -292,6 +312,16 @@
         {#if piece}<button class="btn danger small" onclick={removePiece} disabled={formBusy}>{t('pieceRemove')}</button>{/if}
       </div>
     </div>
+  {/if}
+
+  {#if unit === 'ml' && !byPortion && foodId != null && (editable || drink != null)}
+    <div class="unitrow" role="group" aria-label={t('drinkLabel')}>
+      <span class="note">{t('drinkLabel')}:</span>
+      {#each drinkChoices as c (c.label())}
+        <button class="chip" class:on={drink === c.value} aria-pressed={drink === c.value} disabled={!editable || drinkBusy} onclick={() => setDrink(c.value)}>{c.label()}</button>
+      {/each}
+    </div>
+    {#if drink == null}<p class="note">{t('drinkHint')}</p>{/if}
   {/if}
 
   <div class="result" aria-live="polite">

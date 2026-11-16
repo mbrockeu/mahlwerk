@@ -79,7 +79,7 @@ def test_version_8_database_gets_activity_without_losing_data(tmp_path):
     store = Store(path)
 
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 17
     tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert {"activity_day", "workout"} <= tables
     assert con.execute("SELECT name, amount FROM diary_entry").fetchall() == [("Rice", 150)]

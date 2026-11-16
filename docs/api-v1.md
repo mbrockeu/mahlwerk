@@ -116,7 +116,7 @@ Extra    { <key>: number }   additional nutrients per 100 g or 100 ml, in the un
 Nutrient { key, group:"fat"|"carb"|"mineral"|"vitamin"|"other", unit:"g"|"mg"|"µg", nrv:number|null }
 Food     { id:int, code:string|null, source:"openfoodfacts"|"own"|"recipe"|"yazio"|"bls", recipe_id:int|null, name, brand, quantity, serving_size,
            serving_quantity:number|null, unit:"g"|"ml", per_100:Per100, extra:Extra, complete:bool, empty:bool,
-           cached:bool, stale:bool, fetched_at:int, image:FoodImage|null, piece:FoodPiece|null }
+           cached:bool, stale:bool, fetched_at:int, image:FoodImage|null, piece:FoodPiece|null, drink:bool|null }
 FoodPiece { label:string (1-30 characters, trimmed), grams:number (> 0, at most 5000, in the unit of the food) }   what one piece of a food is, for example `Scheibe` = 25 g;
            shared by all users, kept when the food is reloaded from Open Food Facts; diary entries stay in g or ml
 FoodImage { hash:string (32 hex digits), origin:"own"|"cookidoo"|"web", credit:string|null }   the picture of a recipe, see Recipe pictures;
@@ -128,7 +128,7 @@ FoodIn   { name (required), brand, quantity, serving_size, serving_quantity, uni
 Goal     { kcal:int, protein:number, carbs:number, fat:number, water_ml:int, steps:int }   water_ml optional, 500-6000, default 2000
            (goals saved before it existed read 2000; a PUT without it keeps the saved value); steps optional, 1000-50000,
            default 8000, kept the same way
-Water    { ml:int, goal_ml:int }                 the day's total and the goal, in ml
+Water    { ml:int, goal_ml:int, drinks_ml:int }  the glasses logged (total of the day) and the goal, in ml; `drinks_ml` is the water in the day's drinks, computed on read, not part of `ml`
 Fast     { id, started_at:int, ended_at:int|null, target_hours:number, elapsed_seconds:int, duration_seconds:int|null,
            target_reached:bool }                  Unix seconds (UTC); elapsed runs to now while the fast is open
 Meal     "breakfast" | "lunch" | "dinner" | "snack"
@@ -164,13 +164,13 @@ Editing or deleting the food later does not change past days; deleting sets `foo
 | Method | Path | Body | Returns | Notes |
 | --- | --- | --- | --- | --- |
 | GET | `/healthz` | – | `{status, version}` | no auth |
-| GET | `/api/v1/me` | – | `{username, display_name, display_name_custom:bool, provider_name:string\|null, is_admin:bool, household:bool, goal:Goal\|null, settings:{playful:bool, fasting:{enabled:bool, target_hours:number}, activity:{add_to_goal:bool}, tour_seen:bool, suggestions:bool, home:HomeCard[]\|null, water_glasses:int[]\|null}, demo:{available:bool, entries:int, weights:int, water:int, activity:int, workouts:int}, demo_account:{can_switch:bool, viewing:bool, real_username:string\|null, real_display_name:string\|null}, catalog:{products:int, updated_at:int\|null, bls:{products:int, updated_at:int\|null}}}` | `demo.available` is true when the server runs with `MAHLWERK_DEMO_DATA`; the counts are this user's demo rows. `catalog` is the size and build time (unix seconds) of the Open Food Facts catalogue file (`products`, `updated_at`) and of the basic foods file (`bls`), `0` and `null` without a file |
+| GET | `/api/v1/me` | – | `{username, display_name, display_name_custom:bool, provider_name:string\|null, is_admin:bool, household:bool, goal:Goal\|null, settings:{playful:bool, fasting:{enabled:bool, target_hours:number}, activity:{add_to_goal:bool}, tour_seen:bool, suggestions:bool, home:HomeCard[]\|null, water_glasses:int[]\|null, water_drinks:bool}, demo:{available:bool, entries:int, weights:int, water:int, activity:int, workouts:int}, demo_account:{can_switch:bool, viewing:bool, real_username:string\|null, real_display_name:string\|null}, catalog:{products:int, updated_at:int\|null, bls:{products:int, updated_at:int\|null}}}` | `demo.available` is true when the server runs with `MAHLWERK_DEMO_DATA`; the counts are this user's demo rows. `catalog` is the size and build time (unix seconds) of the Open Food Facts catalogue file (`products`, `updated_at`) and of the basic foods file (`bls`), `0` and `null` without a file |
 | PATCH | `/api/v1/me` | `{display_name: string\|null}` | `Me` (same as GET) | Chooses the display name: trimmed, blanks collapsed, 1-60 characters, no control characters or line breaks (Unicode and emojis are fine), else `422`. Empty or `null` goes back to the provider's name (proxy header, OIDC claim, local account) or the user name. The chosen name wins in every sign-in mode and is **not** overwritten by proxy headers or later OIDC sign-ins; it shows in `/me`, `/auth/status`, the login answer and `/admin/users`. `username` never changes. Stored as the user setting `display_name` (no schema change). Needs a write token like `PATCH /me/settings` (`read` scope: `403`) |
 | GET | `/api/v1/me/imports` | – | ImportBatch[] | this user's import batches, newest first, see Importing from Yazio |
 | DELETE | `/api/v1/me/imports/{id}` | – | `{entries, weights, water, activity, workouts, foods:int, goal:bool}` | takes back one of the user's own batches (404 for an unknown or foreign one); the numbers are what was removed |
 | GET | `/api/v1/me/export?from=&to=&lang=` | – | ZIP (`application/zip`) | the caller's own data, see Personal data export; `from`/`to` (`YYYY-MM-DD`, inclusive) limit the day-based data, an invalid date or `from` after `to` → 422; works with a read key |
 | PUT | `/api/v1/me/goal` | Goal | Goal | kcal 500–10000, macros 0–1000, water_ml 500–6000 |
-| PATCH | `/api/v1/me/settings` | `{playful?:bool, fasting?:{enabled?:bool, target_hours?:number}, activity?:{add_to_goal?:bool}, tour_seen?:bool, suggestions?:bool, home?:HomeCard[]\|null, water_glasses?:int[]\|null}` | `{playful, fasting, activity, tour_seen, suggestions, home, water_glasses}` | per-user settings, `playful` defaults to true, `fasting` to `{enabled:false, target_hours:16}` (hours 8–72), `activity` to `{add_to_goal:false}`, `tour_seen` to false (set once the first-run tour of the day view was shown or skipped; the profile can reset it), `suggestions` to true (the day view shows the card "what still fits today"; `GET /recipes/suggestions` answers either way), `home` to null (the default layout of the day view; otherwise a list of `{id, hidden, wide}` with `id` one of `ring, macros, fasting, water, activity, weight, meals, micros, suggestions`, no duplicates, at most 9; **422** otherwise; the list replaces the whole layout, `null` resets it; cards missing from the list are appended by the client), `water_glasses` to null (the default glasses 250 and 500 ml of the quick buttons on the water card; otherwise 1–3 whole numbers of 50–1000 ml, no duplicates, **422** otherwise; stored ascending, `null` resets it); fields left out stay as they are, also inside `fasting` and `activity` |
+| PATCH | `/api/v1/me/settings` | `{playful?:bool, fasting?:{enabled?:bool, target_hours?:number}, activity?:{add_to_goal?:bool}, tour_seen?:bool, suggestions?:bool, home?:HomeCard[]\|null, water_glasses?:int[]\|null, water_drinks?:bool}` | `{playful, fasting, activity, tour_seen, suggestions, home, water_glasses, water_drinks}` | per-user settings, `playful` defaults to true, `fasting` to `{enabled:false, target_hours:16}` (hours 8–72), `activity` to `{add_to_goal:false}`, `tour_seen` to false (set once the first-run tour of the day view was shown or skipped; the profile can reset it), `suggestions` to true (the day view shows the card "what still fits today"; `GET /recipes/suggestions` answers either way), `home` to null (the default layout of the day view; otherwise a list of `{id, hidden, wide}` with `id` one of `ring, macros, fasting, water, activity, weight, meals, micros, suggestions`, no duplicates, at most 9; **422** otherwise; the list replaces the whole layout, `null` resets it; cards missing from the list are appended by the client), `water_glasses` to null (the default glasses 250 and 500 ml of the quick buttons on the water card; otherwise 1–3 whole numbers of 50–1000 ml, no duplicates, **422** otherwise; stored ascending, `null` resets it), `water_drinks` to true (drinks of the diary count towards the water card, see "Drinks count as water"); fields left out stay as they are, also inside `fasting` and `activity` |
 | GET | `/api/v1/badges` | – | Badges | see Playful feedback; empty lists while `playful` is false |
 | POST | `/api/v1/badges/seen` | `{codes:[string]}` | Badges | marks those badges as seen; unknown codes are ignored |
 | GET | `/api/v1/review?week=YYYY-Www` | – | Review | see Playful feedback; default the last completed week (Monday to Sunday); malformed or non-existent week → 422 |
@@ -187,6 +187,7 @@ Editing or deleting the food later does not change past days; deleting sets `foo
 | DELETE | `/api/v1/foods/{id}` | – | 204 | diary copies stay; a recipe food → 409 (delete the recipe) |
 | PUT | `/api/v1/foods/{id}/piece` | FoodPiece | Food | says what one piece is (`Scheibe` = 25 g); not part of the food data, so a reload from Open Food Facts and `PUT /foods/{id}` leave it alone; label empty or longer than 30, grams 0 or over 5000 → 422; unknown food → 404; foods booked in portions (`cookidoo`, `web`) → 409; a write (read access key: 403) |
 | DELETE | `/api/v1/foods/{id}/piece` | – | 204 | removes the piece; 404 / 409 as above |
+| PUT | `/api/v1/foods/{id}/drink` | `{drink:bool\|null}` | Food | whether the food counts towards the day's water ("Drinks count as water" below): `true` always, `false` never, `null` automatic; not part of the food data (kept on a reload); 404 / 409 as for the piece; a write (read access key: 403) |
 | POST | `/api/v1/label-scans` | image bytes | `{per_100, basis, warnings, text}` | unchanged |
 | GET | `/api/v1/diary/{day}` | – | Day | |
 | POST | `/api/v1/diary/{day}/entries` | `{food_id, meal, amount}` | Entry (201) | amount > 0, ≤ 5000 |
@@ -401,6 +402,18 @@ simply has none. The address is stored (`image_url`) only together with a fetche
 
 Water is one total per user and day (`water` table); the goal `Goal.water_ml` defaults to 2000 ml. Adding below 0 or
 above 10000 ml clamps the total.
+
+### Drinks count as water
+
+Diary entries that are drinks add their water to the day's fluid total, shown next to the glasses (`Water.drinks_ml`, `summary/today`
+`water_drinks_ml`). It is computed on every read: nothing is written to the `water` table, `Water.ml`, the water export and the
+Apple Health sync stay as they are. Switch: setting `water_drinks` (default true; false: `drinks_ml` is 0). Per entry, only unit `ml`:
+
+- water share = amount x water content / 100; the content is the nutrient `water` (per 100 g/ml) of the entry, else of its food;
+- food setting `drink` (`PUT /foods/{id}/drink`): `false` never counts, `true` always counts (the water share, the whole amount when the water content is unknown);
+- `null` (automatic): counts when the name is no soup (`suppe`, `soup`, `eintopf`, `brühe`, `bouillon`, `consommé`, `broth`, `stew`, `chowder`, `bisque`, `gazpacho` anywhere in the name), alcohol (nutrient `alcohol`) is at most 0.5 g per 100 and the water content is at least 80 %;
+- without a known water content the entry counts in full when it looks like a plain drink: at most 70 kcal, 0.5 g salt and 5 g protein per 100;
+- entries without a food (the food was deleted) follow the automatic rule only.
 
 Fasting is optional and off by default (`settings.fasting.enabled`); the routes work either way, the switch only
 decides whether the client shows the timer. A user has at most one open fast. Times are Unix seconds (UTC), clients
@@ -839,7 +852,7 @@ most once per minute.
 ### Summary for home automation
 
 `GET /summary/today` (any token scope): `{day, kcal_eaten, kcal_goal, kcal_left, protein, carbs, fat, water_ml,
-water_goal_ml, steps, steps_goal, active_kcal, workouts, kcal_goal_bonus, weight_kg, weight_day, fasting, logged_today, last_entry_at}`. `kcal_goal` and `kcal_left` are null
+water_goal_ml, water_drinks_ml, steps, steps_goal, active_kcal, workouts, kcal_goal_bonus, weight_kg, weight_day, fasting, logged_today, last_entry_at}`. `kcal_goal` and `kcal_left` are null
 without a goal (`kcal_left` is negative above the goal). `weight_kg` is the latest value of any day. `fasting` is
 `{active, elapsed_seconds, target_hours}`, or null when the timer is off and no fast runs. `last_entry_at` is unix
 seconds of the latest entry ever made. "Today" is the server's date.

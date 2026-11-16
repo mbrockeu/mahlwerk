@@ -286,6 +286,9 @@ const en = {
   rev_improve_weekend_higher: 'At the weekend you averaged {weekend} kcal, on weekdays {weekday} kcal, so {pct} % more. To even it out, one lighter meal at the weekend does it.',
   rev_quiet: 'A quiet week with {n} days logged. The review starts from 2 days.',
   // water
+  waterFromGlasses: 'Glasses {n} l', waterFromDrinks: 'from drinks {n} l',
+  gpDrinksTitle: 'Drinks count as water', gpDrinksText: 'Drinks in the diary (entries in ml with at least 80 % water, no soup, hardly any alcohol) are added to the water card as "from drinks". Nothing is saved to the water card itself.', gpDrinksFailed: 'Could not save the setting ({reason}).',
+  drinkLabel: 'Counts as a drink', drinkAuto: 'automatic', drinkYes: 'yes', drinkNo: 'no', drinkHint: 'Automatic: counts at 80 % water or more, hardly any alcohol, no soup.',
   waterTitle: 'Water', waterAria: '{ml} of {goal} litres of water', waterAdd: '+ {n} ml', waterAddShort: '+ {n}', waterAddAria: 'Add {n} ml of water',
   waterTakeBack: '− {n}', waterTakeBackAria: 'Take back {n} ml of water', waterFailed: 'Could not save the water ({reason}).',
   waterBad: 'Water goal: 500–6000 ml.', insWater: 'Water per day', waterLitres: '{n} l',
@@ -943,6 +946,9 @@ const de: Record<Key, string> = {
   rev_quiet: 'Eine ruhige Woche mit {n} erfassten Tagen. Die Bilanz gibt es ab 2 Tagen.',
 
   // water
+  waterFromGlasses: 'Gläser {n} l', waterFromDrinks: 'aus Getränken {n} l',
+  gpDrinksTitle: 'Getränke zählen als Wasser', gpDrinksText: 'Getränke im Tagebuch (Einträge in ml mit mindestens 80 % Wasser, keine Suppe, kaum Alkohol) werden auf der Wasserkarte als „aus Getränken“ dazugerechnet. Die Gläser selbst bleiben unverändert.', gpDrinksFailed: 'Einstellung konnte nicht gespeichert werden ({reason}).',
+  drinkLabel: 'Zählt als Getränk', drinkAuto: 'automatisch', drinkYes: 'ja', drinkNo: 'nein', drinkHint: 'Automatisch: zählt ab 80 % Wasser, kaum Alkohol, keine Suppe.',
   waterTitle: 'Wasser', waterAria: '{ml} von {goal} Litern Wasser', waterAdd: '+ {n} ml', waterAddShort: '+ {n}', waterAddAria: '{n} ml Wasser hinzufügen',
   waterTakeBack: '− {n}', waterTakeBackAria: '{n} ml Wasser zurücknehmen', waterFailed: 'Wasser konnte nicht gespeichert werden ({reason}).',
   waterBad: 'Wasserziel: 500–6000 ml.', insWater: 'Wasser Ø je Tag', waterLitres: '{n} l',

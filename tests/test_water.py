@@ -8,11 +8,11 @@ def water(client, day=DAY):
 
 
 def test_day_has_no_water_by_default_and_the_default_goal(client):
-    assert water(client) == {"ml": 0, "goal_ml": 2000}
+    assert water(client) == {"ml": 0, "goal_ml": 2000, "drinks_ml": 0}
 
 
 def test_add_sums_up_and_can_take_back(client):
-    assert client.post(f"/api/v1/water/{DAY}", json={"add_ml": 250}).json() == {"ml": 250, "goal_ml": 2000}
+    assert client.post(f"/api/v1/water/{DAY}", json={"add_ml": 250}).json() == {"ml": 250, "goal_ml": 2000, "drinks_ml": 0}
     assert client.post(f"/api/v1/water/{DAY}", json={"add_ml": 500}).json()["ml"] == 750
     assert client.post(f"/api/v1/water/{DAY}", json={"add_ml": -250}).json()["ml"] == 500
     assert water(client)["ml"] == 500
@@ -36,7 +36,7 @@ def test_add_amount_is_limited_to_2000(client):
 
 def test_put_sets_the_value_directly(client):
     client.post(f"/api/v1/water/{DAY}", json={"add_ml": 250})
-    assert client.put(f"/api/v1/water/{DAY}", json={"ml": 1750}).json() == {"ml": 1750, "goal_ml": 2000}
+    assert client.put(f"/api/v1/water/{DAY}", json={"ml": 1750}).json() == {"ml": 1750, "goal_ml": 2000, "drinks_ml": 0}
     assert client.put(f"/api/v1/water/{DAY}", json={"ml": 0}).json()["ml"] == 0
     assert client.put(f"/api/v1/water/{DAY}", json={"ml": 10001}).status_code == 422
     assert client.put(f"/api/v1/water/{DAY}", json={"ml": -1}).status_code == 422

@@ -176,8 +176,11 @@ def duo(monkeypatch, tmp_path):
     return tuple(TestClient(app, client=("10.0.0.5", 1), headers={"Remote-User": name}) for name in ("ann", "ben"))
 
 
-# What version 16 added (household flag, owner of a food), to take a fresh database back to version 15.
-DROP_V16 = "ALTER TABLE food DROP COLUMN created_by; ALTER TABLE user DROP COLUMN household;"
+# What version 17 added (the drink flag of a food), to take a fresh database back to version 16.
+DROP_V17 = "ALTER TABLE food DROP COLUMN drink;"
+
+# What version 16 added (household flag, owner of a food), to take a fresh database back to version 15 (after DROP_V17).
+DROP_V16 = DROP_V17 + "ALTER TABLE food DROP COLUMN created_by; ALTER TABLE user DROP COLUMN household;"
 
 # What version 15 added (the piece of a food), to take a fresh database back to version 14 (after DROP_V16).
 DROP_V15 = DROP_V16 + "ALTER TABLE food DROP COLUMN piece_label; ALTER TABLE food DROP COLUMN piece_grams;"

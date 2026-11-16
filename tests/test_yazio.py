@@ -590,7 +590,7 @@ def test_version_6_database_is_migrated_without_losing_data(tmp_path):
     store = Store(path)
 
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 17
     assert con.execute("SELECT name, amount, external_id, import_id FROM diary_entry").fetchall() == [("Rice", 150, None, None)]
     assert con.execute("SELECT kg, import_id FROM weight").fetchall() == [(80.5, None)]
     assert con.execute("SELECT name FROM sqlite_master WHERE name = 'import_batch'").fetchone()

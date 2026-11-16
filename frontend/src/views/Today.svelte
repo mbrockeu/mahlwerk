@@ -344,7 +344,7 @@
             {:else if id === 'fasting'}
               <FastCard />
             {:else if id === 'water'}
-              <WaterRow day={data.day} ml={data.water?.ml ?? 0} goalMl={data.water?.goal_ml ?? 2000} />
+              <WaterRow day={data.day} ml={data.water?.ml ?? 0} goalMl={data.water?.goal_ml ?? 2000} drinksMl={data.water?.drinks_ml ?? 0} />
             {:else if id === 'activity'}
               <ActivityCard day={data.day} activity={data.activity} />
             {:else if id === 'weight'}

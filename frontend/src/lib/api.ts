@@ -113,6 +113,8 @@ export const api = {
   /** Say what one piece of the food is ("slice" = 25 g); not part of the food data, so a reload never replaces it. */
   setFoodPiece: (id: number, piece: FoodPiece) => request<Food>('PUT', `foods/${id}/piece`, piece),
   removeFoodPiece: (id: number) => request<void>('DELETE', `foods/${id}/piece`),
+  /** Whether the food counts as a drink for the daily fluid total: true, false, or null for automatic. */
+  setFoodDrink: (id: number, drink: boolean | null) => request<Food>('PUT', `foods/${id}/drink`, { drink }),
   /** An own photo for a recipe (the file as the request body; the interface shrinks it first). */
   setFoodImage: (id: number, image: Blob) => request<Food>('PUT', `foods/${id}/image`, undefined, image),
   removeFoodImage: (id: number) => request<Food>('DELETE', `foods/${id}/image`),

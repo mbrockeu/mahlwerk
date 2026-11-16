@@ -10,6 +10,7 @@ from ..admin_models import SummaryToday
 from ..auth import current_user
 from ..db import DEFAULT_WATER_GOAL, Store
 from ..deps import get_store
+from ..hydration import day_drinks_ml
 from ..nutrition import r1, scale, total
 from .diary import today
 
@@ -51,6 +52,7 @@ def summary_today(user: dict = Depends(current_user), store: Store = Depends(get
         "fat": r1(sums["fat"]),
         "water_ml": store.get_water(uid, day),
         "water_goal_ml": (goal or {}).get("water_ml", DEFAULT_WATER_GOAL),
+        "water_drinks_ml": day_drinks_ml(store, uid, day),
         "weight_kg": weight["kg"] if weight else None,
         "weight_day": weight["day"] if weight else None,
         "fasting": fast,

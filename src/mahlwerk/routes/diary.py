@@ -10,6 +10,7 @@ from ..activity_views import day_activities
 from ..auth import current_user
 from ..db import DEFAULT_WATER_GOAL, Store
 from ..deps import get_store
+from ..hydration import day_drinks_ml
 from ..models import MEALS, CopyIn, Day, Entries, Entry, EntryIn, EntryPatch, HistoryDay
 from ..nutrition import PER_100_KEYS, r1, scale, total
 from ..webhooks import emit
@@ -143,7 +144,7 @@ def get_day(day: str, user: dict = Depends(current_user), store: Store = Depends
         goal=goal,
         kcal_goal=round(activity.day_goal_kcal(goal["kcal"], {day: todays_activity.bonus_kcal}, day)) if goal else None,
         activity=todays_activity,
-        water={"ml": store.get_water(uid, day), "goal_ml": (goal or {}).get("water_ml", DEFAULT_WATER_GOAL)},
+        water={"ml": store.get_water(uid, day), "goal_ml": (goal or {}).get("water_ml", DEFAULT_WATER_GOAL), "drinks_ml": day_drinks_ml(store, uid, day)},
         totals={k: r1(sums[k]) for k in PER_100_KEYS},
         extra_totals={
             k: {"amount": round(v["amount"], 3), "coverage": round(v["coverage"], 3)} for k, v in extra_totals.items()

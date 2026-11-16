@@ -210,6 +210,24 @@
   const removeGlass = (i: number) => saveGlasses(glassList.filter((_, j) => j !== i));
   const addGlass = () => saveGlasses([...glassList, [250, 300, 400, 200, 500, 350, 150, 100].find((v) => !glassList.includes(v)) ?? GLASS_LIMITS.max]);
 
+  // drinks of the diary count towards the water card (default on)
+  const drinksOn = $derived(ui.me?.settings?.water_drinks !== false);
+  let drinksBusy = $state(false);
+  let drinksError = $state('');
+  async function toggleDrinks() {
+    if (!ui.me || drinksBusy) return;
+    drinksBusy = true;
+    drinksError = '';
+    try {
+      ui.me.settings = await api.setSettings({ water_drinks: !drinksOn });
+      changed();
+    } catch (err) {
+      drinksError = t('gpDrinksFailed', { reason: err instanceof ApiError ? err.status || err.message : 'error' });
+    } finally {
+      drinksBusy = false;
+    }
+  }
+
   const suggestOn = $derived(ui.me?.settings?.suggestions !== false);
   let sugBusy = $state(false);
   let sugError = $state('');
@@ -424,6 +442,10 @@
               {/if}
             </div>
             {#if glassError}<p class="note warn" role="alert">{glassError}</p>{:else}<p class="note">{t('gpGlassesNote', { n: GLASS_LIMITS.count })}</p>{/if}
+          </div>
+          <div class="gl">
+            <Toggle checked={drinksOn} label={t('gpDrinksTitle')} sub={drinksOn ? t('playOn') : t('playOff')} disabled={drinksBusy} onchange={toggleDrinks} />
+            {#if drinksError}<p class="note warn" role="alert">{drinksError}</p>{:else}<p class="note">{t('gpDrinksText')}</p>{/if}
           </div>
         </section>
 

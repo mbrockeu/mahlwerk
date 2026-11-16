@@ -16,7 +16,7 @@ from ..catalog import OFF, food_data
 from ..db import Store
 from ..deps import get_store
 from .. import ownership
-from ..models import Food, FoodImage, FoodIn, FoodPiece, LabelScan, RecentFood
+from ..models import Food, FoodDrink, FoodImage, FoodIn, FoodPiece, LabelScan, RecentFood
 from ..nutrition import guess_unit, is_complete, parse_serving, valid_gtin
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(current_user)])
@@ -76,6 +76,7 @@ def build_food(row: dict, user: dict | None = None, **extra) -> Food:
         image=food_image(row),
         image_removed=row.get("image_origin") == "none",
         piece=FoodPiece(label=row["piece_label"], grams=row["piece_grams"]) if row.get("piece_label") and row.get("piece_grams") else None,
+        drink=row.get("drink"),
         **{"cached": True, "fetched_at": row["fetched_at"], **extra},
     )
 
@@ -83,7 +84,7 @@ def build_food(row: dict, user: dict | None = None, **extra) -> Food:
 def with_piece(store: Store, food_id: int) -> dict:
     """The piece columns of a food that was just written (a reload keeps them), for the rows `build_food` gets from a write."""
     row = store.get_food(food_id, demo_view=True) or {}
-    return {"piece_label": row.get("piece_label"), "piece_grams": row.get("piece_grams"), "owner": row.get("owner")}
+    return {"piece_label": row.get("piece_label"), "piece_grams": row.get("piece_grams"), "drink": row.get("drink"), "owner": row.get("owner")}
 
 
 def own_data(food: FoodIn) -> dict:
@@ -252,6 +253,17 @@ def set_piece(food_id: int, piece: FoodPiece, user: dict = Depends(current_user)
 def delete_piece(food_id: int, user: dict = Depends(current_user), store: Store = Depends(get_store)) -> None:
     _piece_food(store, food_id, user)
     store.set_food_piece(food_id, None, None)
+
+
+@router.put("/foods/{food_id}/drink", response_model=Food)
+def set_drink(food_id: int, body: FoodDrink, user: dict = Depends(current_user), store: Store = Depends(get_store)) -> Food:
+    """Say whether the food counts towards the daily fluid total (`null`: automatically). Not part of the food data."""
+    row = _existing(store, food_id)
+    ownership.need_edit(user, row["owner"])
+    if row["source"] in (cookidoo.SOURCE, webrecipes.SOURCE):
+        raise HTTPException(409, "this food is booked in portions: it is no drink")
+    store.set_food_drink(food_id, body.drink)
+    return build_food({**row, "drink": body.drink}, user)
 
 
 @router.delete("/foods/{food_id}", status_code=204)
