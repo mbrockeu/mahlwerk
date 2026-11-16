@@ -6,7 +6,8 @@
   import Icon from './Icon.svelte';
 
   // The weekly review as a dark card: seven day strokes, one strong point (lime), at most one idea (paper).
-  let { review, ondismiss }: { review: Review; ondismiss?: () => void } = $props();
+  // `spread`: on a wide screen the card takes the full width, the week on the left and the texts on the right (start page)
+  let { review, ondismiss, spread = false }: { review: Review; ondismiss?: () => void; spread?: boolean } = $props();
 
   const dm = (day: string) => new Intl.DateTimeFormat(lang, { day: 'numeric', month: 'numeric' }).format(fromDay(day));
   const weekNo = $derived(Number(review.week.split('-W')[1]));
@@ -25,7 +26,7 @@
     t(`rev_${kind}_${h.code}` as 'rev_best_all_days', Object.fromEntries(Object.entries(h.params).map(([k, v]) => [k, fmt(v)])));
 </script>
 
-<section class="card on-dark review" aria-label={t('revTitle')}>
+<section class="card on-dark review" class:spread aria-label={t('revTitle')}>
   <div class="head">
     <div>
       <span class="micro lime">{t('revTitle')} · {t('revWeek', { n: weekNo })}</span>
@@ -36,9 +37,11 @@
     {/if}
   </div>
 
+  <div class="cols">
   {#if quiet}
     <p class="quiet-text">{t('rev_quiet', { n: review.logged_days })}</p>
   {:else}
+    <div class="l">
     <ul class="week" aria-label={t('revDaysAria')}>
       {#each review.days as d (d.day)}
         {@const l = look(d)}
@@ -49,7 +52,9 @@
       {/each}
     </ul>
     <p class="mono avg">{review.logged_days ? `${t('revAvgKcal', { kcal: fmt(review.kcal_avg) })} · ` : ''}{t('revLogged', { n: review.logged_days })}</p>
+    </div>
 
+    <div class="r">
     {#if review.best}
       <div class="block best">
         <span class="micro">{t('revBest')}</span>
@@ -63,6 +68,7 @@
       </div>
     {/if}
     {#if !review.best && !review.improve}<p class="quiet-text">{t('revNeutral')}</p>{/if}
+    </div>
   {/if}
 
   {#if marks.length}
@@ -73,6 +79,7 @@
       </div>
     </div>
   {/if}
+  </div>
 </section>
 
 <style>
@@ -102,5 +109,17 @@
   .marks { display: flex; flex-direction: column; gap: 8px; }
   .marks div { display: flex; flex-wrap: wrap; gap: 8px; }
   .m { display: flex; }
+  /* the columns exist only on a wide start page; elsewhere their parts stack in the order week, texts, badges */
+  .cols { display: flex; flex-direction: column; gap: 14px; }
+  .l, .r { display: contents; }
+  .marks { order: 1; }
+  @media (min-width: 900px) {
+    .spread { max-width: none; padding: 22px 26px 24px; }
+    .spread .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 14px 28px; align-items: start; }
+    .spread .l, .spread .r { display: flex; flex-direction: column; gap: 14px; }
+    .spread .l { grid-row: 1; grid-column: 1; }
+    .spread .r { grid-row: 1 / span 2; grid-column: 2; }
+    .spread .marks { grid-row: 2; grid-column: 1; }
+  }
   @keyframes rise { from { transform: scaleY(0.1); opacity: 0; } to { transform: none; opacity: 1; } }
 </style>

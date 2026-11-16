@@ -295,7 +295,7 @@
     <div class="skeleton" aria-hidden="true"></div>
   {:else}
     {#if showReview && review}
-      <ReviewCard {review} ondismiss={dismissReview} />
+      <ReviewCard {review} ondismiss={dismissReview} spread />
     {/if}
     {#if !goal}
       <section class="nogoal">
