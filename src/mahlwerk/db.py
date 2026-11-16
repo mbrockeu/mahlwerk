@@ -15,7 +15,7 @@ def _json(value) -> str:
     """json.dumps that refuses NaN and infinity: such a value in a food would turn every day sum that uses it into null."""
     return json.dumps(value, allow_nan=False)
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 BASE_TABLES = """
 CREATE TABLE user (
@@ -351,7 +351,13 @@ ALTER TABLE food ADD COLUMN image_at INTEGER;
 ALTER TABLE food ADD COLUMN image_url TEXT;
 CREATE INDEX food_image_hash ON food (image_hash) WHERE image_hash IS NOT NULL;
 """
-TABLES = BASE_TABLES + V4_TABLES + V5_TABLES + V6_TABLES + V7_TABLES + V8_TABLES + V9_TABLES + V10_TABLES + V11_TABLES + V12_TABLES + V13_TABLES + V14_TABLES
+# Version 15: the piece of a food ("slice" = 25 g). Kept in columns of its own, not in the JSON `data`: a reload from Open Food Facts
+# replaces `data`, and the piece is something a person told us. Shared by all users, like the food itself.
+V15_TABLES = """
+ALTER TABLE food ADD COLUMN piece_label TEXT;
+ALTER TABLE food ADD COLUMN piece_grams REAL;
+"""
+TABLES = BASE_TABLES + V4_TABLES + V5_TABLES + V6_TABLES + V7_TABLES + V8_TABLES + V9_TABLES + V10_TABLES + V11_TABLES + V12_TABLES + V13_TABLES + V14_TABLES + V15_TABLES
 DEFAULT_WATER_GOAL = 2000
 MAX_WATER_ML = 10000
 
@@ -398,6 +404,9 @@ MIGRATE_12_TO_13 = V13_TABLES
 
 # Version 13 had no recipe pictures; four columns and an index are new, nothing existing changes.
 MIGRATE_13_TO_14 = V14_TABLES
+
+# Version 14 had no pieces; two columns are new, nothing existing changes.
+MIGRATE_14_TO_15 = V15_TABLES
 
 # Demo foods are ordinary `food` rows whose JSON `data` carries "demo": true (test-data mode of the own account) or
 # "demo_account": true (the built-in demo account; these are left out of the product list of everybody else).
@@ -491,7 +500,8 @@ class Store:
                 script += (MIGRATE_7_TO_8 if version < 8 else "") + (MIGRATE_8_TO_9 if version < 9 else "")
                 script += (MIGRATE_9_TO_10 if version < 10 else "")
                 script += (MIGRATE_10_TO_11 if version < 11 else "") + (MIGRATE_11_TO_12 if version < 12 else "")
-                script += (MIGRATE_12_TO_13 if version < 13 else "") + MIGRATE_13_TO_14
+                script += (MIGRATE_12_TO_13 if version < 13 else "") + (MIGRATE_13_TO_14 if version < 14 else "")
+                script += MIGRATE_14_TO_15
             script += f"PRAGMA user_version = {SCHEMA_VERSION}; COMMIT;"
             try:
                 con.executescript(script)
@@ -720,6 +730,8 @@ class Store:
             "image_origin": row["image_origin"],
             "image_at": row["image_at"],
             "image_url": row["image_url"],
+            "piece_label": row["piece_label"],
+            "piece_grams": row["piece_grams"],
         }
 
     def get_food(self, food_id: int, demo_view: bool = False) -> dict | None:
@@ -819,6 +831,11 @@ class Store:
                 (source, _json(data), now, food_id),
             ).rowcount
         return now if updated else None
+
+    def set_food_piece(self, food_id: int, label: str | None, grams: float | None) -> bool:
+        """Set the piece of a food (both None: remove it). False for an unknown food."""
+        with self._connect() as con:
+            return con.execute("UPDATE food SET piece_label = ?, piece_grams = ? WHERE id = ?", (label, grams, food_id)).rowcount > 0
 
     def delete_food(self, food_id: int) -> bool:
         """Diary entries, template and recipe items keep their copy and lose only the link."""

@@ -116,7 +116,9 @@ Extra    { <key>: number }   additional nutrients per 100 g or 100 ml, in the un
 Nutrient { key, group:"fat"|"carb"|"mineral"|"vitamin"|"other", unit:"g"|"mg"|"µg", nrv:number|null }
 Food     { id:int, code:string|null, source:"openfoodfacts"|"own"|"recipe"|"yazio"|"bls", recipe_id:int|null, name, brand, quantity, serving_size,
            serving_quantity:number|null, unit:"g"|"ml", per_100:Per100, extra:Extra, complete:bool, empty:bool,
-           cached:bool, stale:bool, fetched_at:int, image:FoodImage|null }
+           cached:bool, stale:bool, fetched_at:int, image:FoodImage|null, piece:FoodPiece|null }
+FoodPiece { label:string (1-30 characters, trimmed), grams:number (> 0, at most 5000, in the unit of the food) }   what one piece of a food is, for example `Scheibe` = 25 g;
+           shared by all users, kept when the food is reloaded from Open Food Facts; diary entries stay in g or ml
 FoodImage { hash:string (32 hex digits), origin:"own"|"cookidoo"|"web", credit:string|null }   the picture of a recipe, see Recipe pictures;
            `credit` is `Cookidoo` or the host of the page for a provider's picture, `null` for an own photo
 CatalogItem { source:"openfoodfacts"|"bls", code:string, name, name_en:string|null (BLS only), brand, quantity, serving_size, serving_quantity:number|null,
@@ -183,6 +185,8 @@ Editing or deleting the food later does not change past days; deleting sets `foo
 | GET | `/api/v1/foods/{id}` | – | Food | |
 | PUT | `/api/v1/foods/{id}` | FoodIn | Food | turns the food into `own`; a recipe food → 409 |
 | DELETE | `/api/v1/foods/{id}` | – | 204 | diary copies stay; a recipe food → 409 (delete the recipe) |
+| PUT | `/api/v1/foods/{id}/piece` | FoodPiece | Food | says what one piece is (`Scheibe` = 25 g); not part of the food data, so a reload from Open Food Facts and `PUT /foods/{id}` leave it alone; label empty or longer than 30, grams 0 or over 5000 → 422; unknown food → 404; foods booked in portions (`cookidoo`, `web`) → 409; a write (read access key: 403) |
+| DELETE | `/api/v1/foods/{id}/piece` | – | 204 | removes the piece; 404 / 409 as above |
 | POST | `/api/v1/label-scans` | image bytes | `{per_100, basis, warnings, text}` | unchanged |
 | GET | `/api/v1/diary/{day}` | – | Day | |
 | POST | `/api/v1/diary/{day}/entries` | `{food_id, meal, amount}` | Entry (201) | amount > 0, ≤ 5000 |

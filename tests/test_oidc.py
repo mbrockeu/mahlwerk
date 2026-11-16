@@ -739,7 +739,7 @@ def test_version_10_database_gets_the_identity_table_without_losing_data(tmp_pat
     store = Store(path)
 
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 14
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 15
     assert "oidc_identity" in {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     con.close()
     assert store.get_goal(1)["kcal"] == 2000

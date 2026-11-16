@@ -90,6 +90,7 @@ _classify(
     "POST /recipe-groups", "PUT /recipe-groups/order", "PUT /recipe-groups/foods/{food_id}", "PUT /recipe-groups/{group_id}",
     "DELETE /recipe-groups/{group_id}", "POST /recipe-groups/{group_id}/members", "POST /recipe-groups/{group_id}/members/remove",
     "PUT /foods/{food_id}/image", "DELETE /foods/{food_id}/image", "POST /foods/{food_id}/image/restore",
+    "PUT /foods/{food_id}/piece", "DELETE /foods/{food_id}/piece",
     # what reaches outwards or lets something in: keys, webhooks, connectors, imports
     "GET /me/tokens", "POST /me/tokens", "DELETE /me/tokens/{token_id}",
     "GET /me/webhooks", "POST /me/webhooks", "PATCH /me/webhooks/{hook_id}", "DELETE /me/webhooks/{hook_id}",

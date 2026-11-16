@@ -39,6 +39,11 @@ const en = {
   noRecent: 'Nothing logged yet. Scan or search for a product first.', searching: 'Searching …',
   lastTime: 'last {amount}', yourProducts: 'Your products', basicFoods: 'Basic foods', moreProducts: 'More products',
 
+  // pieces ("2 × slice"): the label of a piece is typed by the person
+  pieceToggle: 'Unit', pieceCount: 'Count ({label} = {g})', piecesN: '{n} × {label}', pieceLast: 'last time {n} × {label}',
+  pieceSet: 'Set a piece', pieceEdit: 'Change piece', pieceTitle: 'What is one piece?', pieceName: 'Name', pieceNameHint: 'for example slice',
+  pieceNameDefault: 'Piece', pieceGrams: 'Weight of one piece ({unit})', pieceSave: 'Save piece', pieceRemove: 'Remove piece',
+  pieceBad: 'Give the piece a name (up to 30 characters) and a weight above 0 up to 5000.', pieceHelp: 'Say it once, then count pieces next time.',
   // amount sheet
   amount: 'Amount', amountEdit: 'Change entry', portion: '1 portion ({s})', stepLess: 'Less ({s})', stepMore: 'More ({s})', hundred: '100 {unit}', lastAmount: 'last time {a} {unit}',
   noEnergy: 'This product has no energy value. The entry will not count towards the goal.',
@@ -694,6 +699,11 @@ const de: Record<Key, string> = {
   noRecent: 'Noch nichts eingetragen. Scanne oder suche zuerst ein Produkt.', searching: 'Suche …',
   lastTime: 'zuletzt {amount}', yourProducts: 'Deine Produkte', basicFoods: 'Grundnahrungsmittel', moreProducts: 'Weitere Produkte',
 
+  // Stück („2 × Scheibe“): die Bezeichnung tippt die Person selbst
+  pieceToggle: 'Einheit', pieceCount: 'Anzahl ({label} = {g})', piecesN: '{n} × {label}', pieceLast: 'zuletzt {n} × {label}',
+  pieceSet: 'Stück festlegen', pieceEdit: 'Stück ändern', pieceTitle: 'Was ist ein Stück?', pieceName: 'Name', pieceNameHint: 'z. B. Scheibe',
+  pieceNameDefault: 'Stück', pieceGrams: 'Gewicht eines Stücks ({unit})', pieceSave: 'Stück speichern', pieceRemove: 'Stück entfernen',
+  pieceBad: 'Gib dem Stück einen Namen (bis 30 Zeichen) und ein Gewicht über 0 bis 5000.', pieceHelp: 'Einmal festlegen, beim nächsten Mal Stück zählen.',
   amount: 'Menge', amountEdit: 'Eintrag ändern', portion: '1 Portion ({s})', stepLess: 'Weniger ({s})', stepMore: 'Mehr ({s})', hundred: '100 {unit}', lastAmount: 'zuletzt {a} {unit}',
   noEnergy: 'Für dieses Produkt fehlt der Energiewert. Der Eintrag zählt nicht zum Ziel.',
   saveToDiary: 'Ins Tagebuch', saveChange: 'Änderung speichern', deleteEntry: 'Eintrag löschen', confirmDelete: 'Wirklich löschen?',

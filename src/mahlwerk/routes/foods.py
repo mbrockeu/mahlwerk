@@ -15,7 +15,7 @@ from ..auth import current_user
 from ..catalog import OFF, food_data
 from ..db import Store
 from ..deps import get_store
-from ..models import Food, FoodImage, FoodIn, LabelScan, RecentFood
+from ..models import Food, FoodImage, FoodIn, FoodPiece, LabelScan, RecentFood
 from ..nutrition import guess_unit, is_complete, parse_serving, valid_gtin
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(current_user)])
@@ -72,8 +72,15 @@ def build_food(row: dict, **extra) -> Food:
         empty=empty,
         image=food_image(row),
         image_removed=row.get("image_origin") == "none",
+        piece=FoodPiece(label=row["piece_label"], grams=row["piece_grams"]) if row.get("piece_label") and row.get("piece_grams") else None,
         **{"cached": True, "fetched_at": row["fetched_at"], **extra},
     )
+
+
+def with_piece(store: Store, food_id: int) -> dict:
+    """The piece columns of a food that was just written (a reload keeps them), for the rows `build_food` gets from a write."""
+    row = store.get_food(food_id, demo_view=True) or {}
+    return {"piece_label": row.get("piece_label"), "piece_grams": row.get("piece_grams")}
 
 
 def own_data(food: FoodIn) -> dict:
@@ -120,7 +127,7 @@ def food_by_barcode(code: str, request: Request, store: Store = Depends(get_stor
     if (item := request.app.state.catalog.get(OFF, code)) is not None:
         data = food_data(item)
         food_id, fetched_at = store.put_food(code, OFF, data)
-        return build_food({"id": food_id, "code": code, "source": OFF, "data": data, "fetched_at": fetched_at}, cached=False)
+        return build_food({**with_piece(store, food_id), "id": food_id, "code": code, "source": OFF, "data": data, "fetched_at": fetched_at}, cached=False)
     if fresh:
         raise HTTPException(404, "unknown barcode")
     if not request.app.state.features.lookup:
@@ -138,7 +145,7 @@ def food_by_barcode(code: str, request: Request, store: Store = Depends(get_stor
     if data is None:
         raise HTTPException(404, "unknown barcode")
     return build_food(
-        {"id": food_id, "code": code, "source": "openfoodfacts", "data": data, "fetched_at": fetched_at}, cached=False
+        {**with_piece(store, food_id), "id": food_id, "code": code, "source": "openfoodfacts", "data": data, "fetched_at": fetched_at}, cached=False
     )
 
 
@@ -150,7 +157,7 @@ def save_barcode_food(code: str, food: FoodIn, store: Store = Depends(get_store)
         _not_a_recipe(existing)
     data = own_data(food)
     food_id, fetched_at = store.put_food(code, "own", data)
-    return build_food({"id": food_id, "code": code, "source": "own", "data": data, "fetched_at": fetched_at})
+    return build_food({**with_piece(store, food_id), "id": food_id, "code": code, "source": "own", "data": data, "fetched_at": fetched_at})
 
 
 @router.get("/foods", response_model=list[Food])
@@ -215,6 +222,27 @@ def replace_food(food_id: int, food: FoodIn, request: Request, store: Store = De
         request.app.state.images.remove(food_id)
         row = {**row, "image_hash": None, "image_origin": None}
     return build_food({**row, "source": "own", "data": data, "fetched_at": fetched_at})
+
+
+def _piece_food(store: Store, food_id: int) -> dict:
+    row = _existing(store, food_id)
+    if row["source"] in (cookidoo.SOURCE, webrecipes.SOURCE):
+        raise HTTPException(409, "this food is booked in portions: a piece makes no sense here")
+    return row
+
+
+@router.put("/foods/{food_id}/piece", response_model=Food)
+def set_piece(food_id: int, piece: FoodPiece, store: Store = Depends(get_store)) -> Food:
+    """Say what one piece is ("slice" = 25 g). Not part of the food data: a reload from Open Food Facts leaves it alone."""
+    row = _piece_food(store, food_id)
+    store.set_food_piece(food_id, piece.label, piece.grams)
+    return build_food({**row, "piece_label": piece.label, "piece_grams": piece.grams})
+
+
+@router.delete("/foods/{food_id}/piece", status_code=204)
+def delete_piece(food_id: int, store: Store = Depends(get_store)) -> None:
+    _piece_food(store, food_id)
+    store.set_food_piece(food_id, None, None)
 
 
 @router.delete("/foods/{food_id}", status_code=204)

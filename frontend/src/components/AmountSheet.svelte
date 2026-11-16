@@ -2,9 +2,10 @@
   import { onMount } from 'svelte';
   import { api, ApiError } from '../lib/api';
   import { fmt, inputNumber, parseNumber, t } from '../lib/i18n';
+  import { checkPiece, gramsToPieces, isHalfMultiple, MAX_LABEL, piecesToGrams } from '../lib/piece';
   import { isPortionEntry, isPortionFood, PORTION_GRAMS } from '../lib/portion';
   import { backToAdd, changed, toast, ui, type AmountRequest } from '../lib/store.svelte';
-  import { MEALS, type Meal } from '../lib/types';
+  import { MEALS, type FoodPiece, type Meal } from '../lib/types';
   import Sheet from './Sheet.svelte';
 
   let { req }: { req: AmountRequest } = $props();
@@ -20,7 +21,13 @@
   // a Cookidoo recipe is stored as 100 g = 1 portion: here it is typed, shown and booked as portions
   const byPortion = isPortionFood(food) || isPortionEntry(entry);
   const scale = byPortion ? PORTION_GRAMS : 1;
-  const toBooked = (v: number) => Math.round(v * scale * 1000) / 1000;
+  // a piece ("slice" = 25 g) of the food, if a person defined one: the field then counts pieces and the diary still gets grams
+  const foodId = food?.id ?? entry?.food_id ?? null;
+  // svelte-ignore state_referenced_locally
+  let piece = $state<FoodPiece | null>(byPortion ? null : (food?.piece ?? null));
+  let inPieces = $state(false);
+  const factor = $derived(inPieces && piece ? piece.grams : scale);
+  const toBooked = (v: number) => Math.round(v * factor * 1000) / 1000;
 
   // nutrients per 100 g/ml (for an existing entry derived from its scaled values)
   const per = (key: 'kcal' | 'protein' | 'carbs' | 'fat'): number | null => {
@@ -32,8 +39,24 @@
 
   // svelte-ignore state_referenced_locally
   let last = $state<number | null>(req.lastAmount == null ? null : req.lastAmount / scale);
+  // the amount the dialog starts with, in g/ml as booked (nothing given and a piece known: one piece)
   // svelte-ignore state_referenced_locally
-  let text = $state(byPortion ? inputNumber(entry ? entry.amount / scale : (req.amount ?? scale) / scale) : inputNumber(entry?.amount ?? req.amount ?? food?.serving_quantity ?? 100));
+  const start = byPortion ? null : (entry?.amount ?? req.amount ?? (piece ? (req.lastAmount ?? null) : (food?.serving_quantity ?? 100)));
+  // svelte-ignore state_referenced_locally
+  let text = $state(byPortion ? inputNumber(entry ? entry.amount / scale : (req.amount ?? scale) / scale) : inputNumber(start ?? piece?.grams ?? 100));
+  // typed or changed by the person: a piece that arrives late then no longer switches the field under their fingers
+  let touched = false;
+  // pieces are the default once defined, unless the start amount is not a whole or half number of pieces: then it stays in grams
+  function usePiece(p: FoodPiece | null) {
+    piece = p;
+    if (!p || touched) return;
+    if (start == null || isHalfMultiple(start, p.grams)) {
+      inPieces = true;
+      text = inputNumber(start == null ? 1 : gramsToPieces(start, p.grams));
+    }
+  }
+  // svelte-ignore state_referenced_locally
+  usePiece(piece);
   // svelte-ignore state_referenced_locally
   let meal = $state<Meal>(req.meal);
   let saving = $state(false);
@@ -46,6 +69,10 @@
   const kcal = $derived(calc(p100.kcal));
 
   onMount(async () => {
+    // an entry brings no piece: ask for the food it came from (the piece is optional, a failure changes nothing)
+    if (!food && entry && foodId != null && !byPortion) {
+      api.food(foodId).then((f) => { if (f.piece && !piece) usePiece(f.piece); }).catch(() => {});
+    }
     if (!food || last != null) return;
     try {
       const recent = await api.recent(50);
@@ -56,6 +83,12 @@
 
   const quick = $derived.by(() => {
     const list: { label: string; value: number }[] = [];
+    if (inPieces && piece) {
+      for (const n of [1, 2, 3]) list.push({ label: t('piecesN', { n: String(n), label: piece.label }), value: n });
+      const count = last == null ? null : gramsToPieces(last, piece.grams);
+      if (count != null && isHalfMultiple(last as number, piece.grams) && !list.some((q) => q.value === count)) list.push({ label: t('pieceLast', { n: fmt(count, 1), label: piece.label }), value: count });
+      return list;
+    }
     if (byPortion) {
       list.push({ label: t('halfPortion'), value: 0.5 }, { label: t('portions1'), value: 1 }, { label: t('portionsN', { n: '2' }), value: 2 });
       if (last != null && !list.some((q) => q.value === last)) list.push({ label: t('lastTime', { amount: t('portionsN', { n: fmt(last, 2) }) }), value: last });
@@ -69,15 +102,86 @@
 
   // − and + beside the field: one serving (two slices of toast), half a portion of a recipe, else 10 g/ml
   const serving = byPortion ? null : (food?.serving_quantity ?? null);
-  const step = byPortion ? 0.5 : (serving ?? 10);
+  const step = $derived(inPieces ? 1 : byPortion ? 0.5 : (serving ?? 10));
   const round = (v: number) => Math.round(v * 1000) / 1000;
   function stepBy(dir: 1 | -1) {
+    touched = true;
     const now = valid ? (amount as number) : 0;
     const n = dir > 0 ? Math.floor(now / step + 1e-9) + 1 : Math.ceil(now / step - 1e-9) - 1;  // the next whole step
     text = inputNumber(round(Math.max(1, n) * step));
   }
-  const servings = $derived(serving && valid ? round((amount as number) / serving) : null);
-  const stepText = byPortion ? t('portionsN', { n: fmt(step, 1) }) : `${fmt(step, 1)} ${unit}`;
+  const servings = $derived(serving && valid && !inPieces ? round((amount as number) / serving) : null);
+  const stepText = $derived(inPieces && piece ? t('piecesN', { n: '1', label: piece.label }) : byPortion ? t('portionsN', { n: fmt(step, 1) }) : `${fmt(step, 1)} ${unit}`);
+  // the other way round: grams with a piece defined say how many pieces that is, pieces say how many grams
+  const pieceNote = $derived.by(() => {
+    if (!piece || !valid) return null;
+    const grams = toBooked(amount as number);
+    if (inPieces) return `= ${fmt(grams, 1)} ${unit}`;
+    return isHalfMultiple(grams, piece.grams) ? `= ${t('piecesN', { n: fmt(gramsToPieces(grams, piece.grams), 1), label: piece.label })}` : null;
+  });
+
+  // the unit switch converts what is typed; a half piece or an odd gram amount stays exact to three digits
+  function setMode(pieces: boolean) {
+    if (!piece || pieces === inPieces) return;
+    touched = true;
+    const grams = valid ? toBooked(amount as number) : null;
+    inPieces = pieces;
+    text = inputNumber(pieces ? (grams == null ? 1 : gramsToPieces(grams, piece.grams)) : (grams ?? piece.grams));
+  }
+
+  // the small form that says what one piece is (new, or change/remove an existing one)
+  let formOpen = $state(false);
+  let formLabel = $state('');
+  let formGrams = $state('');
+  let formBusy = $state(false);
+  let formError = $state('');
+  function openForm() {
+    formLabel = piece?.label ?? t('pieceNameDefault');
+    const now = piece ? piece.grams : valid && !byPortion ? toBooked(amount as number) : null;
+    formGrams = now == null || now > 5000 ? '' : inputNumber(now);
+    formError = '';
+    formOpen = true;
+  }
+  async function savePiece() {
+    const draft = checkPiece(formLabel, parseNumber(formGrams));
+    if (!draft) { formError = t('pieceBad'); return; }
+    if (foodId == null) return;
+    formBusy = true;
+    formError = '';
+    try {
+      const saved = (await api.setFoodPiece(foodId, draft)).piece ?? draft;
+      const first = !piece;
+      touched = true;
+      piece = saved;
+      if (food) food.piece = saved;
+      if (first) { inPieces = true; text = '1'; }
+      formOpen = false;
+    } catch (err) {
+      formError = failMsg(err);
+    } finally {
+      formBusy = false;
+    }
+  }
+  async function removePiece() {
+    if (foodId == null) return;
+    formBusy = true;
+    formError = '';
+    try {
+      await api.removeFoodPiece(foodId);
+      // what was typed stays as the same amount, now in grams
+      const grams = valid ? toBooked(amount as number) : null;
+      touched = true;
+      piece = null;
+      if (food) food.piece = null;
+      inPieces = false;
+      text = inputNumber(grams ?? 100);
+      formOpen = false;
+    } catch (err) {
+      formError = failMsg(err);
+    } finally {
+      formBusy = false;
+    }
+  }
 
   // came from the add sheet: closing (swipe down, ✕, a tap beside) goes back there, like a step back on a phone
   const close = () => { if (req.back) backToAdd(); else ui.amount = null; };
@@ -134,23 +238,58 @@
     {/each}
   </div>
 
+  {#if piece}
+    <div class="unitrow" role="group" aria-label={t('pieceToggle')}>
+      <button class="chip" class:on={!inPieces} aria-pressed={!inPieces} onclick={() => setMode(false)}>{unit}</button>
+      <button class="chip" class:on={inPieces} aria-pressed={inPieces} onclick={() => setMode(true)}>{piece.label}</button>
+      <button class="btn quiet-btn small" onclick={openForm} disabled={formOpen}>{t('pieceEdit')}</button>
+    </div>
+  {/if}
   <div class="amountrow">
     <label class="field grow">
-      <span>{byPortion ? t('portionsLabel') : `${t('amount')} (${unit})`}</span>
-      <input inputmode="decimal" autocomplete="off" bind:value={text} aria-invalid={!valid && text !== ''}
+      <span>{inPieces && piece ? t('pieceCount', { label: piece.label, g: `${fmt(piece.grams, 1)} ${unit}` }) : byPortion ? t('portionsLabel') : `${t('amount')} (${unit})`}</span>
+      <input inputmode="decimal" autocomplete="off" bind:value={text} oninput={() => (touched = true)} aria-invalid={!valid && text !== ''}
         onfocus={(e) => e.currentTarget.select()} onkeydown={(e) => e.key === 'Enter' && save()} />
     </label>
     <button class="step" onclick={() => stepBy(-1)} disabled={!valid || (amount as number) <= step} aria-label={t('stepLess', { s: stepText })}>−</button>
     <button class="step" onclick={() => stepBy(1)} aria-label={t('stepMore', { s: stepText })}>+</button>
   </div>
+  {#if pieceNote}<p class="note">{pieceNote}</p>{/if}
   {#if servings != null && servings !== 1 && Number.isInteger(servings * 2)}
     <p class="note">= {t('portionsN', { n: fmt(servings, 1) })}</p>
   {/if}
   <div class="quick">
     {#each quick as q}
-      <button class="chip" class:on={amount === q.value} onclick={() => (text = inputNumber(q.value))}>{q.label}</button>
+      <button class="chip" class:on={amount === q.value} onclick={() => { touched = true; text = inputNumber(q.value); }}>{q.label}</button>
     {/each}
+    {#if !piece && !byPortion && foodId != null && !formOpen}
+      <button class="chip quiet" onclick={openForm}>{t('pieceSet')}</button>
+    {/if}
   </div>
+
+  {#if formOpen}
+    <div class="piecebox">
+      <p class="note">{piece ? t('pieceTitle') : `${t('pieceTitle')} ${t('pieceHelp')}`}</p>
+      <div class="pieceform">
+        <label class="field">
+          <span>{t('pieceName')}</span>
+          <input type="text" maxlength={MAX_LABEL} autocomplete="off" placeholder={t('pieceNameHint')} bind:value={formLabel}
+            onkeydown={(e) => e.key === 'Enter' && savePiece()} />
+        </label>
+        <label class="field">
+          <span>{t('pieceGrams', { unit })}</span>
+          <input inputmode="decimal" autocomplete="off" bind:value={formGrams} onfocus={(e) => e.currentTarget.select()}
+            onkeydown={(e) => e.key === 'Enter' && savePiece()} />
+        </label>
+      </div>
+      {#if formError}<p class="note warn" role="alert">{formError}</p>{/if}
+      <div class="pieceactions">
+        <button class="btn primary small" onclick={savePiece} disabled={formBusy}>{t('pieceSave')}</button>
+        <button class="btn small" onclick={() => (formOpen = false)} disabled={formBusy}>{t('cancel')}</button>
+        {#if piece}<button class="btn danger small" onclick={removePiece} disabled={formBusy}>{t('pieceRemove')}</button>{/if}
+      </div>
+    </div>
+  {/if}
 
   <div class="result" aria-live="polite">
     <span class="big display">{kcal == null ? '–' : fmt(Math.round(kcal))}<span class="mono unit"> kcal</span></span>
@@ -175,6 +314,13 @@
   .meals .chip { justify-content: center; }
   .quick { display: flex; flex-wrap: wrap; gap: 8px; }
   .grow { flex: 1; }
+  .unitrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .unitrow .small { margin-left: auto; min-height: 44px; padding: 0 8px; font-size: 14px; }
+  .chip.quiet { background: transparent; border-style: dashed; color: var(--quiet); }
+  .piecebox { background: var(--paper); border-radius: 20px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .pieceform { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .pieceactions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pieceactions .small { min-height: 44px; padding: 0 16px; font-size: 14px; }
   .amountrow { display: flex; align-items: flex-end; gap: 8px; }
   .step { flex-shrink: 0; width: 48px; height: 48px; border-radius: 50%; border: 2px solid var(--field-line); background: var(--paper); color: inherit; font-size: 26px; line-height: 1; }
   .step:disabled { opacity: 0.4; }

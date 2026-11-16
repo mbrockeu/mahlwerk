@@ -63,6 +63,7 @@ function givePicture(food: Food, origin: 'own' | 'cookidoo' | 'web', credit: str
   return food;
 }
 const oats = addFood(L('Haferflocken zart', 'Rolled oats'), 'Kornika', per(372, 7, 1.3, 59, 1.1, 10, 13.5, 0.02), { code: gtin('400100000010'), source: 'openfoodfacts', quantity: '500 g', serving_size: '40 g', serving_quantity: 40 });
+addFood(L('Toastbrot', 'Sliced bread'), 'Backhaus', per(262, 3.5, 0.7, 47, 4, 3, 8.5, 1.1), { quantity: '500 g', piece: { label: L('Scheibe', 'Slice'), grams: 25 } });
 const banana = addFood(L('Banane', 'Banana'), null, per(89, 0.3, 0.1, 20, 12, 2, 1.1, 0), { serving_size: '120 g', serving_quantity: 120 });
 const milk = addFood(L('Vollmilch 3,5 %', 'Whole milk 3.5 %'), 'Almora', per(64, 3.6, 2.3, 4.8, 4.8, 0, 3.3, 0.1), { code: gtin('400100000027'), source: 'openfoodfacts', unit: 'ml', quantity: '1 l', serving_size: '200 ml', serving_quantity: 200 });
 const pasta = addFood(L('Spaghetti', 'Spaghetti'), 'Pastello', per(352, 1.5, 0.3, 71, 3.5, 3, 12.5, 0.01), { code: gtin('400100000034'), source: 'openfoodfacts', quantity: '500 g', serving_size: '80 g', serving_quantity: 80 });
@@ -1421,6 +1422,18 @@ export async function mockRequest(method: string, path: string, body?: unknown, 
     } else { if (food.image && food.image.origin !== 'own') food.image_removed = true; food.image = null; }
     const rec = recipes.find((x) => x.food.id === food.id);
     if (rec) rec.food = food;
+    return clone(food);
+  }
+  // what one piece of a food is (the server keeps it apart from the food data; portion foods have none)
+  if ((r = m(/^foods\/(\d+)\/piece$/)) && (method === 'PUT' || method === 'DELETE')) {
+    const food = foods.find((f) => f.id === Number(r?.[1]));
+    if (!food) throw new ApiError(404, 'unknown food');
+    if (food.source === 'cookidoo' || food.source === 'web') throw new ApiError(409, 'this food is booked in portions: a piece makes no sense here');
+    if (method === 'DELETE') { food.piece = null; return undefined; }
+    const b = body as { label?: string; grams?: number };
+    const label = (b.label ?? '').trim();
+    if (!label || [...label].length > 30 || !(typeof b.grams === 'number' && b.grams > 0 && b.grams <= 5000)) throw new ApiError(422, 'invalid piece');
+    food.piece = { label, grams: b.grams };
     return clone(food);
   }
   if ((r = m(/^foods\/(\d+)\/image\/restore$/)) && method === 'POST') {

@@ -37,6 +37,13 @@ export interface FoodImage {
   credit: string | null;
 }
 
+/** What one piece of a food is ("slice" = 25 g); shared by all users. */
+export interface FoodPiece {
+  label: string;
+  /** In the unit of the food (g or ml). */
+  grams: number;
+}
+
 export interface Food {
   id: number;
   code: string | null;
@@ -65,6 +72,7 @@ export interface Food {
   image?: FoodImage | null;
   /** A person took the provider's picture away (it can be restored while the picture switch of the connector is on). */
   image_removed?: boolean;
+  piece?: FoodPiece | null;
 }
 
 /** A packaged product (Open Food Facts) or basic food (BLS) of the local catalogue; it gets an id once it is adopted as a Food. */

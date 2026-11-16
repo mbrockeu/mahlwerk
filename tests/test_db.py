@@ -25,7 +25,7 @@ def test_prototype_database_is_migrated_without_losing_foods(tmp_path):
     store = Store(path)
 
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 14
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 15
     assert con.execute("SELECT code, source, found, fetched_at FROM food ORDER BY id").fetchall() == [
         ("3017620422003", "openfoodfacts", 1, 100),
         ("4068706059940", "own", 1, 200),
@@ -68,7 +68,7 @@ def test_migrated_own_food_is_served_with_derived_unit_and_serving(tmp_path):
 def test_fresh_database_gets_the_current_schema(tmp_path):
     path = str(tmp_path / "new.db")
     Store(path)
-    assert sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0] == 14
+    assert sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0] == 15
 
 
 V1_SCHEMA = """
@@ -98,7 +98,7 @@ def test_version_1_database_gets_demo_columns_and_keeps_its_data(tmp_path):
     store = Store(path)
 
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 14
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 15
     assert con.execute("SELECT name, amount, demo FROM diary_entry").fetchall() == [("Rice", 150, 0)]
     assert con.execute("SELECT kg, demo FROM weight").fetchall() == [(80.5, 0)]
     con.close()
@@ -135,7 +135,7 @@ def test_version_3_database_gets_templates_and_recipes_without_losing_data(tmp_p
     store = Store(path)
 
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 14
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 15
     assert {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")} >= {
         "template", "template_item", "recipe", "recipe_item"}
     assert con.execute("SELECT name, amount, extra FROM diary_entry").fetchall() == [("Rice", 150, '{"iron": 1}')]
@@ -185,7 +185,7 @@ def test_version_4_database_gets_settings_and_badges_without_losing_data(tmp_pat
     store = Store(path)
 
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 14
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 15
     assert {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")} >= {
         "user_setting", "badge_earned", "template", "recipe"}
     con.close()
@@ -224,7 +224,7 @@ def test_version_5_database_gets_water_and_fasting_without_losing_data(tmp_path)
     store = Store(path)
 
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 14
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 15
     assert {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")} >= {"water", "fast"}
     con.close()
     assert store.get_goal(1) == {"kcal": 2000, "protein": 100, "carbs": 200, "fat": 60, "water_ml": 2000, "steps": 8000}

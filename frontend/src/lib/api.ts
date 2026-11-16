@@ -1,6 +1,6 @@
 // API client. All paths are relative (`api/v1/...`) so the app works below any path prefix.
 import type {
-  Account, ActivityDayOut, CookidooAccount, CookidooBulkPreview, CookidooBulkRun, CookidooBulkScope, CookidooPicturePreview, RecipeGroup, CookidooScope, YazioPreview, YazioRun, YazioState, AccessToken, AuthStatus, AccessTokenCreated, AdminOverview, AdminUser, DemoAccountState, Badges, CatalogItem, Connector, CookidooCollection, CookidooPlanDay, CookidooPreview, RefreshState, TokenScope, Webhook, WebhookCreated, WebhookDelivery, WebhookIn, FoodDetail, FoodList, FoodSort, Granularity, NutrientCurve, DemoResult, Day, Entry, Fast, Fasting, Food, FoodIn, Goal, HistoryDay, ImportBatch, ImportRemoved, Insights, LabelScan, Me, Meal, NutrientInfo, RecentFood, Recipe, RecipeIn, Review, Settings, SettingsPatch, SuggestFocus, Suggestions, Template, WebPreview, WebPreviewIn, WeightPoint, Workout, WorkoutIn, VisionMeal, VisionRecipe, VisionState, IngredientMatches,
+  Account, FoodPiece, ActivityDayOut, CookidooAccount, CookidooBulkPreview, CookidooBulkRun, CookidooBulkScope, CookidooPicturePreview, RecipeGroup, CookidooScope, YazioPreview, YazioRun, YazioState, AccessToken, AuthStatus, AccessTokenCreated, AdminOverview, AdminUser, DemoAccountState, Badges, CatalogItem, Connector, CookidooCollection, CookidooPlanDay, CookidooPreview, RefreshState, TokenScope, Webhook, WebhookCreated, WebhookDelivery, WebhookIn, FoodDetail, FoodList, FoodSort, Granularity, NutrientCurve, DemoResult, Day, Entry, Fast, Fasting, Food, FoodIn, Goal, HistoryDay, ImportBatch, ImportRemoved, Insights, LabelScan, Me, Meal, NutrientInfo, RecentFood, Recipe, RecipeIn, Review, Settings, SettingsPatch, SuggestFocus, Suggestions, Template, WebPreview, WebPreviewIn, WeightPoint, Workout, WorkoutIn, VisionMeal, VisionRecipe, VisionState, IngredientMatches,
 } from './types';
 
 export class ApiError extends Error {
@@ -110,6 +110,9 @@ export const api = {
   createFood: (food: FoodIn) => request<Food>('POST', 'foods', food),
   updateFood: (id: number, food: FoodIn) => request<Food>('PUT', `foods/${id}`, food),
   deleteFood: (id: number) => request<void>('DELETE', `foods/${id}`),
+  /** Say what one piece of the food is ("slice" = 25 g); not part of the food data, so a reload never replaces it. */
+  setFoodPiece: (id: number, piece: FoodPiece) => request<Food>('PUT', `foods/${id}/piece`, piece),
+  removeFoodPiece: (id: number) => request<void>('DELETE', `foods/${id}/piece`),
   /** An own photo for a recipe (the file as the request body; the interface shrinks it first). */
   setFoodImage: (id: number, image: Blob) => request<Food>('PUT', `foods/${id}/image`, undefined, image),
   removeFoodImage: (id: number) => request<Food>('DELETE', `foods/${id}/image`),

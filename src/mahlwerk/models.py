@@ -50,6 +50,21 @@ class FoodImage(BaseModel):
     credit: str | None = Field(None, description="whose picture it is, for a provider picture: `Cookidoo` or the host of the page")
 
 
+class FoodPiece(BaseModel):
+    """What one piece of a food is ("slice" = 25 g), so that a person can log "2 slices" instead of grams."""
+
+    label: str = Field(min_length=1, max_length=30, description="what a piece is called, for example `Scheibe` (the interface writes `2 × Scheibe`)")
+    grams: float = Field(gt=0, le=5000, description="the weight of one piece, in the unit of the food (g or ml)")
+
+    @field_validator("label")
+    @classmethod
+    def _trimmed(cls, label: str) -> str:
+        label = label.strip()
+        if not label:
+            raise ValueError("the label must not be empty")
+        return label
+
+
 class Food(BaseModel):
     id: int
     code: str | None = None
@@ -73,6 +88,7 @@ class Food(BaseModel):
     fetched_at: int
     image: FoodImage | None = Field(None, description="the picture of a recipe (own or taken over), if it has one")
     image_removed: bool = Field(False, description="a person took the provider's picture away (`POST /foods/{id}/image/restore` brings it back when the picture switch is on)")
+    piece: FoodPiece | None = Field(None, description="what one piece of this food is (set with `PUT /foods/{id}/piece`; shared by all users, survives a reload from the provider)")
 
 
 class FoodIn(BaseModel):
