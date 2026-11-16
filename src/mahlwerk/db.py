@@ -15,7 +15,7 @@ def _json(value) -> str:
     """json.dumps that refuses NaN and infinity: such a value in a food would turn every day sum that uses it into null."""
     return json.dumps(value, allow_nan=False)
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 BASE_TABLES = """
 CREATE TABLE user (
@@ -357,7 +357,15 @@ V15_TABLES = """
 ALTER TABLE food ADD COLUMN piece_label TEXT;
 ALTER TABLE food ADD COLUMN piece_grams REAL;
 """
-TABLES = BASE_TABLES + V4_TABLES + V5_TABLES + V6_TABLES + V7_TABLES + V8_TABLES + V9_TABLES + V10_TABLES + V11_TABLES + V12_TABLES + V13_TABLES + V14_TABLES + V15_TABLES
+# Version 16: guests and household members. `user.household` (1 = member of the household, the default: an existing installation
+# behaves as before) is decided from the groups at every sign-in in the proxy and oidc modes and set by an admin in the local mode.
+# `food.created_by` says who made a shared food; NULL = it belongs to the household. Only the household may change what it owns
+# or what has no owner; a guest changes only what they made themself (recipes and groups already had `created_by`).
+V16_TABLES = """
+ALTER TABLE user ADD COLUMN household INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE food ADD COLUMN created_by INTEGER REFERENCES user(id);
+"""
+TABLES = BASE_TABLES + V4_TABLES + V5_TABLES + V6_TABLES + V7_TABLES + V8_TABLES + V9_TABLES + V10_TABLES + V11_TABLES + V12_TABLES + V13_TABLES + V14_TABLES + V15_TABLES + V16_TABLES
 DEFAULT_WATER_GOAL = 2000
 MAX_WATER_ML = 10000
 
@@ -407,6 +415,7 @@ MIGRATE_13_TO_14 = V14_TABLES
 
 # Version 14 had no pieces; two columns are new, nothing existing changes.
 MIGRATE_14_TO_15 = V15_TABLES
+MIGRATE_15_TO_16 = V16_TABLES
 
 # Demo foods are ordinary `food` rows whose JSON `data` carries "demo": true (test-data mode of the own account) or
 # "demo_account": true (the built-in demo account; these are left out of the product list of everybody else).
@@ -431,7 +440,8 @@ def is_reserved_name(username: str) -> bool:
     return username.strip().lower() == RESERVED_USERNAME
 
 # A food row together with the recipe it was calculated from (NULL for everything else).
-FOOD_SELECT = "SELECT food.*, (SELECT recipe.id FROM recipe WHERE recipe.food_id = food.id) AS recipe_id FROM food"
+FOOD_SELECT = ("SELECT food.*, (SELECT recipe.id FROM recipe WHERE recipe.food_id = food.id) AS recipe_id, "
+               "(SELECT recipe.created_by FROM recipe WHERE recipe.food_id = food.id) AS recipe_owner FROM food")
 
 # The prototype keyed `food` by barcode. Its rows move over; `scan_test` is left alone.
 LEGACY_RENAME = "ALTER TABLE food RENAME TO food_legacy;"
@@ -501,7 +511,7 @@ class Store:
                 script += (MIGRATE_9_TO_10 if version < 10 else "")
                 script += (MIGRATE_10_TO_11 if version < 11 else "") + (MIGRATE_11_TO_12 if version < 12 else "")
                 script += (MIGRATE_12_TO_13 if version < 13 else "") + (MIGRATE_13_TO_14 if version < 14 else "")
-                script += MIGRATE_14_TO_15
+                script += (MIGRATE_14_TO_15 if version < 15 else "") + MIGRATE_15_TO_16
             script += f"PRAGMA user_version = {SCHEMA_VERSION}; COMMIT;"
             try:
                 con.executescript(script)
@@ -511,20 +521,25 @@ class Store:
 
     # users and goals
 
-    def get_or_create_user(self, username: str, display_name: str) -> dict:
+    def get_or_create_user(self, username: str, display_name: str, household: bool | None = None) -> dict:
+        """The user of this name, created on first sight. `household` (proxy mode: decided from the groups of this request) is stored;
+        None leaves a known user's flag alone (a new user is a household member)."""
         if is_reserved_name(username):
             raise ReservedName(username)
         with self._connect() as con:
             row = con.execute("SELECT * FROM user WHERE username = ?", (username,)).fetchone()
             if row is None:
                 cur = con.execute(
-                    "INSERT INTO user (username, display_name, created_at) VALUES (?, ?, ?)",
-                    (username, display_name, int(time.time())),
+                    "INSERT INTO user (username, display_name, created_at, household) VALUES (?, ?, ?, ?)",
+                    (username, display_name, int(time.time()), int(household is not False)),
                 )
-                return {"id": cur.lastrowid, "username": username, "display_name": display_name}
+                return {"id": cur.lastrowid, "username": username, "display_name": display_name, "household": household is not False}
             if row["display_name"] != display_name:
                 con.execute("UPDATE user SET display_name = ? WHERE id = ?", (display_name, row["id"]))
-            return {"id": row["id"], "username": username, "display_name": display_name}
+            if household is not None and bool(row["household"]) != household:
+                con.execute("UPDATE user SET household = ? WHERE id = ?", (int(household), row["id"]))
+            return {"id": row["id"], "username": username, "display_name": display_name, "household": bool(row["household"]) if household is None else household}
+
 
     def get_goal(self, user_id: int) -> dict | None:
         with self._connect() as con:
@@ -589,7 +604,7 @@ class Store:
                             (password_hash, display_name, user_id))
         return {"id": user_id, "username": username, "display_name": display_name}
 
-    def create_local_user(self, username: str, display_name: str, password_hash: str, admin: bool) -> dict:
+    def create_local_user(self, username: str, display_name: str, password_hash: str, admin: bool, household: bool = True) -> dict:
         if is_reserved_name(username):
             raise ReservedName(username)
         with self._connect() as con:
@@ -597,8 +612,8 @@ class Store:
             if con.execute("SELECT 1 FROM user WHERE lower(username) = ?", (username.lower(),)).fetchone() is not None:
                 raise NameTaken
             cur = con.execute(
-                "INSERT INTO user (username, display_name, created_at, password_hash, local_admin) VALUES (?, ?, ?, ?, ?)",
-                (username, display_name, int(time.time()), password_hash, int(admin)),
+                "INSERT INTO user (username, display_name, created_at, password_hash, local_admin, household) VALUES (?, ?, ?, ?, ?, ?)",
+                (username, display_name, int(time.time()), password_hash, int(admin), int(household or admin)),
             )
         return {"id": cur.lastrowid, "username": username, "display_name": display_name}
 
@@ -606,7 +621,7 @@ class Store:
         with self._connect() as con:
             con.execute("UPDATE user SET password_hash = ? WHERE id = ?", (password_hash, user_id))
 
-    def change_account(self, user_id: int, disabled: bool | None = None, admin: bool | None = None) -> None:
+    def change_account(self, user_id: int, disabled: bool | None = None, admin: bool | None = None, household: bool | None = None) -> None:
         """Block or unblock, give or take the admin right. The last active admin can be neither blocked nor demoted.
         Blocking also ends the user's sessions."""
         with self._connect() as con:
@@ -618,6 +633,8 @@ class Store:
             if now_active and (new_disabled or not new_admin) and self._active_admins(con, besides=user_id) == 0:
                 raise LastAdmin
             con.execute("UPDATE user SET disabled = ?, local_admin = ? WHERE id = ?", (int(new_disabled), int(new_admin), user_id))
+            if household is not None or new_admin:  # an admin is always a member: the stored flag says so too (an access key reads it)
+                con.execute("UPDATE user SET household = ? WHERE id = ?", (int(new_admin or bool(household)), user_id))
             if new_disabled:
                 con.execute("DELETE FROM auth_session WHERE user_id = ?", (user_id,))
 
@@ -645,7 +662,7 @@ class Store:
         at that issuer, so sessions left over from another mode or another provider are worth nothing."""
         with self._connect() as con:
             row = con.execute(
-                "SELECT s.id AS session_id, s.last_seen, s.created_at, u.id, u.username, u.display_name, u.local_admin FROM auth_session s "
+                "SELECT s.id AS session_id, s.last_seen, s.created_at, u.id, u.username, u.display_name, u.local_admin, u.household FROM auth_session s "
                 "JOIN user u ON u.id = s.user_id WHERE s.hash = ? AND s.expires_at > ? AND s.created_at > ? AND u.disabled = 0 "
                 "AND u.username <> '~demo' "  # the demo account never signs in (RESERVED_USERNAME)
                 "AND (? = 0 OR u.password_hash IS NOT NULL) "
@@ -658,9 +675,9 @@ class Store:
             if renewed:
                 con.execute("UPDATE auth_session SET last_seen = ?, expires_at = ? WHERE id = ?", (now, min(now + ttl, row["created_at"] + max_age), row["session_id"]))
         return {"id": row["id"], "username": row["username"], "display_name": row["display_name"],
-                "local_admin": bool(row["local_admin"]), "renewed": renewed}
+                "local_admin": bool(row["local_admin"]), "household": bool(row["household"]), "renewed": renewed}
 
-    def oidc_sign_in(self, issuer: str, sub: str, username: str, display_name: str, admin: bool, link_existing: bool) -> dict:
+    def oidc_sign_in(self, issuer: str, sub: str, username: str, display_name: str, admin: bool, link_existing: bool, household: bool = True) -> dict:
         """The user for a verified provider identity, created or linked on the first sign-in. Raises SignInRefused.
 
         Known (issuer, sub): the same user whatever the name is now; the display name and the admin right follow the
@@ -697,7 +714,7 @@ class Store:
                 raise SignInRefused("blocked")
             else:
                 con.execute("UPDATE oidc_identity SET last_login = ? WHERE issuer = ? AND sub = ?", (now, issuer, sub))
-            con.execute("UPDATE user SET display_name = ?, local_admin = ? WHERE id = ?", (display_name, int(admin), row["id"]))
+            con.execute("UPDATE user SET display_name = ?, local_admin = ?, household = ? WHERE id = ?", (display_name, int(admin), int(household or admin), row["id"]))
         return {"id": row["id"], "username": row["username"], "display_name": display_name, "is_admin": admin}
 
     def session_user_id(self, token_hash: str) -> int | None:
@@ -732,6 +749,8 @@ class Store:
             "image_url": row["image_url"],
             "piece_label": row["piece_label"],
             "piece_grams": row["piece_grams"],
+            # who made it (None: the household); an own recipe is its recipe's author's
+            "owner": row["created_by"] if row["created_by"] is not None else row["recipe_owner"],
         }
 
     def get_food(self, food_id: int, demo_view: bool = False) -> dict | None:
@@ -798,25 +817,28 @@ class Store:
             row = con.execute(f"{FOOD_SELECT} WHERE food.external_id = ?", (external_id,)).fetchone()
         return self._food(row) if row else None
 
-    def put_external_food(self, external_id: str, source: str, data: dict) -> tuple[int, int]:
+    def put_external_food(self, external_id: str, source: str, data: dict, created_by: int | None = None) -> tuple[int, int]:
         """Insert a food without barcode that is recognised by `external_id`. Returns (id, fetched_at)."""
         now = int(time.time())
         with self._connect() as con:
             food_id = con.execute(
-                "INSERT INTO food (code, source, found, data, fetched_at, external_id) VALUES (NULL, ?, 1, ?, ?, ?)",
-                (source, _json(data), now, external_id),
+                "INSERT INTO food (code, source, found, data, fetched_at, external_id, created_by) VALUES (NULL, ?, 1, ?, ?, ?, ?)",
+                (source, _json(data), now, external_id, created_by),
             ).lastrowid
         return food_id, now
 
-    def put_food(self, code: str | None, source: str, data: dict | None) -> tuple[int, int]:
-        """Insert or, for a known barcode, replace. Returns (id, fetched_at)."""
+    def put_food(self, code: str | None, source: str, data: dict | None, created_by: int | None = None) -> tuple[int, int]:
+        """Insert or, for a known barcode, replace. Returns (id, fetched_at). `created_by` becomes the owner of a new food, or of
+        one that was only a remembered miss; a food that exists keeps its owner (the caller checked that the replacing is allowed).
+        A remembered miss has no owner."""
         now = int(time.time())
-        args = (code, source, int(data is not None), _json(data) if data else None, now)
+        args = (code, source, int(data is not None), _json(data) if data else None, now, created_by if data else None)
         with self._connect() as con:
             con.execute(
-                "INSERT INTO food (code, source, found, data, fetched_at) VALUES (?, ?, ?, ?, ?) "
+                "INSERT INTO food (code, source, found, data, fetched_at, created_by) VALUES (?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT(code) DO UPDATE SET source = excluded.source, found = excluded.found, "
-                "data = excluded.data, fetched_at = excluded.fetched_at, import_id = NULL",
+                "data = excluded.data, fetched_at = excluded.fetched_at, import_id = NULL, "
+                "created_by = CASE WHEN food.found = 0 THEN excluded.created_by ELSE food.created_by END",
                 args,
             )
             row = con.execute("SELECT id FROM food WHERE code = ?", (code,)).fetchone() if code else None
@@ -1044,8 +1066,8 @@ class Store:
         with self._connect() as con:
             if recipe_id is None:
                 food_id = con.execute(
-                    "INSERT INTO food (code, source, found, data, fetched_at) VALUES (NULL, 'recipe', 1, ?, ?)",
-                    (_json(food_data), now),
+                    "INSERT INTO food (code, source, found, data, fetched_at, created_by) VALUES (NULL, 'recipe', 1, ?, ?, ?)",
+                    (_json(food_data), now, user_id),
                 ).lastrowid
                 recipe_id = con.execute(
                     "INSERT INTO recipe (food_id, portions, total_weight, created_by, updated_at) VALUES (?, ?, ?, ?, ?)",
@@ -1766,7 +1788,7 @@ class Store:
             needed = list(dict.fromkeys(
                 [e["food_key"] for e in entries if e["food_key"]] + (list(plan["foods"]) if plan["all_products"] else [])
             ))
-            ids, created, reused = self._import_foods(con, plan["foods"], needed, batch_id, now)
+            ids, created, reused = self._import_foods(con, plan["foods"], needed, batch_id, now, user_id)
             con.executemany(
                 "INSERT INTO diary_entry (user_id, day, meal, food_id, amount, unit, name, brand, per_100, extra, "
                 "created_at, external_id, import_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -1836,7 +1858,7 @@ class Store:
                 "activity_kept": len(plan.get("activity", [])) - activity, "workouts_already": workouts_already}
 
     @staticmethod
-    def _import_foods(con: sqlite3.Connection, specs: dict, needed: list[str], batch_id: int, now: int):
+    def _import_foods(con: sqlite3.Connection, specs: dict, needed: list[str], batch_id: int, now: int, user_id: int | None = None):
         """Food ids for the keys in `needed`: (ids, created, reused)."""
         known = {r["external_id"]: r["id"] for r in con.execute("SELECT id, external_id FROM food WHERE external_id IS NOT NULL")}
         codes = [specs[k]["code"] for k in needed if k not in known and specs[k]["code"]]
@@ -1861,13 +1883,13 @@ class Store:
             data = _json(specs[key]["data"])
             if hit:  # the barcode is only a remembered miss: the row becomes this food
                 con.execute(
-                    "UPDATE food SET source = 'yazio', found = 1, data = ?, fetched_at = ?, external_id = ?, import_id = ? "
-                    "WHERE id = ?", (data, now, key, batch_id, hit[0]))
+                    "UPDATE food SET source = 'yazio', found = 1, data = ?, fetched_at = ?, external_id = ?, import_id = ?, created_by = ? "
+                    "WHERE id = ?", (data, now, key, batch_id, user_id, hit[0]))
                 ids[key] = hit[0]
             else:
                 ids[key] = con.execute(
-                    "INSERT INTO food (code, source, found, data, fetched_at, external_id, import_id) "
-                    "VALUES (?, 'yazio', 1, ?, ?, ?, ?)", (code, data, now, key, batch_id)).lastrowid
+                    "INSERT INTO food (code, source, found, data, fetched_at, external_id, import_id, created_by) "
+                    "VALUES (?, 'yazio', 1, ?, ?, ?, ?, ?)", (code, data, now, key, batch_id, user_id)).lastrowid
             if code:
                 by_code[code] = (ids[key], True)
             created += 1
@@ -2010,7 +2032,7 @@ class Store:
         now = int(time.time())
         with self._connect() as con:
             row = con.execute(
-                "SELECT t.id AS token_id, t.scope, u.id, u.username, u.display_name FROM access_token t "
+                "SELECT t.id AS token_id, t.scope, u.id, u.username, u.display_name, u.household FROM access_token t "
                 "JOIN user u ON u.id = t.user_id WHERE t.hash = ? AND t.revoked_at IS NULL AND u.disabled = 0 "
                 "AND u.username <> '~demo' "  # the demo account has no keys (RESERVED_USERNAME)
                 "AND (t.expires_at IS NULL OR t.expires_at > ?) AND (? = 0 OR u.password_hash IS NOT NULL)",
@@ -2216,7 +2238,7 @@ class Store:
         now = int(time.time())
         with self._connect() as con:
             rows = con.execute(
-                "SELECT u.username, u.display_name, u.created_at, u.disabled, u.local_admin AS admin, "
+                "SELECT u.username, u.display_name, u.created_at, u.disabled, u.local_admin AS admin, (u.household OR u.local_admin) AS household, "
                 "(u.password_hash IS NOT NULL) AS has_password, "
                 "(u.username = '~demo') AS demo, "
                 "(SELECT json_extract(value, '$') FROM user_setting s WHERE s.user_id = u.id AND s.key = 'display_name') AS own_name, "

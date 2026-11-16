@@ -3,6 +3,7 @@
   // (no dragging: works with the keyboard and a screen reader). Every change is saved at once.
   import { api, ApiError } from '../lib/api';
   import { fmt, t } from '../lib/i18n';
+  import { ui } from '../lib/store.svelte';
   import type { RecipeGroup } from '../lib/types';
   import Icon from './Icon.svelte';
 
@@ -13,6 +14,8 @@
   let draft = $state('');
   let confirming = $state<number | null>(null);
   let busy = $state(false);
+  // the order is shared by all: only the household changes it (the server refuses it too)
+  const member = $derived(ui.me?.household !== false);
 
   const why = (err: unknown) => (err instanceof ApiError && err.status === 409 ? t('grpTaken') : t('grpFailed', { reason: err instanceof ApiError ? err.status || err.message : 'error' }));
   async function run(work: () => Promise<unknown>) {
@@ -54,12 +57,14 @@
             </form>
           {:else}
             <div class="line">
-              <span class="t"><strong>{g.name}</strong><small>{g.auto ? `${t('grpAuto')} · ` : ''}{fmt(g.count)}</small></span>
+              <span class="t"><strong>{g.name}</strong><small>{g.auto ? `${t('grpAuto')} · ` : ''}{fmt(g.count)}{g.can_edit === false && !member ? ` · ${t('hhGroupReadOnly')}` : ''}</small></span>
               <span class="tools">
-                <button type="button" class="round" disabled={busy || i === 0} onclick={() => move(i, -1)} aria-label={t('grpUp', { name: g.name })}><Icon name="up" size={18} /></button>
-                <button type="button" class="round" disabled={busy || i === groups.length - 1} onclick={() => move(i, 1)} aria-label={t('grpDown', { name: g.name })}><Icon name="down" size={18} /></button>
+                <button type="button" class="round" disabled={busy || !member || i === 0} title={member ? undefined : t('hhOrderOnly')} onclick={() => move(i, -1)} aria-label={t('grpUp', { name: g.name })}><Icon name="up" size={18} /></button>
+                <button type="button" class="round" disabled={busy || !member || i === groups.length - 1} title={member ? undefined : t('hhOrderOnly')} onclick={() => move(i, 1)} aria-label={t('grpDown', { name: g.name })}><Icon name="down" size={18} /></button>
+                {#if g.can_edit !== false}
                 <button type="button" class="round" onclick={() => begin(g)} aria-label={t('grpRenameAria', { name: g.name })} title={t('grpRename')}><Icon name="edit" size={18} /></button>
                 <button type="button" class="round" onclick={() => { confirming = confirming === g.id ? null : g.id; }} aria-expanded={confirming === g.id} aria-label={`${t('grpDelete')}: ${g.name}`} title={t('grpDelete')}><Icon name="close" size={18} /></button>
+                {/if}
               </span>
             </div>
             {#if confirming === g.id}

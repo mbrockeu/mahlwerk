@@ -40,7 +40,7 @@ def test_status_before_and_after_setup(browser):
         "mode": "local", "setup_required": True, "setup_code_required": False, "authenticated": False, "username": None, "display_name": None, "is_admin": None}
     assert c.get("/api/v1/me").status_code == 401
     r = c.post("/api/v1/auth/setup", json={"username": " Alex ", "display_name": "Alex A.", "password": PW})
-    assert r.status_code == 201 and r.json() == {"username": "alex", "display_name": "Alex A.", "is_admin": True, "disabled": False}
+    assert r.status_code == 201 and r.json() == {"username": "alex", "display_name": "Alex A.", "is_admin": True, "disabled": False, "household": True}
     status = c.get("/api/v1/auth/status").json()
     assert status["setup_required"] is False and status["authenticated"] is True and status["is_admin"] is True
     me = c.get("/api/v1/me").json()
@@ -392,7 +392,7 @@ def test_account_management_is_for_admins_only(browser, admin):
 
 def test_admin_overview_in_local_mode(admin):
     body = admin.get("/api/v1/admin/overview").json()
-    assert body["auth_mode"] == "local" and body["users"] == 1 and body["schema_version"] == 15
+    assert body["auth_mode"] == "local" and body["users"] == 1 and body["schema_version"] == 16
 
 
 def test_create_user_checks(browser, admin):
@@ -593,7 +593,7 @@ def test_version_9_database_gets_accounts_without_losing_data(tmp_path):
     store = Store(path)
 
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 15
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 16
     assert "auth_session" in {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert con.execute("SELECT username, password_hash, disabled, local_admin FROM user").fetchone() == ("me", None, 0, 0)
     con.close()

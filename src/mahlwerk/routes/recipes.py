@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .. import ingredients, nutrients
+from .. import ownership
 from ..auth import current_user
 from ..catalog import Catalog
 from ..db import Store
@@ -14,7 +15,7 @@ from .foods import build_food
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(current_user)])
 
 
-def recipe_out(row: dict) -> Recipe:
+def recipe_out(row: dict, user: dict | None = None) -> Recipe:
     items = []
     for item in row["items"]:
         kcal = scale(item["per_100"], item["amount"])["kcal"]
@@ -25,11 +26,12 @@ def recipe_out(row: dict) -> Recipe:
     known = [i["kcal"] for i in items if i["kcal"] is not None]
     return Recipe(
         id=row["id"],
-        food=build_food(row["food"]),
+        food=build_food(row["food"], user),
         portions=row["portions"],
         total_weight=row["total_weight"],
         items=items,
         kcal_per_portion=r1(sum(known) / row["portions"]) if known else None,
+        can_edit=True if user is None else ownership.can_edit(user, row["food"]["owner"]),
     )
 
 
@@ -89,18 +91,18 @@ def match_ingredients(
 
 
 @router.get("/recipes", response_model=list[Recipe])
-def list_recipes(store: Store = Depends(get_store)) -> list[Recipe]:
-    return [recipe_out(row) for row in store.list_recipes()]
+def list_recipes(user: dict = Depends(current_user), store: Store = Depends(get_store)) -> list[Recipe]:
+    return [recipe_out(row, user) for row in store.list_recipes()]
 
 
 @router.post("/recipes", response_model=Recipe, status_code=201)
 def create_recipe(body: RecipeIn, user: dict = Depends(current_user), store: Store = Depends(get_store)) -> Recipe:
-    return recipe_out(_save(store, user["id"], None, body))
+    return recipe_out(_save(store, user["id"], None, body), user)
 
 
 @router.get("/recipes/{recipe_id}", response_model=Recipe)
-def get_recipe(recipe_id: int, store: Store = Depends(get_store)) -> Recipe:
-    return recipe_out(_existing(store, recipe_id))
+def get_recipe(recipe_id: int, user: dict = Depends(current_user), store: Store = Depends(get_store)) -> Recipe:
+    return recipe_out(_existing(store, recipe_id), user)
 
 
 @router.put("/recipes/{recipe_id}", response_model=Recipe)
@@ -108,14 +110,16 @@ def replace_recipe(
     recipe_id: int, body: RecipeIn, user: dict = Depends(current_user), store: Store = Depends(get_store)
 ) -> Recipe:
     """Recalculates the food; diary entries logged before keep their copy."""
-    _existing(store, recipe_id)
-    return recipe_out(_save(store, user["id"], recipe_id, body))
+    ownership.need_edit(user, _existing(store, recipe_id)["food"]["owner"])
+    return recipe_out(_save(store, user["id"], recipe_id, body), user)
 
 
 @router.delete("/recipes/{recipe_id}", status_code=204)
-def delete_recipe(recipe_id: int, request: Request, store: Store = Depends(get_store)) -> None:
+def delete_recipe(recipe_id: int, request: Request, user: dict = Depends(current_user), store: Store = Depends(get_store)) -> None:
     """Removes the recipe and its food (and its picture); diary entries and templates keep their copies."""
     row = store.get_recipe(recipe_id)
+    if row is not None:
+        ownership.need_edit(user, row["food"]["owner"])
     if row is None or not store.delete_recipe(recipe_id):
         raise HTTPException(404, "unknown recipe")
     request.app.state.images.release_food(row["food"].get("image_hash"))

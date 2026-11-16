@@ -52,6 +52,7 @@ def me(
         display_name_custom=user["name_custom"],
         provider_name=_provider_name(user),
         is_admin=user["is_admin"],
+        household=bool(user.get("household", True)),
         goal=store.get_goal(user["id"]),
         settings=user_settings(store, user["id"]),
         # the demo account has no test-data switch of its own and no connectors (demo_account.py closes them)

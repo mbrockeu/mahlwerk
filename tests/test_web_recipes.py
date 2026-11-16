@@ -855,3 +855,27 @@ def test_n5_the_cache_does_not_serve_a_name_that_was_blocked_later(client, web, 
     assert preview(client).status_code == 200
     monkeypatch.setenv("MAHLWERK_WEB_RECIPES_BLOCKED_HOSTS", "recipes.example.org")
     assert preview(client).status_code == 502
+
+
+def test_guest_owns_what_they_take_over_but_cannot_renew_the_households(tmp_path, monkeypatch, web):
+    monkeypatch.setenv("MAHLWERK_WEB_RECIPES", "1")
+    monkeypatch.setenv("MAHLWERK_AUTH", "proxy")
+    monkeypatch.setenv("MAHLWERK_TRUSTED_PROXIES", "10.0.0.5")
+    monkeypatch.setenv("MAHLWERK_HOUSEHOLD_GROUPS", "eltern")
+    app = create_app(str(tmp_path / "wg.db"), web_transport=httpx.MockTransport(web))
+    web.cache = app.state.web_cache
+    mum = TestClient(app, client=("10.0.0.5", 1), headers={"Remote-User": "mum", "Remote-Groups": "eltern"})
+    guest = TestClient(app, client=("10.0.0.5", 1), headers={"Remote-User": "gast"})
+    other = "https://recipes.example.org/other-salad"
+    serve(web, GOOD)
+    serve(web, GOOD, url=other)
+    household = mum.post("/api/v1/web-recipes", json={"url": PAGE})
+    assert household.status_code == 200 and household.json()["can_edit"] is True
+    assert guest.get(f"/api/v1/foods/{household.json()['id']}").json()["can_edit"] is False
+    assert guest.post("/api/v1/web-recipes", json={"url": PAGE}).status_code == 403  # would renew the household's recipe
+    assert guest.post(f"/api/v1/web-recipes/{household.json()['id']}/reload").status_code == 403
+    mine = guest.post("/api/v1/web-recipes", json={"url": other})
+    assert mine.status_code == 200 and mine.json()["can_edit"] is True
+    assert guest.post(f"/api/v1/web-recipes/{mine.json()['id']}/reload").status_code == 200
+    group = mum.post("/api/v1/recipe-groups", json={"name": "Salads"}).json()
+    assert guest.post("/api/v1/web-recipes", json={"url": other, "group_id": group["id"]}).status_code == 403  # a group of the household

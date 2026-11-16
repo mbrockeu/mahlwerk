@@ -471,7 +471,7 @@ def test_version_13_database_gets_the_picture_columns_without_losing_data(tmp_pa
     con.close()
     store = Store(path)
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 15
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 16
     columns = {r[1] for r in con.execute("PRAGMA table_info(food)")}
     assert {"image_hash", "image_origin", "image_at", "image_url"} <= columns
     assert "food_image_hash" in {r[0] for r in con.execute("SELECT name FROM sqlite_master")}

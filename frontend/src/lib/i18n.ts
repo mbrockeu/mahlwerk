@@ -467,6 +467,7 @@ const en = {
   admAuthLocal: 'accounts with password', admAuthOidc: 'identity provider (OpenID Connect)',
 
   // wide screens: product detail pane, weight facts
+  hhReadOnly: 'This belongs to the household. As a guest you can look at it and log it, but not change it.', hhGroupReadOnly: 'Made by the household: you cannot change this group.', hhOrderOnly: 'Only the household can reorder the groups', hhGuestTag: 'Guest', usrMakeGuest: 'Make guest', usrMakeMember: 'Make household member', usrHouseholdDone: '{name} updated',
   detailEdit: 'Edit', detailPer100: 'Nutrition per 100 {unit}', per100Unit: 'per 100 {unit}', detailMore: 'More nutrients',
   detailPick: 'Pick a product to see its values.', detailPickRecipe: 'Pick a recipe to see its values.',
   wChange: 'Change', wDays: '{n} days', wLowest: 'Lowest', wHighest: 'Highest', wEntriesCount: 'Entries', wRecent: 'Recent entries',
@@ -1123,6 +1124,7 @@ const de: Record<Key, string> = {
   admAuthLocal: 'Konten mit Passwort', admAuthOidc: 'Identitätsanbieter (OpenID Connect)',
 
   // große Bildschirme: Detailfläche der Produkte, Gewichts-Kennzahlen
+  hhReadOnly: 'Das gehört dem Haushalt. Als Gast kannst du es ansehen und ins Tagebuch eintragen, aber nicht ändern.', hhGroupReadOnly: 'Vom Haushalt angelegt: Diese Gruppe kannst du nicht ändern.', hhOrderOnly: 'Die Reihenfolge ändert nur der Haushalt', hhGuestTag: 'Gast', usrMakeGuest: 'Zum Gast machen', usrMakeMember: 'Zum Haushalt', usrHouseholdDone: '{name} geändert',
   detailEdit: 'Bearbeiten', detailPer100: 'Nährwerte je 100 {unit}', per100Unit: 'je 100 {unit}', detailMore: 'Weitere Nährstoffe',
   detailPick: 'Wähle ein Produkt, um seine Werte zu sehen.', detailPickRecipe: 'Wähle ein Rezept, um seine Werte zu sehen.',
   wChange: 'Veränderung', wDays: '{n} Tage', wLowest: 'Niedrigster', wHighest: 'Höchster', wEntriesCount: 'Einträge', wRecent: 'Letzte Einträge',

@@ -71,8 +71,8 @@ User names: 1 to 40 characters `a-z 0-9 . _ -`, starting with a letter or digit,
 | `POST /auth/login` | `{username, password}` | `200` like setup + cookie; `401` wrong password, unknown name or blocked account (one message, same timing); `429` brake |
 | `POST /auth/logout` | – | `204`, session ended, cookie deleted |
 | `POST /auth/password` | `{current_password, new_password}` | `204`; `403` wrong current password; all other sessions of the user end (access keys stay) |
-| `POST /admin/users` | `{username, display_name?, password, is_admin?}` | `201 {username, display_name, is_admin}`; `409` name taken |
-| `PATCH /admin/users/{username}` | `{disabled?, is_admin?}` | `200 {username, display_name, is_admin, disabled}`; blocking ends the sessions; `409` if it would leave no active admin |
+| `POST /admin/users` | `{username, display_name?, password, is_admin?, household?}` | `201 {username, display_name, is_admin, household}`; `409` name taken; `household` (default true) false makes a guest, see [Guests and the household](#guests-and-the-household) |
+| `PATCH /admin/users/{username}` | `{disabled?, is_admin?, household?}` | `200 {username, display_name, is_admin, disabled, household}`; blocking ends the sessions; `409` if it would leave no active admin |
 | `POST /admin/users/{username}/password` | `{password}` | `204`, sets a new initial password, ends that user's sessions and revokes their access keys; `409` for the own account |
 
 The `admin/users` routes need an admin session (no token). Admin in `local` mode is a stored flag per account; in `proxy`
@@ -95,7 +95,7 @@ Only with `MAHLWERK_AUTH=oidc` (schema version 11); in the other modes these end
 | `GET /auth/oidc/login?next=` | `302` to the provider's authorization endpoint (code flow, PKCE S256, `state`, `nonce`, the configured redirect URI and scopes). Sets the cookie `mahlwerk_oidc` (`__Host-mahlwerk_oidc` when Secure; `HttpOnly`, `SameSite=Lax`, `Path=/`, 10 minutes) that holds state, nonce, PKCE verifier, target and expiry, signed with HMAC-SHA256 (nothing is kept on the server), and binds the pending sign-in to this browser. `429` with `Retry-After` beyond 30 requests per address and minute (login and callback each). `next` is an optional path on this site to open afterwards (anything else, an absolute URL, `//host` or a path below `/api`, is ignored). `302` back to the start page with `?auth_error=failed` when the provider cannot be reached or its discovery document is not acceptable. |
 | `GET /auth/oidc/callback?code=&state=` | The provider sends the browser here. Checks the cookie and `state` (used once), swaps the code for the tokens (with the PKCE verifier), checks the ID token, maps the identity to a user, starts the session (cookie `mahlwerk_session`) and answers `303` to `next` or the start page. Every failure is a `303` to the start page with `?auth_error=<word>`, the cookie `mahlwerk_oidc` deleted and no session; the reason goes to the server log without tokens or claim values. |
 | `POST /auth/logout` | `204`, the session ended, cookie deleted (as in `local`). Nothing is sent to the provider. |
-| `PATCH /admin/users/{username}` | `{disabled}`: block or unblock (a block ends sessions). `is_admin` is refused with `409` (the right comes from the provider's groups at each sign-in); blocking yourself is refused with `409`. |
+| `PATCH /admin/users/{username}` | `{disabled}`: block or unblock (a block ends sessions). `is_admin` and `household` are refused with `409` (they come from the provider's groups at each sign-in); blocking yourself is refused with `409`. |
 
 `auth_error` words: `denied` (the provider reported an error, e.g. the person declined), `failed` (anything wrong with the
 provider's answers or the checks), `expired` (no pending sign-in for this browser: older than 10 minutes, used before, or the
@@ -164,7 +164,7 @@ Editing or deleting the food later does not change past days; deleting sets `foo
 | Method | Path | Body | Returns | Notes |
 | --- | --- | --- | --- | --- |
 | GET | `/healthz` | – | `{status, version}` | no auth |
-| GET | `/api/v1/me` | – | `{username, display_name, display_name_custom:bool, provider_name:string\|null, goal:Goal\|null, settings:{playful:bool, fasting:{enabled:bool, target_hours:number}, activity:{add_to_goal:bool}, tour_seen:bool, suggestions:bool, home:HomeCard[]\|null, water_glasses:int[]\|null}, demo:{available:bool, entries:int, weights:int, water:int, activity:int, workouts:int}, demo_account:{can_switch:bool, viewing:bool, real_username:string\|null, real_display_name:string\|null}, catalog:{products:int, updated_at:int\|null, bls:{products:int, updated_at:int\|null}}}` | `demo.available` is true when the server runs with `MAHLWERK_DEMO_DATA`; the counts are this user's demo rows. `catalog` is the size and build time (unix seconds) of the Open Food Facts catalogue file (`products`, `updated_at`) and of the basic foods file (`bls`), `0` and `null` without a file |
+| GET | `/api/v1/me` | – | `{username, display_name, display_name_custom:bool, provider_name:string\|null, is_admin:bool, household:bool, goal:Goal\|null, settings:{playful:bool, fasting:{enabled:bool, target_hours:number}, activity:{add_to_goal:bool}, tour_seen:bool, suggestions:bool, home:HomeCard[]\|null, water_glasses:int[]\|null}, demo:{available:bool, entries:int, weights:int, water:int, activity:int, workouts:int}, demo_account:{can_switch:bool, viewing:bool, real_username:string\|null, real_display_name:string\|null}, catalog:{products:int, updated_at:int\|null, bls:{products:int, updated_at:int\|null}}}` | `demo.available` is true when the server runs with `MAHLWERK_DEMO_DATA`; the counts are this user's demo rows. `catalog` is the size and build time (unix seconds) of the Open Food Facts catalogue file (`products`, `updated_at`) and of the basic foods file (`bls`), `0` and `null` without a file |
 | PATCH | `/api/v1/me` | `{display_name: string\|null}` | `Me` (same as GET) | Chooses the display name: trimmed, blanks collapsed, 1-60 characters, no control characters or line breaks (Unicode and emojis are fine), else `422`. Empty or `null` goes back to the provider's name (proxy header, OIDC claim, local account) or the user name. The chosen name wins in every sign-in mode and is **not** overwritten by proxy headers or later OIDC sign-ins; it shows in `/me`, `/auth/status`, the login answer and `/admin/users`. `username` never changes. Stored as the user setting `display_name` (no schema change). Needs a write token like `PATCH /me/settings` (`read` scope: `403`) |
 | GET | `/api/v1/me/imports` | – | ImportBatch[] | this user's import batches, newest first, see Importing from Yazio |
 | DELETE | `/api/v1/me/imports/{id}` | – | `{entries, weights, water, activity, workouts, foods:int, goal:bool}` | takes back one of the user's own batches (404 for an unknown or foreign one); the numbers are what was removed |
@@ -322,7 +322,8 @@ Ingredients are stored as snapshots of the food at save time (`recipe_item`, in 
   copies and templates stay (their `food_id` becomes `null`). Deleting an ingredient food keeps the recipe as it is.
 - A recipe food cannot be changed with `PUT /foods/{id}` or `PUT /foods/barcode/{code}`, nor deleted with
   `DELETE /foods/{id}`: all answer `409`. It shows up in `GET /foods`, `GET /foods/recent`, and as `source: "recipe"`.
-- Recipes belong to the household like foods do: every user can see, change and delete them. `created_by` is stored.
+- Recipes belong to the household: every user can see them; who may change and delete them is decided by the rules in [Guests and the household](#guests-and-the-household). `created_by` is stored; `Recipe.can_edit` says whether the caller may.
+
 
 ### Calculating from an ingredient list
 
@@ -1086,3 +1087,48 @@ the portion, so logging `amount: 100` is one portion and 50 is half. Energy come
 sodium x 2.5; sodium also goes to `extra`. Values in unknown units or implausible sizes are left out (unknown, not zero);
 a recipe without an energy value, or without a block for one portion, is refused. `name` is the recipe name, `brand` is
 `Cookidoo`. Editing such a food in the product editor turns it into an `own` food and is limited to per-100 g ranges.
+
+## Guests and the household
+
+Foods, recipes and recipe groups are shared by everybody on the server. Since schema version 16 there are two kinds of people:
+
+- **Household members** (and admins) change and delete everything, as always.
+- **Guests** read everything shared, can create their own foods, recipes and groups, and change or delete **only what they made**.
+  Everything else answers `403` with a reason (`this belongs to the household: ...` or `this was made by somebody else: ...`). The
+  user's diary, templates, water, fasting, goals, profile, access keys and webhooks are per person and not affected.
+
+Who is a guest (`GET /me` has `household: bool`; an admin is always `true`):
+
+| Mode | How it is decided |
+|---|---|
+| `single` | always household |
+| `proxy` | at every request from `Remote-Groups`: household when a group is in `MAHLWERK_HOUSEHOLD_GROUPS` (or is the admin group); stored in `user.household` |
+| `oidc` | at every sign-in from the groups claim, the same way |
+| `local` | stored per user; an admin sets it in the admin area (`household` on `POST` / `PATCH /admin/users`) |
+| any, access key | the stored value of the owner (a key never turns a guest into a household member) |
+
+`MAHLWERK_HOUSEHOLD_GROUPS` unset: everybody is household and nothing changes (proxy and oidc). The demo view behaves as before.
+
+Owner: `food.created_by` (new in version 16; `NULL` = the household), `recipe.created_by`, `recipe_group.created_by`. The owner of a
+recipe food is the recipe's author. Taking over from the catalogue, Open Food Facts, a web page or Cookidoo, an own barcode entry and
+a Yazio import set `created_by` to the person who did it (a remembered miss for an unknown barcode has no owner). `Food.can_edit`,
+`Recipe.can_edit` and `RecipeGroup.can_edit` tell the caller whether the rules allow changing it (an absent field means yes).
+
+| Route | Household | Guest |
+|---|---|---|
+| `POST /foods`, `POST /recipes`, `POST /recipe-groups`, `POST /catalog/adopt`, `GET /foods/barcode/{code}` (stores what it fetches) | yes | yes, owner is the guest |
+| `PUT` / `DELETE /foods/{id}`, `PUT` / `DELETE /foods/{id}/piece` | yes | only own |
+| `PUT /foods/barcode/{code}` | yes | only while the barcode has no entry (a remembered miss does not count) or the entry is the guest's own; an entry of the household, also one fetched from Open Food Facts, is never replaced (`403`) |
+| `PUT` / `DELETE /foods/{id}/image`, `POST /foods/{id}/image/restore` | yes | only own recipes |
+| `PUT` / `DELETE /recipes/{id}` | yes | only own |
+| `PUT` / `DELETE /recipe-groups/{id}`, `POST /recipe-groups/{id}/members[/remove]` | yes | only own groups (members may be any recipe) |
+| `PUT /recipe-groups/foods/{food_id}` | yes | may change the membership in own groups only; the list must keep the recipe in all other groups it is in and add it to none, else `403` |
+| `PUT /recipe-groups/order` | yes | `403` (the order is shared) |
+| Deleting a group made from a Cookidoo collection (remembered in `recipe_group_dismissed`) | yes | `403` |
+| `POST /web-recipes`, `POST /web-recipes/{id}/reload` | yes | new recipes are the guest's own; renewing a recipe of the household is `403`; `group_id` must be an own group |
+| `POST /cookidoo/adopt` | yes | needs an own Cookidoo account; new recipes are the guest's own, no collection group is made; renewing a recipe of the household is `403` |
+| `POST /cookidoo/import`, `POST /cookidoo/images` | yes | `403` |
+| `GET /cookidoo/status`, `/week`, `/collections`, `/recipe` | household account, or the own one | **only an own account**: the shared household account is never used for a guest (`409` "not set up for you") |
+| Own accounts `/me/cookidoo-account`, admin routes | as before | as before (admin routes: admin only) |
+
+A person who is moved from household to guest keeps the right to change what they made earlier (their `created_by`).

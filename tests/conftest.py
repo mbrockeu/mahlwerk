@@ -63,6 +63,7 @@ def clean_env(monkeypatch, tmp_path):
         "MAHLWERK_DB",
         "MAHLWERK_PROXY_GROUPS_HEADER",
         "MAHLWERK_ADMIN_GROUP",
+        "MAHLWERK_HOUSEHOLD_GROUPS",
         "MAHLWERK_TOKENS",
         "MAHLWERK_WEBHOOKS",
         "MAHLWERK_WEBHOOK_HOSTS",
@@ -175,8 +176,11 @@ def duo(monkeypatch, tmp_path):
     return tuple(TestClient(app, client=("10.0.0.5", 1), headers={"Remote-User": name}) for name in ("ann", "ben"))
 
 
-# What version 15 added (the piece of a food), to take a fresh database back to version 14.
-DROP_V15 = "ALTER TABLE food DROP COLUMN piece_label; ALTER TABLE food DROP COLUMN piece_grams;"
+# What version 16 added (household flag, owner of a food), to take a fresh database back to version 15.
+DROP_V16 = "ALTER TABLE food DROP COLUMN created_by; ALTER TABLE user DROP COLUMN household;"
+
+# What version 15 added (the piece of a food), to take a fresh database back to version 14 (after DROP_V16).
+DROP_V15 = DROP_V16 + "ALTER TABLE food DROP COLUMN piece_label; ALTER TABLE food DROP COLUMN piece_grams;"
 
 # What version 14 added (recipe pictures), to take a fresh database back to version 13 (after DROP_V15).
 DROP_V14 = DROP_V15 + ("DROP INDEX food_image_hash; ALTER TABLE food DROP COLUMN image_hash; ALTER TABLE food DROP COLUMN image_origin; "

@@ -97,6 +97,7 @@ class OidcConfig:
     name_claim: str = "name"
     groups_claim: str = "groups"
     admin_group: str = "admin"
+    household_groups: frozenset | None = None  # see AuthConfig.household_groups
     redirect_url: str = ""
     home_path: str = "/"
     button_label: str = ""
@@ -104,7 +105,7 @@ class OidcConfig:
     allow_http: bool = False
 
     @classmethod
-    def from_env(cls, admin_group: str) -> "OidcConfig":
+    def from_env(cls, admin_group: str, household_groups: frozenset | None = None) -> "OidcConfig":
         """Read and check the settings; ValueError (naming the variable, never a value) if something is missing or wrong,
         so that a half configured server does not start."""
         env = os.environ.get
@@ -146,7 +147,7 @@ class OidcConfig:
             username_claim=env("MAHLWERK_OIDC_USERNAME_CLAIM", "").strip() or "preferred_username",
             name_claim=env("MAHLWERK_OIDC_NAME_CLAIM", "").strip() or "name",
             groups_claim=env("MAHLWERK_OIDC_GROUPS_CLAIM", "").strip() or "groups",
-            admin_group=admin_group, redirect_url=redirect, home_path=home, button_label=label,
+            admin_group=admin_group, household_groups=household_groups, redirect_url=redirect, home_path=home, button_label=label,
             link_existing=_flag("MAHLWERK_OIDC_LINK_EXISTING"), allow_http=allow_http,
         )
 
@@ -490,7 +491,8 @@ class OidcClient:
             raise OidcError("name", "no usable user name in the claims")
         display = clean_display(claims.get(config.name_claim), username)
         return {"issuer": config.issuer, "sub": claims["sub"], "username": username, "display_name": display,
-                "admin": config.admin_group in groups_of(claims.get(config.groups_claim))}
+                "admin": config.admin_group in groups_of(claims.get(config.groups_claim)),
+                "household": config.household_groups is None or bool(config.household_groups & set(groups_of(claims.get(config.groups_claim))))}
 
 
 def new_login() -> tuple[str, str, str, str]:

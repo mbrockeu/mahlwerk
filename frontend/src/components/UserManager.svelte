@@ -44,7 +44,7 @@
     } catch (err) { error = fail(err); } finally { busy = ''; }
   }
 
-  async function patch(u: AdminUser, body: { disabled?: boolean; is_admin?: boolean }, done: 'usrBlockedDone' | 'usrUnblockedDone' | 'usrAdminDone') {
+  async function patch(u: AdminUser, body: { disabled?: boolean; is_admin?: boolean; household?: boolean }, done: 'usrBlockedDone' | 'usrUnblockedDone' | 'usrAdminDone' | 'usrHouseholdDone') {
     busy = u.username;
     error = '';
     try {
@@ -85,6 +85,7 @@
           <small class="mono">{u.username}</small>
           <span class="tags">
             {#if u.admin}<span class="tag lime">{t('usrAdmin')}</span>{/if}
+            {#if u.household === false}<span class="tag">{t('hhGuestTag')}</span>{/if}
             {#if u.disabled}<span class="tag">{t('usrBlockedTag')}</span>{/if}
             {#if oidc}{#if !u.sso}<span class="tag">{t('usrNotSignedIn')}</span>{/if}
             {:else if !u.has_password}<span class="tag">{t('usrNoPassword')}</span>{/if}
@@ -97,6 +98,7 @@
             <button type="button" class="btn small danger" disabled={busy === u.username || (oidc && u.username === me)} onclick={() => block(u)}>{confirmBlock === u.username ? t('usrBlockSure') : t('usrBlock')}</button>
           {/if}
           {#if !oidc}<button type="button" class="btn small" disabled={busy === u.username} onclick={() => patch(u, { is_admin: !u.admin }, 'usrAdminDone')}>{u.admin ? t('usrRemoveAdmin') : t('usrMakeAdmin')}</button>{/if}
+          {#if auth.mode === 'local' && !u.admin && !u.demo}<button type="button" class="btn small" disabled={busy === u.username} onclick={() => patch(u, { household: u.household === false }, 'usrHouseholdDone')}>{u.household === false ? t('usrMakeMember') : t('usrMakeGuest')}</button>{/if}
           {#if !oidc && u.username !== me}
             <button type="button" class="btn small" aria-expanded={resetFor === u.username} onclick={() => { resetFor = resetFor === u.username ? '' : u.username; resetPassword = ''; }}>{t('usrReset')}</button>
           {/if}

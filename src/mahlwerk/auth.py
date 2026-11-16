@@ -66,6 +66,9 @@ class AuthConfig:
     name_header: str = "Remote-Name"
     groups_header: str = "Remote-Groups"
     admin_group: str = "admin"
+    # Groups whose members belong to the household (proxy and oidc mode); the others are guests. None = everybody is household
+    # (an installation that does not set MAHLWERK_HOUSEHOLD_GROUPS behaves as before). The admin group always counts.
+    household_groups: frozenset | None = None
     trusted: frozenset = frozenset()
     cookie_secure: bool = False
     # Host names this server answers to (None = any). Against DNS rebinding: a page on an attacker's name that
@@ -87,10 +90,12 @@ class AuthConfig:
             if part.strip()
         )
         admin_group = os.environ.get("MAHLWERK_ADMIN_GROUP", "admin").strip() or "admin"
+        raw_household = [part.strip() for part in os.environ.get("MAHLWERK_HOUSEHOLD_GROUPS", "").split(",") if part.strip()]
+        household_groups = frozenset(raw_household) | {admin_group} if raw_household else None
         single_user = os.environ.get("MAHLWERK_SINGLE_USER", "me")
         if mode == "single" and is_reserved_name(single_user):
             raise ValueError(f"MAHLWERK_SINGLE_USER must not be {RESERVED_USERNAME!r}: that name is reserved for the demo account")
-        oidc = OidcConfig.from_env(admin_group) if mode == "oidc" else None
+        oidc = OidcConfig.from_env(admin_group, household_groups) if mode == "oidc" else None
         oidc_mode = mode == "oidc"
         days = _days("MAHLWERK_SESSION_DAYS", OIDC_SESSION_DAYS if oidc_mode else SESSION_DAYS)
         max_days = max(days, _days("MAHLWERK_SESSION_MAX_DAYS", OIDC_SESSION_MAX_DAYS if oidc_mode else SESSION_MAX_AGE // 86400))
@@ -105,6 +110,7 @@ class AuthConfig:
             name_header=os.environ.get("MAHLWERK_PROXY_NAME_HEADER", "Remote-Name"),
             groups_header=os.environ.get("MAHLWERK_PROXY_GROUPS_HEADER", "Remote-Groups"),
             admin_group=admin_group,
+            household_groups=household_groups,
             trusted=trusted,
             # behind a TLS proxy the app itself only sees HTTP: an https public address of the oidc mode says "secure" too
             cookie_secure=os.environ.get("MAHLWERK_COOKIE_SECURE", "").strip().lower() in ("1", "true", "yes")
@@ -161,6 +167,22 @@ def _bearer_token(request: Request) -> str | None:
     return None
 
 
+def is_household_group(config: AuthConfig, groups) -> bool:
+    """Whether people in these groups belong to the household (everybody does while MAHLWERK_HOUSEHOLD_GROUPS is not set)."""
+    return config.household_groups is None or bool(config.household_groups & set(groups))
+
+
+def effective_household(config: AuthConfig, stored: bool, admin: bool = False) -> bool:
+    """The household flag of a user whose value comes from the database (access token, session). An admin is always household. In the
+    local mode the stored flag (an admin sets it per user) decides; in the other modes, while no household groups are configured,
+    everybody is household whatever an earlier configuration stored."""
+    if admin or config.mode == "single":
+        return True
+    if config.mode != "local" and config.household_groups is None:
+        return True
+    return bool(stored)
+
+
 def _token_user(request: Request, token: str) -> dict:
     if not request.app.state.features.tokens:
         raise HTTPException(401, "access tokens are switched off")
@@ -173,14 +195,19 @@ def _token_user(request: Request, token: str) -> dict:
         raise HTTPException(403, "this access token may only read")
     store.touch_token(row["token_id"])
     # a token never makes its owner an admin and cannot manage tokens or webhooks (see `session_user`)
-    return {"id": row["id"], "username": row["username"], "display_name": row["display_name"], "is_admin": False, "via_token": True}
+    return {"id": row["id"], "username": row["username"], "display_name": row["display_name"], "is_admin": False, "via_token": True,
+            "household": effective_household(request.app.state.auth, bool(row["household"]))}
+
+
+def _groups(request: Request, config: AuthConfig) -> set[str]:
+    raw = _header_text(request.headers.get(config.groups_header, ""))
+    return {part.strip() for part in raw.split(",") if part.strip()}
 
 
 def _is_admin(request: Request, config: AuthConfig) -> bool:
     if config.mode == "single":
         return True
-    raw = _header_text(request.headers.get(config.groups_header, ""))
-    return config.admin_group in {part.strip() for part in raw.split(",") if part.strip()}
+    return config.admin_group in _groups(request, config)
 
 
 def client_ip(request: Request, config: AuthConfig) -> str:
@@ -242,7 +269,8 @@ def _session_user(request: Request, response: Response) -> dict:
     if row.pop("renewed"):
         set_session_cookie(request, response, token)  # keep the cookie as long-lived as the sliding session
     return {"id": row["id"], "username": row["username"], "display_name": row["display_name"],
-            "is_admin": row["local_admin"], "via_token": False, "session_hash": hash_token(token)}
+            "is_admin": row["local_admin"], "via_token": False, "session_hash": hash_token(token),
+            "household": effective_household(config, row["household"], row["local_admin"])}
 
 
 def demo_cookie_name(request: Request) -> str:
@@ -295,7 +323,7 @@ def _demo_view(request: Request, response: Response, real: dict) -> dict:
         clear_demo_cookie(request, response)
         return real
     return {"id": demo_row["id"], "username": demo_row["username"], "display_name": demo_row["display_name"], "is_admin": False,
-            "via_token": False, "is_demo": True, "session_hash": real.get("session_hash")}
+            "via_token": False, "is_demo": True, "session_hash": real.get("session_hash"), "household": True}
 
 
 def effective_name(store, user_id: int, provider_name: str, username: str) -> str:
@@ -349,8 +377,10 @@ def _identity(request: Request, response: Response) -> dict:
         display = _header_text(request.headers.get(config.name_header, "")).strip()[:200] or username
     if is_reserved_name(username):  # nobody is the demo account, whatever the proxy or the configuration says
         raise HTTPException(403, "this user name is reserved")
-    user = request.app.state.store.get_or_create_user(username, display)
-    return {**user, "is_admin": _is_admin(request, config), "via_token": False}
+    admin = _is_admin(request, config)
+    household = config.mode == "single" or admin or is_household_group(config, _groups(request, config))
+    user = request.app.state.store.get_or_create_user(username, display, household)  # the flag is renewed with every request
+    return {**user, "is_admin": admin, "via_token": False, "household": household}
 
 
 def real_user(request: Request, response: Response) -> dict:

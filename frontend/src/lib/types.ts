@@ -69,6 +69,8 @@ export interface Food {
   cached: boolean;
   stale: boolean;
   fetched_at: number;
+  /** The caller may change or delete this food (a guest only what they made themself; absent: yes). */
+  can_edit?: boolean;
   image?: FoodImage | null;
   /** A person took the provider's picture away (it can be restored while the picture switch of the connector is on). */
   image_removed?: boolean;
@@ -266,6 +268,8 @@ export interface Me {
   provider_name?: string | null;
   /** May open the admin area (decided by the server for each request). */
   is_admin?: boolean;
+  /** Member of the household (false: a guest, who changes only the foods, recipes and groups they made themself; absent: yes). */
+  household?: boolean;
   goal: Goal | null;
   settings: Settings;
   demo: { available: boolean; entries: number; weights: number; water: number; activity?: number; workouts?: number };
@@ -531,6 +535,8 @@ export interface Recipe {
   total_weight: number | null;
   items: RecipeItem[];
   kcal_per_portion: number | null;
+  /** The caller may change or delete this recipe (absent: yes). */
+  can_edit?: boolean;
 }
 
 export interface RecipeIn {
@@ -665,6 +671,8 @@ export interface AdminUser {
   /** Local sign-in mode only (false in the other modes). */
   disabled: boolean;
   admin: boolean;
+  /** Member of the household (false: a guest). Local mode: set here; proxy and oidc: as of the last request or sign-in. */
+  household?: boolean;
   has_password: boolean;
   /** oidc mode only: signed in through the provider at least once. */
   sso?: boolean;
@@ -773,7 +781,7 @@ export interface CookidooBulkRun {
 }
 
 /** A group of recipes (own and Cookidoo recipes alike); `food_ids` are food ids (an own recipe's is `Recipe.food.id`). */
-export interface RecipeGroup { id: number; name: string; position: number; auto: boolean; count: number; food_ids: number[] }
+export interface RecipeGroup { id: number; name: string; position: number; auto: boolean; count: number; food_ids: number[]; /** The caller may rename, delete and fill it (absent: yes). */ can_edit?: boolean }
 
 /** A Cookidoo account as the server describes it: never the password, the e-mail address masked. */
 export interface CookidooAccount {

@@ -384,6 +384,7 @@ All settings are environment variables (see `.env.example`). The Docker image se
 | `MAHLWERK_PROXY_NAME_HEADER` | `Remote-Name` | Header carrying the display name. |
 | `MAHLWERK_PROXY_GROUPS_HEADER` | `Remote-Groups` | Header with the user's groups, comma separated (`proxy` mode). |
 | `MAHLWERK_ADMIN_GROUP` | `admin` | Group whose members are admins (`proxy` and `oidc` mode). In `single` mode the one user is an admin. |
+| `MAHLWERK_HOUSEHOLD_GROUPS` | empty | Comma-separated groups whose members belong to the **household** (`proxy` and `oidc` mode; the admin group always does). Everybody else is a **guest**: guests read all shared foods, recipes and groups and make their own, but change or delete only what they made themselves (the API answers `403`); the Cookidoo account of the household is not available to them (only an own account). Empty: everybody is household, as before. Read at every request (`proxy`) or sign-in (`oidc`); in `local` mode an admin switches it per user in the admin area. See [docs/api-v1.md](docs/api-v1.md#guests-and-the-household). |
 | `MAHLWERK_TOKENS` | on | `off` switches personal access tokens off (fixed, the admin area shows it as such). |
 | `MAHLWERK_WEBHOOKS` | on | `off` switches outgoing webhooks off. |
 | `MAHLWERK_WEBHOOK_HOSTS` | empty | Comma-separated hosts webhooks may target. Empty: any host with a public address. A listed host is the only kind allowed and may be internal (Home Assistant in the LAN). |

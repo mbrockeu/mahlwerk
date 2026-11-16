@@ -31,7 +31,7 @@
   <p class="note">{t('grpOfRecipeHint')}</p>
   <div class="chips">
     {#each groups as g (g.id)}
-      <button type="button" class="chip" class:on={mine.includes(g.id)} aria-pressed={mine.includes(g.id)} disabled={busy} onclick={() => toggle(g)}>
+      <button type="button" class="chip" class:on={mine.includes(g.id)} aria-pressed={mine.includes(g.id)} disabled={busy || g.can_edit === false} onclick={() => toggle(g)}>
         {#if mine.includes(g.id)}<Icon name="check" size={16} stroke={2.6} />{/if}{g.name}
       </button>
     {/each}

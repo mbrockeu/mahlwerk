@@ -13,7 +13,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 
-from .. import imagestore
+from .. import imagestore, ownership
 from ..auth import current_user
 from ..db import Store
 from ..deps import get_store
@@ -49,12 +49,14 @@ def get_image(digest: str, size: str, request: Request, store: Store = Depends(g
     return Response(content=body, media_type="image/webp", headers=headers)
 
 
-def _recipe_food(store: Store, food_id: int) -> dict:
+def _recipe_food(store: Store, food_id: int, user: dict) -> dict:
+    """The recipe a picture is changed on: it must exist, be a recipe and be the caller's to change."""
     row = store.get_food(food_id)
     if row is None or not row["found"]:
         raise HTTPException(404, "unknown food")
     if row["source"] not in PICTURE_SOURCES:
         raise HTTPException(409, "only recipes (own, from Cookidoo or from a web page) can have a picture")
+    ownership.need_edit(user, row["owner"])
     return row
 
 
@@ -63,7 +65,7 @@ async def set_own_photo(food_id: int, request: Request, store: Store = Depends(g
     """Set an own photo for a recipe: the picture file as the request body (JPEG, PNG or WebP, at most 8 MB; the interface shrinks
     it first). It replaces any picture the recipe had and is never replaced by a reload from the provider. Always possible, whatever
     the picture switches of the connectors say."""
-    _recipe_food(store, food_id)
+    _recipe_food(store, food_id, user)
     data = await request.body()  # the body limit is enforced while the bytes arrive (security.py)
     if not data:
         raise HTTPException(422, "empty body")
@@ -80,26 +82,26 @@ async def set_own_photo(food_id: int, request: Request, store: Store = Depends(g
         raise HTTPException(507, "the picture could not be written (disk full or no permission)") from None
     except LookupError:
         raise HTTPException(404, "unknown food") from None
-    return build_food(store.get_food(food_id))
+    return build_food(store.get_food(food_id), user)
 
 
 @router.delete("/foods/{food_id}/image", response_model=Food)
-def remove_picture(food_id: int, request: Request, store: Store = Depends(get_store)) -> Food:
+def remove_picture(food_id: int, request: Request, store: Store = Depends(get_store), user: dict = Depends(current_user)) -> Food:
     """Take the picture of a recipe away. For a picture taken over from a provider this is remembered, so a reload does not bring it back."""
-    _recipe_food(store, food_id)
+    _recipe_food(store, food_id, user)
     request.app.state.images.remove(food_id, mark=True)
-    return build_food(store.get_food(food_id))
+    return build_food(store.get_food(food_id), user)
 
 
 
 @router.post("/foods/{food_id}/image/restore", response_model=Food)
-def restore_picture(food_id: int, request: Request, store: Store = Depends(get_store)) -> Food:
+def restore_picture(food_id: int, request: Request, store: Store = Depends(get_store), user: dict = Depends(current_user)) -> Food:
     """Lift the "taken away" marker of a provider's picture, so that the next reload of the recipe fetches it again (the caller reloads: the
     interface does it at once). Only while the picture switch of the recipe's connector is on; **409** otherwise or when nothing was taken away."""
-    row = _recipe_food(store, food_id)
+    row = _recipe_food(store, food_id, user)
     features = request.app.state.features
     if not ((row["source"] == "cookidoo" and features.cookidoo_images) or (row["source"] == "web" and features.web_images)):
         raise HTTPException(409, "storing recipe pictures is switched off for this recipe's source (admin area)")
     if not request.app.state.images.restore(food_id):
         raise HTTPException(409, "the picture of this recipe was not taken away")
-    return build_food(store.get_food(food_id))
+    return build_food(store.get_food(food_id), user)

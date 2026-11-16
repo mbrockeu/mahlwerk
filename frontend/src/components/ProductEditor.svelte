@@ -41,6 +41,8 @@
   let confirming = $state(false);
   let nameInput: HTMLInputElement;
 
+  // a guest looks at what the household owns but cannot change it (the server refuses it too)
+  const locked = food?.can_edit === false;
   const close = () => { ui.editor = null; };
   const failMsg = (err: unknown) => t('saveFailed', { reason: err instanceof ApiError ? err.status || err.message : 'error' });
 
@@ -183,10 +185,11 @@
       <details><summary>{t('rawText')}</summary><pre>{rawText}</pre></details>
     {/if}
 
-    <button class="btn primary" disabled={saving}>{t('save')}</button>
+    {#if locked}<p class="note warn" role="status">{t('hhReadOnly')}</p>{/if}
+    <button class="btn primary" disabled={saving || locked}>{t('save')}</button>
     <button type="button" class="btn" onclick={close}>{t('cancel')}</button>
     {#if food?.id}
-      <button type="button" class="btn danger" onclick={remove} disabled={saving}>{confirming ? t('confirmRemove') : t('remove')}</button>
+      <button type="button" class="btn danger" onclick={remove} disabled={saving || locked}>{confirming ? t('confirmRemove') : t('remove')}</button>
     {/if}
     <p class="note">{t('ownHint')}</p>
   </form>

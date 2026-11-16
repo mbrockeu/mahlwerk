@@ -87,6 +87,7 @@ class Food(BaseModel):
     stale: bool = Field(False, description="served from an expired cache entry because the upstream failed")
     fetched_at: int
     image: FoodImage | None = Field(None, description="the picture of a recipe (own or taken over), if it has one")
+    can_edit: bool = Field(True, description="the caller may change or delete this food (a guest only what they made themself; the household everything)")
     image_removed: bool = Field(False, description="a person took the provider's picture away (`POST /foods/{id}/image/restore` brings it back when the picture switch is on)")
     piece: FoodPiece | None = Field(None, description="what one piece of this food is (set with `PUT /foods/{id}/piece`; shared by all users, survives a reload from the provider)")
 
@@ -271,6 +272,7 @@ class Me(BaseModel):
     display_name_custom: bool = Field(False, description="the user chose display_name themself")
     provider_name: str | None = Field(None, description="the name the provider delivered (proxy header, OIDC claim, local account), only when it differs from display_name")
     is_admin: bool = Field(False, description="may use the admin area; decided per request, never for an access token")
+    household: bool = Field(True, description="belongs to the household (false: a guest, who changes only the foods, recipes and groups they made themself)")
     goal: Goal | None
     settings: Settings
     demo: DemoInfo
@@ -852,6 +854,7 @@ class Recipe(BaseModel):
     total_weight: float | None
     items: list[RecipeItem]
     kcal_per_portion: float | None
+    can_edit: bool = Field(True, description="the caller may change or delete this recipe (a guest only their own; the household all)")
 
 
 class IngredientsIn(BaseModel):

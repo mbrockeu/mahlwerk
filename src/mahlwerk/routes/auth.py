@@ -83,6 +83,7 @@ class NewAccount(BaseModel):
 
 class NewUser(NewAccount):
     is_admin: bool = False
+    household: bool = Field(True, description="a member of the household (false: a guest, who changes only the foods, recipes and groups they made themself)")
 
 
 class Login(BaseModel):
@@ -102,6 +103,7 @@ class PasswordReset(BaseModel):
 class UserPatch(BaseModel):
     disabled: bool | None = None
     is_admin: bool | None = None
+    household: bool | None = Field(None, description="local mode: member of the household or guest (an admin is always a member)")
 
 
 class Account(BaseModel):
@@ -109,6 +111,7 @@ class Account(BaseModel):
     display_name: str
     is_admin: bool
     disabled: bool = False
+    household: bool = True
 
 
 router = APIRouter(prefix="/api/v1/auth")
@@ -258,12 +261,12 @@ def _target(store: Store, username: str) -> dict:
 @admin_router.post("", response_model=Account, status_code=201, dependencies=[Depends(need_local)])
 def create_user(body: NewUser, request: Request, store: Store = Depends(get_store)) -> dict:
     try:
-        user = store.create_local_user(body.username, body.display_name or body.username, request.app.state.hasher.hash(body.password), body.is_admin)
+        user = store.create_local_user(body.username, body.display_name or body.username, request.app.state.hasher.hash(body.password), body.is_admin, body.household)
     except ReservedName:
         raise HTTPException(422, "this user name is reserved") from None
     except NameTaken:
         raise HTTPException(409, "this user name is taken") from None
-    return {"username": user["username"], "display_name": user["display_name"], "is_admin": body.is_admin}
+    return {"username": user["username"], "display_name": user["display_name"], "is_admin": body.is_admin, "household": body.household or body.is_admin}
 
 
 @admin_router.patch("/{username}", response_model=Account, dependencies=[Depends(need_sessions)])
@@ -275,10 +278,12 @@ async def patch_user(username: str, body: UserPatch, request: Request, user: dic
     if request.app.state.auth.mode == "oidc":
         if body.is_admin is not None:
             raise HTTPException(409, "the admin right comes from the provider's groups")
+        if body.household is not None:
+            raise HTTPException(409, "household membership comes from the provider's groups")
         if body.disabled and row["id"] == user["id"]:
             raise HTTPException(409, "you cannot block yourself")
     try:
-        store.change_account(row["id"], disabled=body.disabled, admin=body.is_admin)
+        store.change_account(row["id"], disabled=body.disabled, admin=body.is_admin, household=body.household)
     except LastAdmin:
         raise HTTPException(409, "this is the last active admin") from None
     if body.disabled:
@@ -287,7 +292,8 @@ async def patch_user(username: str, body: UserPatch, request: Request, user: dic
         request.app.state.yazio_stage.clear(row["id"])
     row = store.local_user(row["username"])
     return {"username": row["username"], "display_name": effective_name(store, row["id"], row["display_name"], row["username"]),
-            "is_admin": bool(row["local_admin"]), "disabled": bool(row["disabled"])}
+            "is_admin": bool(row["local_admin"]), "disabled": bool(row["disabled"]),
+            "household": bool(row["household"]) or bool(row["local_admin"])}
 
 
 @admin_router.post("/{username}/password", status_code=204, dependencies=[Depends(need_local)])

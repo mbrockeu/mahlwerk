@@ -62,6 +62,9 @@
   let saving = $state(false);
   let error = $state('');
   let confirming = $state(false);
+  // the piece is shared: a guest may set it only on what they made (the server refuses it too)
+  // svelte-ignore state_referenced_locally
+  let editable = $state(food ? food.can_edit !== false : !entry);
 
   const amount = $derived(parseNumber(text));
   const valid = $derived(amount != null && !Number.isNaN(amount) && amount > 0 && toBooked(amount) <= 5000);
@@ -71,7 +74,7 @@
   onMount(async () => {
     // an entry brings no piece: ask for the food it came from (the piece is optional, a failure changes nothing)
     if (!food && entry && foodId != null && !byPortion) {
-      api.food(foodId).then((f) => { if (f.piece && !piece) usePiece(f.piece); }).catch(() => {});
+      api.food(foodId).then((f) => { editable = f.can_edit !== false; if (f.piece && !piece) usePiece(f.piece); }).catch(() => {});
     }
     if (!food || last != null) return;
     try {
@@ -242,7 +245,7 @@
     <div class="unitrow" role="group" aria-label={t('pieceToggle')}>
       <button class="chip" class:on={!inPieces} aria-pressed={!inPieces} onclick={() => setMode(false)}>{unit}</button>
       <button class="chip" class:on={inPieces} aria-pressed={inPieces} onclick={() => setMode(true)}>{piece.label}</button>
-      <button class="btn quiet-btn small" onclick={openForm} disabled={formOpen}>{t('pieceEdit')}</button>
+      {#if editable}<button class="btn quiet-btn small" onclick={openForm} disabled={formOpen}>{t('pieceEdit')}</button>{/if}
     </div>
   {/if}
   <div class="amountrow">
@@ -262,7 +265,7 @@
     {#each quick as q}
       <button class="chip" class:on={amount === q.value} onclick={() => { touched = true; text = inputNumber(q.value); }}>{q.label}</button>
     {/each}
-    {#if !piece && !byPortion && foodId != null && !formOpen}
+    {#if editable && !piece && !byPortion && foodId != null && !formOpen}
       <button class="chip quiet" onclick={openForm}>{t('pieceSet')}</button>
     {/if}
   </div>

@@ -18,7 +18,7 @@ def proxy_app(monkeypatch, tmp_path, trusted="10.0.0.5"):
 
 def test_single_mode_needs_no_login(client):
     me = client.get("/api/v1/me").json()
-    assert me == {"username": "me", "display_name": "me", "display_name_custom": False, "provider_name": None, "is_admin": True, "features": FEATURES, "goal": None, "settings": DEFAULT_SETTINGS, "demo": NO_DEMO, "demo_account": NO_DEMO_ACCOUNT, "catalog": NO_CATALOG}
+    assert me == {"username": "me", "display_name": "me", "display_name_custom": False, "provider_name": None, "is_admin": True, "household": True, "features": FEATURES, "goal": None, "settings": DEFAULT_SETTINGS, "demo": NO_DEMO, "demo_account": NO_DEMO_ACCOUNT, "catalog": NO_CATALOG}
 
 
 def test_single_mode_user_name_is_configurable(monkeypatch, tmp_path):
@@ -37,7 +37,7 @@ def test_proxy_mode_trusts_header_only_from_trusted_peer(monkeypatch, tmp_path):
     trusted = TestClient(app, client=("10.0.0.5", 1))
     r = trusted.get("/api/v1/me", headers={"Remote-User": "anna", "Remote-Name": "Anna B."})
     assert r.status_code == 200
-    assert r.json() == {"username": "anna", "display_name": "Anna B.", "display_name_custom": False, "provider_name": None, "is_admin": False, "features": FEATURES, "goal": None, "settings": DEFAULT_SETTINGS, "demo": NO_DEMO, "demo_account": NO_DEMO_ACCOUNT, "catalog": NO_CATALOG}
+    assert r.json() == {"username": "anna", "display_name": "Anna B.", "display_name_custom": False, "provider_name": None, "is_admin": False, "household": True, "features": FEATURES, "goal": None, "settings": DEFAULT_SETTINGS, "demo": NO_DEMO, "demo_account": NO_DEMO_ACCOUNT, "catalog": NO_CATALOG}
 
     stranger = TestClient(app, client=("203.0.113.9", 1))
     assert stranger.get("/api/v1/me", headers={"Remote-User": "anna"}).status_code == 401

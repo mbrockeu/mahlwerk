@@ -539,6 +539,24 @@ def test_admin_group_is_configurable(make_app, idp):
     assert web.get("/api/v1/auth/status").json()["is_admin"] is True
 
 
+def test_household_follows_the_groups_at_every_sign_in(make_app, idp):
+    web = browser(make_app(MAHLWERK_HOUSEHOLD_GROUPS="family"))
+    idp.claims = {"preferred_username": "alex", "groups": ["friends"]}
+    ok(sign_in(web, idp))
+    assert web.get("/api/v1/me").json()["household"] is False
+    fid = web.post("/api/v1/foods", json={"name": "Mine", "per_100": {"kcal": 100}}).json()["id"]
+    assert web.get(f"/api/v1/foods/{fid}").json()["can_edit"] is True
+    idp.claims = {"preferred_username": "alex", "groups": ["friends", "family"]}
+    ok(sign_in(web, idp))  # signing in again takes the new groups
+    assert web.get("/api/v1/me").json()["household"] is True
+    idp.claims = {"preferred_username": "alex", "groups": ["admin"]}  # the admin group always counts
+    ok(sign_in(web, idp))
+    assert web.get("/api/v1/me").json()["household"] is True
+    idp.claims = {"preferred_username": "alex", "groups": ["friends"]}
+    ok(sign_in(web, idp))
+    assert web.get("/api/v1/me").json()["household"] is False
+
+
 def test_groups_claim_as_a_single_string(web, idp):
     idp.claims = {"preferred_username": "alex", "groups": "admin"}
     ok(sign_in(web, idp))
@@ -739,7 +757,7 @@ def test_version_10_database_gets_the_identity_table_without_losing_data(tmp_pat
     store = Store(path)
 
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 15
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 16
     assert "oidc_identity" in {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     con.close()
     assert store.get_goal(1)["kcal"] == 2000

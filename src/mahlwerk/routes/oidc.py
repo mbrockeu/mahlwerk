@@ -125,7 +125,7 @@ def callback(
         if not code:
             raise OidcError("failed", "no code in the answer")
         who = client.identity(code, pending.verifier, pending.nonce)
-        user = store.oidc_sign_in(who["issuer"], who["sub"], who["username"], who["display_name"], who["admin"], config.link_existing)
+        user = store.oidc_sign_in(who["issuer"], who["sub"], who["username"], who["display_name"], who["admin"], config.link_existing, who["household"])
     except OidcError as exc:
         return _fail(request, exc.code, exc.detail)
     except SignInRefused as exc:

@@ -86,7 +86,7 @@ def test_a_token_never_opens_the_admin_area(monkeypatch, tmp_path):
 def test_overview(client, food, tmp_path):
     client.post("/api/v1/diary/2026-01-10/entries", json={"food_id": food["id"], "meal": "lunch", "amount": 100})
     body = client.get("/api/v1/admin/overview").json()
-    assert body["version"] == __version__ and body["auth_mode"] == "single" and body["schema_version"] == 15
+    assert body["version"] == __version__ and body["auth_mode"] == "single" and body["schema_version"] == 16
     assert body["db_size_bytes"] > 0 and body["users"] == 1 and body["entries"] == 1 and body["foods"] == 1
     assert body["catalog"] == {"products": 0, "updated_at": None, "bls": {"products": 0, "updated_at": None}}
 
@@ -111,7 +111,7 @@ def test_users_list_has_counts_and_no_personal_data(monkeypatch, tmp_path):
     assert (first["first_day"], first["last_day"], first["tokens"], first["webhooks"]) == ("2026-01-10", "2026-01-12", 1, 1)
     assert (second["entries"], second["first_day"], second["tokens"], second["webhooks"]) == (0, None, 0, 0)
     assert set(first) == {"username", "display_name", "created_at", "entries", "first_day", "last_day", "tokens", "webhooks",
-                        "disabled", "admin", "has_password", "demo"}
+                        "disabled", "admin", "has_password", "demo", "household"}
     text = ann.get("/api/v1/admin/users").text
     assert "81.37" not in text and "2100" not in text and "Oats" not in text
 
@@ -281,7 +281,7 @@ def test_migration_from_version_7_keeps_the_data(tmp_path):
     con.close()
     store = Store(path)
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 15
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 16
     assert {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")} >= {
         "access_token", "webhook", "webhook_delivery", "setting"}
     assert con.execute("SELECT kg FROM weight").fetchone()[0] == 80.5

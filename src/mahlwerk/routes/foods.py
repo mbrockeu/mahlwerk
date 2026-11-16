@@ -15,6 +15,7 @@ from ..auth import current_user
 from ..catalog import OFF, food_data
 from ..db import Store
 from ..deps import get_store
+from .. import ownership
 from ..models import Food, FoodImage, FoodIn, FoodPiece, LabelScan, RecentFood
 from ..nutrition import guess_unit, is_complete, parse_serving, valid_gtin
 
@@ -43,7 +44,8 @@ def food_image(row: dict) -> FoodImage | None:
     return FoodImage(hash=digest, origin=origin, credit=credit)
 
 
-def build_food(row: dict, **extra) -> Food:
+def build_food(row: dict, user: dict | None = None, **extra) -> Food:
+    """The API shape of a food row. `user` (the caller) decides `can_edit`; without it nothing is withheld."""
     data = row["data"]
     own = row["source"] == "own"
     unit = data.get("unit") or guess_unit(None, data.get("quantity"), data.get("serving_size"))
@@ -70,6 +72,7 @@ def build_food(row: dict, **extra) -> Food:
         extra=nutrients.clean(data.get("extra")),
         complete=is_complete(data["per_100"]),
         empty=empty,
+        can_edit=True if user is None else ownership.can_edit(user, row.get("owner", row.get("created_by"))),
         image=food_image(row),
         image_removed=row.get("image_origin") == "none",
         piece=FoodPiece(label=row["piece_label"], grams=row["piece_grams"]) if row.get("piece_label") and row.get("piece_grams") else None,
@@ -80,7 +83,7 @@ def build_food(row: dict, **extra) -> Food:
 def with_piece(store: Store, food_id: int) -> dict:
     """The piece columns of a food that was just written (a reload keeps them), for the rows `build_food` gets from a write."""
     row = store.get_food(food_id, demo_view=True) or {}
-    return {"piece_label": row.get("piece_label"), "piece_grams": row.get("piece_grams")}
+    return {"piece_label": row.get("piece_label"), "piece_grams": row.get("piece_grams"), "owner": row.get("owner")}
 
 
 def own_data(food: FoodIn) -> dict:
@@ -111,53 +114,57 @@ def _need_barcode(code: str) -> None:
 
 
 @router.get("/foods/barcode/{code}", response_model=Food)
-def food_by_barcode(code: str, request: Request, store: Store = Depends(get_store)) -> Food:
+def food_by_barcode(code: str, request: Request, user: dict = Depends(current_user), store: Store = Depends(get_store)) -> Food:
     _need_barcode(code)
     upstream: OffClient = request.app.state.off
     cached = store.get_food_by_code(code)
     if cached is not None and cached["source"] == "own":
         # the user's own entry is never replaced by upstream data
-        return build_food(cached)
+        return build_food(cached, user)
     # unknown barcodes are re-checked after a day: someone may have added the product upstream
     ttl = upstream.cache_seconds if cached and cached["found"] else min(upstream.cache_seconds, 86400)
     fresh = cached is not None and time.time() - cached["fetched_at"] < ttl
     if fresh and cached["found"]:
-        return build_food(cached)
+        return build_food(cached, user)
     # the local catalogue comes before the live lookup: faster, and works while Open Food Facts is down
     if (item := request.app.state.catalog.get(OFF, code)) is not None:
         data = food_data(item)
-        food_id, fetched_at = store.put_food(code, OFF, data)
-        return build_food({**with_piece(store, food_id), "id": food_id, "code": code, "source": OFF, "data": data, "fetched_at": fetched_at}, cached=False)
+        food_id, fetched_at = store.put_food(code, OFF, data, user["id"])
+        return build_food({**with_piece(store, food_id), "id": food_id, "code": code, "source": OFF, "data": data, "fetched_at": fetched_at}, user, cached=False)
     if fresh:
         raise HTTPException(404, "unknown barcode")
     if not request.app.state.features.lookup:
         # the live lookup is switched off (admin area): only what is stored or in the local catalogue is known
         if cached is not None and cached["found"]:
-            return build_food(cached, stale=True)
+            return build_food(cached, user, stale=True)
         raise HTTPException(404, "unknown barcode")
     try:
         data = off.fetch(upstream.http, upstream.base, code)
     except off.UpstreamError as exc:
         if cached is not None and cached["found"]:
-            return build_food(cached, stale=True)
+            return build_food(cached, user, stale=True)
         raise HTTPException(502, f"Open Food Facts unavailable: {exc}") from exc
-    food_id, fetched_at = store.put_food(code, "openfoodfacts", data)
+    food_id, fetched_at = store.put_food(code, "openfoodfacts", data, user["id"])
     if data is None:
         raise HTTPException(404, "unknown barcode")
     return build_food(
-        {**with_piece(store, food_id), "id": food_id, "code": code, "source": "openfoodfacts", "data": data, "fetched_at": fetched_at}, cached=False
+        {**with_piece(store, food_id), "id": food_id, "code": code, "source": "openfoodfacts", "data": data, "fetched_at": fetched_at}, user, cached=False
     )
 
 
 @router.put("/foods/barcode/{code}", response_model=Food)
-def save_barcode_food(code: str, food: FoodIn, store: Store = Depends(get_store)) -> Food:
+def save_barcode_food(code: str, food: FoodIn, user: dict = Depends(current_user), store: Store = Depends(get_store)) -> Food:
+    """An own entry for a barcode. A guest may do this only while the barcode has no entry yet (a remembered miss does not count) or
+    the entry is their own: an entry of the household (also one fetched from Open Food Facts) is never replaced by a guest."""
     _need_barcode(code)
     existing = store.get_food_by_code(code)
     if existing is not None:
         _not_a_recipe(existing)
+        if existing["found"]:
+            ownership.need_edit(user, existing["owner"])
     data = own_data(food)
-    food_id, fetched_at = store.put_food(code, "own", data)
-    return build_food({**with_piece(store, food_id), "id": food_id, "code": code, "source": "own", "data": data, "fetched_at": fetched_at})
+    food_id, fetched_at = store.put_food(code, "own", data, user["id"])
+    return build_food({**with_piece(store, food_id), "id": food_id, "code": code, "source": "own", "data": data, "fetched_at": fetched_at}, user)
 
 
 @router.get("/foods", response_model=list[Food])
@@ -171,7 +178,7 @@ def search_foods(
     store: Store = Depends(get_store),
 ) -> list[Food]:
     """Products stored on this server, newest first. The sample foods of the demo account show up only in the demo account."""
-    return [build_food(row) for row in store.list_foods(q, source, limit, tuple(exclude_source), demo_account=bool(user.get("is_demo")))]
+    return [build_food(row, user) for row in store.list_foods(q, source, limit, tuple(exclude_source), demo_account=bool(user.get("is_demo")))]
 
 
 @router.get("/foods/recent", response_model=list[RecentFood])
@@ -183,15 +190,15 @@ def recent_foods(
         row = store.get_food(item["food_id"], demo_view=bool(user.get("is_demo")))
         if row is None:
             continue
-        result.append(RecentFood(food=build_food(row), last_amount=item["amount"], last_meal=item["meal"]))
+        result.append(RecentFood(food=build_food(row, user), last_amount=item["amount"], last_meal=item["meal"]))
     return result
 
 
 @router.post("/foods", response_model=Food, status_code=201)
-def create_food(food: FoodIn, store: Store = Depends(get_store)) -> Food:
+def create_food(food: FoodIn, user: dict = Depends(current_user), store: Store = Depends(get_store)) -> Food:
     data = own_data(food)
-    food_id, fetched_at = store.put_food(None, "own", data)
-    return build_food({"id": food_id, "code": None, "source": "own", "data": data, "fetched_at": fetched_at})
+    food_id, fetched_at = store.put_food(None, "own", data, user["id"])
+    return build_food({"id": food_id, "code": None, "source": "own", "data": data, "fetched_at": fetched_at, "created_by": user["id"]}, user)
 
 
 def _not_a_recipe(row: dict) -> None:
@@ -208,48 +215,51 @@ def _existing(store: Store, food_id: int, demo_view: bool = False) -> dict:
 
 @router.get("/foods/{food_id}", response_model=Food)
 def get_food(food_id: int, user: dict = Depends(current_user), store: Store = Depends(get_store)) -> Food:
-    return build_food(_existing(store, food_id, demo_view=bool(user.get("is_demo"))))
+    return build_food(_existing(store, food_id, demo_view=bool(user.get("is_demo"))), user)
 
 
 @router.put("/foods/{food_id}", response_model=Food)
-def replace_food(food_id: int, food: FoodIn, request: Request, store: Store = Depends(get_store)) -> Food:
+def replace_food(food_id: int, food: FoodIn, request: Request, user: dict = Depends(current_user), store: Store = Depends(get_store)) -> Food:
     row = _existing(store, food_id)
     _not_a_recipe(row)
+    ownership.need_edit(user, row["owner"])
     data = own_data(food)
     fetched_at = store.update_food(food_id, "own", data)
     if row["source"] in ("cookidoo", "web") or row.get("image_hash"):
         # an own product is no recipe and has no picture: the picture of the recipe it was goes with its source (no picture that cannot be removed)
         request.app.state.images.remove(food_id)
         row = {**row, "image_hash": None, "image_origin": None}
-    return build_food({**row, "source": "own", "data": data, "fetched_at": fetched_at})
+    return build_food({**row, "source": "own", "data": data, "fetched_at": fetched_at}, user)
 
 
-def _piece_food(store: Store, food_id: int) -> dict:
+def _piece_food(store: Store, food_id: int, user: dict) -> dict:
     row = _existing(store, food_id)
+    ownership.need_edit(user, row["owner"])
     if row["source"] in (cookidoo.SOURCE, webrecipes.SOURCE):
         raise HTTPException(409, "this food is booked in portions: a piece makes no sense here")
     return row
 
 
 @router.put("/foods/{food_id}/piece", response_model=Food)
-def set_piece(food_id: int, piece: FoodPiece, store: Store = Depends(get_store)) -> Food:
+def set_piece(food_id: int, piece: FoodPiece, user: dict = Depends(current_user), store: Store = Depends(get_store)) -> Food:
     """Say what one piece is ("slice" = 25 g). Not part of the food data: a reload from Open Food Facts leaves it alone."""
-    row = _piece_food(store, food_id)
+    row = _piece_food(store, food_id, user)
     store.set_food_piece(food_id, piece.label, piece.grams)
-    return build_food({**row, "piece_label": piece.label, "piece_grams": piece.grams})
+    return build_food({**row, "piece_label": piece.label, "piece_grams": piece.grams}, user)
 
 
 @router.delete("/foods/{food_id}/piece", status_code=204)
-def delete_piece(food_id: int, store: Store = Depends(get_store)) -> None:
-    _piece_food(store, food_id)
+def delete_piece(food_id: int, user: dict = Depends(current_user), store: Store = Depends(get_store)) -> None:
+    _piece_food(store, food_id, user)
     store.set_food_piece(food_id, None, None)
 
 
 @router.delete("/foods/{food_id}", status_code=204)
-def delete_food(food_id: int, request: Request, store: Store = Depends(get_store)) -> None:
+def delete_food(food_id: int, request: Request, user: dict = Depends(current_user), store: Store = Depends(get_store)) -> None:
     """Past diary entries keep their copy of the values. The picture of a taken-over recipe goes with it."""
     row = _existing(store, food_id)
     _not_a_recipe(row)
+    ownership.need_edit(user, row["owner"])
     store.delete_food(food_id)
     request.app.state.images.release_food(row.get("image_hash"))
 

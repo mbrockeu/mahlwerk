@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from .. import webrecipes
+from .. import ownership, webrecipes
 from ..auth import session_user
 from ..db import Store
 from ..deps import get_store
@@ -131,8 +131,11 @@ def _save(request: Request, store: Store, user: dict, address: str, final: str, 
     item = webrecipes.interpret(parsed, whole=body.whole, portions=body.portions, name=body.name)
     if item.blocked:
         raise HTTPException(422, BLOCKED[item.blocked])
-    if group_id is not None and store.get_group(group_id) is None:
-        raise HTTPException(404, "unknown group")
+    if group_id is not None:
+        group = store.get_group(group_id)
+        if group is None:
+            raise HTTPException(404, "unknown group")
+        ownership.need_edit(user, group["created_by"])
     data = {**webrecipes.food_data(item, address, final), "whole": body.whole}
     external = webrecipes.external_id(address)
     known = store.get_food_by_external_id(external)
@@ -140,15 +143,16 @@ def _save(request: Request, store: Store, user: dict, address: str, final: str, 
         # http and https of one page are ONE recipe, but an http address must not quietly replace one taken over through https
         raise HTTPException(422, "this page was taken over with its https address: use that address")
     if known is not None:
+        ownership.need_edit(user, known["owner"])  # taking a page over again renews the household's recipe
         fetched_at = store.update_food(known["id"], webrecipes.SOURCE, data)
         food_id, row = known["id"], {**known, "source": webrecipes.SOURCE, "data": data, "fetched_at": fetched_at}
     else:
-        food_id, fetched_at = store.put_external_food(external, webrecipes.SOURCE, data)
-        row = {"id": food_id, "code": None, "source": webrecipes.SOURCE, "data": data, "fetched_at": fetched_at, "external_id": external}
+        food_id, fetched_at = store.put_external_food(external, webrecipes.SOURCE, data, user["id"])
+        row = {"id": food_id, "code": None, "source": webrecipes.SOURCE, "data": data, "fetched_at": fetched_at, "external_id": external, "created_by": user["id"]}
     if group_id is not None:
         store.add_to_group(group_id, [food_id])
     _picture(request, store, food_id, webrecipes.image_address(parsed.image, final), user, force)
-    return build_food(store.get_food(food_id) or row)
+    return build_food(store.get_food(food_id) or row, user)
 
 
 def _picture(request: Request, store: Store, food_id: int, url: str | None, user: dict, force: bool) -> None:

@@ -122,6 +122,7 @@ class AdminUser(BaseModel):
     webhooks: int
     disabled: bool = Field(False, description="local sign-in mode: the account is blocked")
     admin: bool = Field(False, description="local sign-in mode: the account may use the admin area")
+    household: bool = Field(True, description="member of the household (false: a guest); local mode: set here, proxy and oidc: as of the last request or sign-in")
     has_password: bool = Field(False, description="local sign-in mode: the account has a password")
     demo: bool = Field(False, description="this is the built-in demo account (it holds invented data and nobody signs in as it)")
     sso: bool = Field(False, description="oidc sign-in mode: the account is linked to an identity at the provider (it has signed in through it)")

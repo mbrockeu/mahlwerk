@@ -20,7 +20,8 @@
   // as high as the table of values beside it, with the source block (link, note) or the ingredients below it. The width of the panel decides, not the window.
   let { food, recipe = null, onedit, onadd, onreload, onremove, onchanged }:
     { food: Food; recipe?: Recipe | null; onedit?: () => void; onadd: () => void; onreload?: () => Promise<void>; onremove?: () => Promise<void>; onchanged?: (food: Food) => void | Promise<void> } = $props();
-  const canPhoto = $derived(!!onchanged && (food.source === 'recipe' || food.source === 'cookidoo' || food.source === 'web'));
+  const editable = $derived(food.can_edit !== false);
+  const canPhoto = $derived(editable && !!onchanged && (food.source === 'recipe' || food.source === 'cookidoo' || food.source === 'web'));
   const WIDE = 640;
   let width = $state(0);
   const wideDetail = $derived(width >= WIDE);
@@ -108,19 +109,20 @@
     <div class="acts">
       {#if cook}
         <button type="button" class="b lime" onclick={onadd}>{t('saveToDiary')}</button>
-        {#if onreload}<button type="button" class="b ghost" disabled={busy} onclick={() => run(onreload)}>{busy ? t('cdReloading') : host ? t('wrReload', { host }) : t('cdReload')}</button>{/if}
-        {#if onremove}
+        {#if onreload && editable}<button type="button" class="b ghost" disabled={busy} onclick={() => run(onreload)}>{busy ? t('cdReloading') : host ? t('wrReload', { host }) : t('cdReload')}</button>{/if}
+        {#if onremove && editable}
           <button type="button" class="b ghost" disabled={busy} onclick={() => (confirming ? run(onremove) : (confirming = true))}>{confirming ? t('cdRemoveConfirm') : t('cdRemove')}</button>
         {/if}
       {:else}
-        <button type="button" class="b lime" onclick={onedit}>{t('detailEdit')}</button>
+        {#if editable}<button type="button" class="b lime" onclick={onedit}>{t('detailEdit')}</button>{/if}
         <button type="button" class="b ghost" onclick={onadd}>{t('saveToDiary')}</button>
       {/if}
       {#if canPhoto && !hasPic}
         <PhotoActions has={!!image} busy={photoBusy} onpick={setPhoto} />
-        {#if food.image_removed && onreload}<button type="button" class="b ghost" disabled={photoBusy} onclick={restorePhoto}>{t('imgRestore')}</button>{/if}
+        {#if food.image_removed && onreload && editable}<button type="button" class="b ghost" disabled={photoBusy} onclick={restorePhoto}>{t('imgRestore')}</button>{/if}
       {/if}
     </div>
+    {#if !editable && !cook}<p class="note">{t('hhReadOnly')}</p>{/if}
   </section>
 
   <section class="tiles" aria-label={cook ? t('cdPerPortion') : t('detailPer100', { unit: food.unit })}>
@@ -164,7 +166,7 @@
         {#if extras.length && !wideDetail}
           <dl>{#each extras as e (e.key)}<div><dt>{e.name}</dt><dd class="mono">{e.text}</dd></div>{/each}</dl>
         {/if}
-        {#if onremove}<p class="note">{t('cdRemoveNote')}</p>{/if}
+        {#if !editable}<p class="note">{t('hhReadOnly')}</p>{:else if onremove}<p class="note">{t('cdRemoveNote')}</p>{/if}
       </section>
       {#if extras.length && wideDetail}
         <section class="card ext">

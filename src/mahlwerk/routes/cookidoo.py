@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
-from .. import cookidoo, cookidoo_bulk, webrecipes
+from .. import cookidoo, cookidoo_bulk, ownership, webrecipes
 from ..auth import require_admin, session_user
 from ..db import Store
 from ..deps import get_store
@@ -193,11 +193,14 @@ def own_access(request: Request, user_id: int) -> tuple["cookidoo.Access | None"
 
 
 def access_for(request: Request, user: dict) -> "cookidoo.Access | None":
-    """The account this user's requests go to: their own (if allowed and readable), else the shared one."""
+    """The account this user's requests go to: their own (if allowed and readable), else the shared one. The shared account is the
+    household's: a guest never gets it, only an own account of theirs (None otherwise)."""
     if request.app.state.features.cookidoo_personal:
         own, _ = own_access(request, user["id"])
         if own is not None:
             return own
+    if not ownership.is_household(user):
+        return None
     return shared_access(request)[0]
 
 
@@ -209,6 +212,8 @@ def _ready(request: Request, user: dict) -> tuple[cookidoo.Hub, "cookidoo.Access
         raise HTTPException(409, "Cookidoo support is not installed (pip install mahlwerk[cookidoo])")
     access = access_for(request, user)
     if access is None:
+        if not ownership.is_household(user):
+            raise HTTPException(409, "Cookidoo is not set up for you: guests do not use the household's account, add an own account in your profile")
         raise HTTPException(409, "Cookidoo is not configured (an account in the admin area or in your profile, "
                                  "or MAHLWERK_COOKIDOO_EMAIL and MAHLWERK_COOKIDOO_PASSWORD)")
     return request.app.state.cookidoo, access
@@ -233,7 +238,7 @@ def _parse(text: str) -> str:
 def status(request: Request, user: dict = Depends(session_user)) -> CookidooState:
     hub: cookidoo.Hub = request.app.state.cookidoo
     access = access_for(request, user)
-    key = access.key if access else cookidoo.SHARED
+    key = access.key if access else cookidoo.SHARED if ownership.is_household(user) else f"user:{user['id']}"
     return CookidooState(
         state=hub.status(request.app.state.features.cookidoo, access, key), error=cookidoo.MESSAGES.get(hub.error_of(key) or ""),
         account=access.scope if access else None, personal_allowed=request.app.state.features.cookidoo_personal)
@@ -305,7 +310,8 @@ async def _group_for(request: Request, access: "cookidoo.Access", store: Store, 
 @router.post("/adopt", response_model=Food)
 async def adopt(body: AdoptIn, request: Request, store: Store = Depends(get_store), user: dict = Depends(session_user)) -> Food:
     """Take a recipe over as a food (source `cookidoo`, external id `cookidoo:<id>`). Doing it again updates the food.
-    With `collection` the recipe also goes into the group of that collection.
+    With `collection` the recipe also goes into the group of that collection (household only: a guest's recipe is theirs and
+    stays out of the shared collection groups; a guest cannot renew a recipe the household owns, 403).
 
     The values per portion are stored as 100 g of the food, so 100 g = 1 portion when logging. The food belongs to the
     household: everybody on this server sees it, also when it came from somebody's own Cookidoo account.
@@ -318,16 +324,17 @@ async def adopt(body: AdoptIn, request: Request, store: Store = Depends(get_stor
     external = cookidoo.EXTERNAL_PREFIX + details.id
     known = store.get_food_by_external_id(external)
     if known is not None:
+        ownership.need_edit(user, known["owner"])  # taking a recipe over again renews the household's recipe
         store.update_food(known["id"], cookidoo.SOURCE, data)
         food_id = known["id"]
-        if body.collection:
+        if body.collection and ownership.is_household(user):
             await _group_for(request, access, store, user, body.collection, food_id, False)
     else:
-        food_id, _ = store.put_external_food(external, cookidoo.SOURCE, data)
-        if body.collection:
+        food_id, _ = store.put_external_food(external, cookidoo.SOURCE, data, user["id"])
+        if body.collection and ownership.is_household(user):  # the groups made from collections are shared and the household's
             await _group_for(request, access, store, user, body.collection, food_id, True)
     await _picture(request, store, user, food_id, details.image, body.refresh_image)
-    return build_food(store.get_food(food_id))
+    return build_food(store.get_food(food_id), user)
 
 
 async def _picture(request: Request, store: Store, user: dict, food_id: int, url: str | None, force: bool) -> None:
@@ -394,7 +401,9 @@ async def import_preview(
 async def import_start(body: BulkIn, request: Request, user: dict = Depends(session_user)) -> BulkRun:
     """Take over the selection in the background: one detail call to Cookidoo every 3 seconds at least, one run per Cookidoo
     account, at most two on the server, at most 500 recipes. Poll `GET /cookidoo/import`; cancel with `DELETE`. Everything is
-    saved recipe by recipe; a run does not survive a restart of the server (start again: what is up to date is skipped)."""
+    saved recipe by recipe; a run does not survive a restart of the server (start again: what is up to date is skipped).
+    Household only: a run renews recipes and makes the shared groups."""
+    ownership.need_household(user, "taking over many recipes")
     access, plan = await _plan(request, user, body.scope, body.collection)
     try:
         run = request.app.state.cookidoo_runs.start(access, plan, user["id"], body.regroup)
@@ -436,7 +445,9 @@ def images_preview(request: Request, store: Store = Depends(get_store), user: di
 async def images_start(request: Request, store: Store = Depends(get_store), user: dict = Depends(session_user)) -> BulkRun:
     """Catch up the pictures of recipes taken over before pictures were switched on: in the background, paced like taking recipes over
     (one detail call every 3 seconds at most, only for recipes whose picture address is not known), one run per Cookidoo account.
-    Needs "store recipe pictures" for Cookidoo (admin area). Poll `GET /cookidoo/import`; cancel with `DELETE /cookidoo/import`."""
+    Needs "store recipe pictures" for Cookidoo (admin area). Poll `GET /cookidoo/import`; cancel with `DELETE /cookidoo/import`.
+    Household only: it sets pictures of recipes of the household."""
+    ownership.need_household(user, "the picture catch-up")
     if not request.app.state.features.cookidoo_images:
         raise HTTPException(409, "storing recipe pictures is switched off for Cookidoo (admin area)")
     hub, access = _ready(request, user)

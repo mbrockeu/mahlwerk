@@ -104,6 +104,6 @@ def suggestions(
     for s in result.items:
         row = store.get_food(s.food_id)
         items.append(SuggestionOut(
-            food=build_food(row), portions=s.portions, amount=s.amount, kcal=s.kcal, protein=s.protein, carbs=s.carbs, fat=s.fat,
+            food=build_food(row, user), portions=s.portions, amount=s.amount, kcal=s.kcal, protein=s.protein, carbs=s.carbs, fat=s.fat,
             after=RestOut(**vars(s.after)), reasons=list(s.reasons), score=s.score))
     return Suggestions(day=iso, state=result.state, focus=focus, goal_kcal=goal_kcal, rest=RestOut(**vars(rest)), candidates=len(candidates), items=items)

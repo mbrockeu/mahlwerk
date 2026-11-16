@@ -20,6 +20,8 @@
   const recipe = req.recipe;
   // svelte-ignore state_referenced_locally
   const draft = req.draft;
+  // a guest looks at the household's recipe but cannot change it (the server refuses it too); the groups of their own stay theirs
+  const locked = recipe?.can_edit === false;
 
   interface Line { key: number; food: Food; amount: string }
   let nextKey = 1;
@@ -177,8 +179,8 @@
           <RecipeThumb food={{ image, name }} />
         {/if}
         <div class="pbtns">
-          <PhotoActions tone="plain" take has={!!image || !!pending} busy={photoBusy} onpick={pickPhoto} />
-          {#if image || pending}<button type="button" class="b plain" disabled={photoBusy} onclick={dropPhoto}>{t('imgRemove')}</button>{/if}
+          {#if !locked}<PhotoActions tone="plain" take has={!!image || !!pending} busy={photoBusy} onpick={pickPhoto} />{/if}
+          {#if !locked && (image || pending)}<button type="button" class="b plain" disabled={photoBusy} onclick={dropPhoto}>{t('imgRemove')}</button>{/if}
         </div>
       </div>
       <p class="note">{pending ? t('imgPending') : t('imgHint')}</p>
@@ -254,11 +256,11 @@
 
     {#if recipe}<GroupAssign foodId={recipe.food.id} {groups} onchange={groupsChanged} />{/if}
 
-    <p class="note warn" role="status">{status}</p>
-    <button class="btn primary" disabled={saving || loading}>{t('save')}</button>
+    <p class="note warn" role="status">{locked ? t('hhReadOnly') : status}</p>
+    <button class="btn primary" disabled={saving || loading || locked}>{t('save')}</button>
     <button type="button" class="btn" onclick={close}>{t('cancel')}</button>
     {#if recipe}
-      <button type="button" class="btn danger" onclick={remove} disabled={saving}>{confirming ? t('confirmDeleteRecipe') : t('deleteRecipe')}</button>
+      <button type="button" class="btn danger" onclick={remove} disabled={saving || locked}>{confirming ? t('confirmDeleteRecipe') : t('deleteRecipe')}</button>
     {/if}
     <p class="note">{t('recipeHint')}</p>
   </form>
