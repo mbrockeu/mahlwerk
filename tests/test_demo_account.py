@@ -35,6 +35,11 @@ def rows(app, sql, *args):
         con.close()
 
 
+def demo_kg(app, demo_id):
+    """The demo account's weight today, as a list: empty on the days the seed leaves out."""
+    return [r["kg"] for r in rows(app, "SELECT kg FROM weight WHERE user_id = ? AND day = ?", demo_id, DAY)]
+
+
 def count(app, table, user_id=None):
     where = "" if user_id is None else f" WHERE user_id = {int(user_id)}"
     return rows(app, f"SELECT count(*) AS n FROM {table}{where}")[0]["n"]
@@ -144,7 +149,7 @@ def test_reset_starts_over_and_deletes_what_the_demo_session_added(local_app, de
     assert leave(demo).status_code == 204
     r = demo.post("/api/v1/admin/demo-account/reset")
     assert r.status_code == 200 and r.json()["info"]["entries"] > 300
-    assert rows(local_app, "SELECT kg FROM weight WHERE user_id = ? AND day = ?", demo_id, DAY)[0]["kg"] != 61.5
+    assert 61.5 not in demo_kg(local_app, demo_id)  # the seed weighs only on some days, so the day may also be empty
     assert rows(local_app, "SELECT kcal FROM goal WHERE user_id = ?", demo_id)[0]["kcal"] == 2100
     assert user_id(local_app, "~demo") == demo_id
 
@@ -220,7 +225,7 @@ def test_a_real_user_named_demo_is_an_ordinary_user_and_the_account_still_works(
     assert demo_id != real_demo
     assert sam.get("/api/v1/me").json()["username"] == "demo"
     assert sam.get(f"/api/v1/weights?days=3").json()[0]["kg"] == 55.5  # their data is theirs
-    assert count(local_app, "weight", real_demo) == 1 and rows(local_app, "SELECT kg FROM weight WHERE user_id = ? AND day = ?", demo_id, DAY)[0]["kg"] != 55.5
+    assert count(local_app, "weight", real_demo) == 1 and 55.5 not in demo_kg(local_app, demo_id)
     users = {u["username"]: u for u in admin.get("/api/v1/admin/users").json()}
     assert users["demo"]["demo"] is False and users["~demo"]["demo"] is True
     assert admin.get("/api/v1/admin/overview").json()["users"] == 2  # alex and the real demo; the account is not counted
