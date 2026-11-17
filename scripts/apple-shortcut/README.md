@@ -29,6 +29,11 @@ weight from Apple Health for the last days and sends each value to `POST /api/v1
 
 ## Notes
 
+- **Apple Watch:** the shortcut adds up every Health sample of the day. iPhone and watch both count steps and active
+  energy, and unlike the Health app the shortcut does not drop the overlap, so Mahlwerk shows about twice the value.
+  If you wear a watch, open both **Find Health Samples** actions (steps and active energy), **Add Filter**, **Source**
+  **is** and pick your watch. The device has to be picked on the iPhone, so the ready-made file cannot do it. Without a
+  watch nothing needs changing. On days you do not wear the watch the filtered value is lower than in Health.
 - Nothing is sent that is not in Health: a day without a value for steps, active energy or weight is skipped.
 - Values typed in by hand in Mahlwerk take precedence over what the shortcut sends.
 - The Health sample types ("Steps", "Active Calories", "Weight") are tested on an iPhone set to German. Weight is not

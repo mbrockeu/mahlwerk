@@ -167,6 +167,10 @@ Ready-made shortcut: `scripts/apple-shortcut/README.md` describes a generator (`
 file that does the steps below for the last days (steps, active energy, weight); only the address and the access key
 are asked for on import. The instructions below remain as the alternative if you prefer to build it by hand.
 
+If you wear an Apple Watch, filter both searches by **Quelle** (Source) = your watch: iPhone and watch both record steps and
+active energy, and a plain sum counts them twice (the Health app drops the overlap, the shortcut does not). See
+`scripts/apple-shortcut/README.md`.
+
 Build the shortcut (names are those of the German Shortcuts app; the English ones are in brackets). The simplest form
 sends today only and runs in the evening; only `day` is required, every other value may be left out.
 

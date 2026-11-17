@@ -35,6 +35,9 @@ HK_STEPS = "Steps"            # observed in the reference
 HK_ENERGY = "Active Calories"  # observed in the reference
 HK_WEIGHT = "Weight"          # not confirmed yet (the reference fallback would be "Body Mass")
 
+WATCH_HINT = ("\n- Apple Watch: add the filter Source is <your watch> to Find Health Samples, else iPhone and watch"
+              " are added up (about twice the value of the Health app); without a watch leave it as it is")
+
 OBJ = "￼"  # U+FFFC placeholder in WFTextTokenString
 
 
@@ -265,11 +268,13 @@ if True:  # body of the loop (indented as in the shortcut)
     set_variable("Tag", ref_out(fmt, "Formatted Date"), p + "tag:var")
     debug_show("1) Datum ok: ", ref_var("Tag"))
 
-    comment("--- STEPS ---\n- Sum of the steps of the day, keep digits only")
+    comment("--- STEPS ---\n- Sum of the steps of the day, keep digits only"
+            + WATCH_HINT)
     sum_block(p + "schritte", HK_STEPS, "Schritte", "steps")
     debug_show("2) Schritte ", ref_var("Tag"), ": [", ref_var("Schritte"), "]")
 
-    comment("--- ACTIVE ENERGY ---\n- Sum of the active calories of the day, keep digits only")
+    comment("--- ACTIVE ENERGY ---\n- Sum of the active calories of the day, keep digits only"
+            + WATCH_HINT)
     sum_block(p + "energie", HK_ENERGY, "Energie", "active_kcal")
     debug_show("3) Energie ", ref_var("Tag"), ": [", ref_var("Energie"), "]")
 
