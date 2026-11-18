@@ -24,3 +24,11 @@ export function checkPiece(label: string, grams: number | null): PieceDraft | nu
   if (grams == null || Number.isNaN(grams) || grams <= 0 || grams > MAX_AMOUNT) return null;
   return { label: name, grams };
 }
+
+/** A share of a whole ("cake of 1250 g cut into 8, ate 2" = 312.5 g); null when the numbers do not make a share up to 5000. */
+export function splitGrams(total: number | null, parts: number | null, eaten: number | null): number | null {
+  if (total == null || parts == null || eaten == null || [total, parts, eaten].some(Number.isNaN)) return null;
+  if (total <= 0 || parts <= 0 || eaten <= 0 || eaten > parts) return null;
+  const grams = round((total / parts) * eaten);
+  return grams > 0 && grams <= MAX_AMOUNT ? grams : null;
+}

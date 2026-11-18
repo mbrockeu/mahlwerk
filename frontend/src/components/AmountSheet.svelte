@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { api, ApiError } from '../lib/api';
   import { fmt, inputNumber, parseNumber, t } from '../lib/i18n';
-  import { checkPiece, gramsToPieces, isHalfMultiple, MAX_LABEL, piecesToGrams } from '../lib/piece';
+  import { checkPiece, gramsToPieces, isHalfMultiple, MAX_LABEL, piecesToGrams, splitGrams } from '../lib/piece';
   import { isPortionEntry, isPortionFood, PORTION_GRAMS } from '../lib/portion';
   import { backToAdd, changed, toast, ui, type AmountRequest } from '../lib/store.svelte';
   import { MEALS, type FoodPiece, type Meal } from '../lib/types';
@@ -206,6 +206,24 @@
     }
   }
 
+  // a share of a whole: the cake weighs 1250 g, cut into 8, 2 eaten; the result goes into the field as grams
+  let splitOpen = $state(false);
+  let splitTotal = $state('');
+  let splitParts = $state('8');
+  let splitEaten = $state('1');
+  const split = $derived(splitGrams(parseNumber(splitTotal), parseNumber(splitParts), parseNumber(splitEaten)));
+  const splitOne = $derived.by(() => {
+    const total = parseNumber(splitTotal), parts = parseNumber(splitParts);
+    return split == null || total == null || parts == null ? null : round(total / parts);
+  });
+  function takeSplit() {
+    if (split == null) return;
+    touched = true;
+    inPieces = false;
+    text = inputNumber(split);
+    splitOpen = false;
+  }
+
   // came from the add sheet: closing (swipe down, ✕, a tap beside) goes back there, like a step back on a phone
   const close = () => { if (req.back) backToAdd(); else ui.amount = null; };
   const failMsg = (err: unknown) => t('saveFailed', { reason: err instanceof ApiError ? err.status || err.message : 'error' });
@@ -285,6 +303,9 @@
     {#each quick as q}
       <button class="chip" class:on={amount === q.value} onclick={() => { touched = true; text = inputNumber(q.value); }}>{q.label}</button>
     {/each}
+    {#if !byPortion && !splitOpen}
+      <button class="chip quiet" onclick={() => (splitOpen = true)}>{t('splitOpen')}</button>
+    {/if}
     {#if editable && !piece && !byPortion && foodId != null && !formOpen}
       <button class="chip quiet" onclick={openForm}>{t('pieceSet')}</button>
     {/if}
@@ -310,6 +331,38 @@
         <button class="btn primary small" onclick={savePiece} disabled={formBusy}>{t('pieceSave')}</button>
         <button class="btn small" onclick={() => (formOpen = false)} disabled={formBusy}>{t('cancel')}</button>
         {#if piece}<button class="btn danger small" onclick={removePiece} disabled={formBusy}>{t('pieceRemove')}</button>{/if}
+      </div>
+    </div>
+  {/if}
+
+  {#if splitOpen}
+    <div class="piecebox">
+      <p class="note">{t('splitTitle')}</p>
+      <div class="splitform">
+        <label class="field">
+          <span>{t('splitTotal', { unit })}</span>
+          <input inputmode="decimal" autocomplete="off" placeholder="1250" bind:value={splitTotal} onfocus={(e) => e.currentTarget.select()}
+            onkeydown={(e) => e.key === 'Enter' && takeSplit()} />
+        </label>
+        <label class="field">
+          <span>{t('splitParts')}</span>
+          <input inputmode="decimal" autocomplete="off" bind:value={splitParts} onfocus={(e) => e.currentTarget.select()}
+            onkeydown={(e) => e.key === 'Enter' && takeSplit()} />
+        </label>
+        <label class="field">
+          <span>{t('splitEaten')}</span>
+          <input inputmode="decimal" autocomplete="off" bind:value={splitEaten} onfocus={(e) => e.currentTarget.select()}
+            onkeydown={(e) => e.key === 'Enter' && takeSplit()} />
+        </label>
+      </div>
+      {#if split != null && splitOne != null}
+        <p class="note">{t('splitResult', { g: `${fmt(split, 1)} ${unit}`, one: `${fmt(splitOne, 1)} ${unit}` })}</p>
+      {:else if splitTotal !== ''}
+        <p class="note warn">{t('splitBad')}</p>
+      {/if}
+      <div class="pieceactions">
+        <button class="btn primary small" onclick={takeSplit} disabled={split == null}>{t('splitTake')}</button>
+        <button class="btn small" onclick={() => (splitOpen = false)}>{t('cancel')}</button>
       </div>
     </div>
   {/if}
@@ -352,6 +405,7 @@
   .chip.quiet { background: transparent; border-style: dashed; color: var(--quiet); }
   .piecebox { background: var(--paper); border-radius: 20px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
   .pieceform { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .splitform { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 10px; }
   .pieceactions { display: flex; flex-wrap: wrap; gap: 8px; }
   .pieceactions .small { min-height: 44px; padding: 0 16px; font-size: 14px; }
   .amountrow { display: flex; align-items: flex-end; gap: 8px; }

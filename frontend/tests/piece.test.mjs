@@ -1,7 +1,7 @@
 // The pure helpers of pieces ("2 × slice"): lib/piece.ts.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { checkPiece, gramsToPieces, isHalfMultiple, piecesText, piecesToGrams } from '../src/lib/piece.ts';
+import { checkPiece, gramsToPieces, isHalfMultiple, piecesText, piecesToGrams, splitGrams } from '../src/lib/piece.ts';
 
 test('pieces become grams and back', () => {
   assert.equal(piecesToGrams(2, 25), 50);
@@ -37,4 +37,15 @@ test('a piece is accepted only as the server would accept it', () => {
   assert.equal(checkPiece('Scheibe', 5001), null);
   assert.equal(checkPiece('Scheibe', null), null);
   assert.equal(checkPiece('Scheibe', NaN), null);
+});
+
+test('a share of a whole: total divided into parts, some eaten', () => {
+  assert.equal(splitGrams(1250, 8, 2), 312.5);
+  assert.equal(splitGrams(1000, 3, 1), 333.333);
+  assert.equal(splitGrams(1250, 8, 0.5), 78.125);  // half a slice
+  assert.equal(splitGrams(1250, 8, 9), null);  // more than there was
+  assert.equal(splitGrams(0, 8, 2), null);
+  assert.equal(splitGrams(1250, 0, 2), null);
+  assert.equal(splitGrams(null, 8, 2), null);
+  assert.equal(splitGrams(20000, 2, 1), null);  // above 5000 g
 });
