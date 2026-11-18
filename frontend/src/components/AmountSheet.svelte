@@ -216,6 +216,11 @@
     const total = parseNumber(splitTotal), parts = parseNumber(splitParts);
     return split == null || total == null || parts == null ? null : round(total / parts);
   });
+  // the whole starts as what the field holds (in g/ml): typed 1250 there, it is used without typing it again
+  function openSplit() {
+    splitTotal = valid ? inputNumber(toBooked(amount as number)) : '';
+    splitOpen = true;
+  }
   function takeSplit() {
     if (split == null) return;
     touched = true;
@@ -304,7 +309,7 @@
       <button class="chip" class:on={amount === q.value} onclick={() => { touched = true; text = inputNumber(q.value); }}>{q.label}</button>
     {/each}
     {#if !byPortion && !splitOpen}
-      <button class="chip quiet" onclick={() => (splitOpen = true)}>{t('splitOpen')}</button>
+      <button class="chip quiet" onclick={openSplit}>{t('splitOpen')}</button>
     {/if}
     {#if editable && !piece && !byPortion && foodId != null && !formOpen}
       <button class="chip quiet" onclick={openForm}>{t('pieceSet')}</button>
@@ -341,7 +346,7 @@
       <div class="splitform">
         <label class="field">
           <span>{t('splitTotal', { unit })}</span>
-          <input inputmode="decimal" autocomplete="off" placeholder="1250" bind:value={splitTotal} onfocus={(e) => e.currentTarget.select()}
+          <input inputmode="decimal" autocomplete="off" bind:value={splitTotal} onfocus={(e) => e.currentTarget.select()}
             onkeydown={(e) => e.key === 'Enter' && takeSplit()} />
         </label>
         <label class="field">
