@@ -10,6 +10,8 @@
   const DAYS = 90;
   let points = $state<WeightPoint[] | null>(null);
   let text = $state('');
+  let fatText = $state('');
+  let leanText = $state('');
   let error = $state('');
   let saving = $state(false);
   let primed = false;
@@ -22,6 +24,9 @@
         const todayValue = points.find((p) => p.day === ui.today);
         const seed = todayValue ?? points[points.length - 1];
         text = seed ? inputNumber(seed.kg) : '';
+        // body values belong to the day they were measured: only today's are offered for editing
+        fatText = todayValue?.body_fat_pct != null ? inputNumber(todayValue.body_fat_pct) : '';
+        leanText = todayValue?.lean_kg != null ? inputNumber(todayValue.lean_kg) : '';
       }
     } catch (err) {
       error = t('loadFailed', { reason: err instanceof ApiError ? err.status || err.message : 'error' });
@@ -33,10 +38,19 @@
     event.preventDefault();
     const kg = parseNumber(text);
     if (kg == null || Number.isNaN(kg) || kg < 20 || kg > 400) { error = t('weightBad'); return; }
+    // an empty field clears a value stored for today, and is left out when there is none
+    const body: { body_fat_pct?: number | null; lean_kg?: number | null } = {};
+    const stored = points?.find((p) => p.day === ui.today);
+    for (const [key, raw, lo, hi] of [['body_fat_pct', fatText, 2, 75], ['lean_kg', leanText, 20, 300]] as const) {
+      if (raw.trim() === '') { if (stored?.[key] != null) body[key] = null; continue; }
+      const v = parseNumber(raw);
+      if (v == null || Number.isNaN(v) || v < lo || v > hi) { error = t('bodyBad'); return; }
+      body[key] = v;
+    }
     saving = true;
     error = '';
     try {
-      await api.setWeight(ui.today, kg);
+      await api.setWeight(ui.today, kg, body);
       toast(t('weightSaved'));
       checkBadges();
       await load();
@@ -113,6 +127,16 @@
       <input inputmode="decimal" autocomplete="off" bind:value={text} aria-invalid={error === t('weightBad') ? 'true' : undefined} />
     </label>
     <button class="btn primary" disabled={saving}>{t('weightSave')}</button>
+    <div class="body">
+      <label class="field">
+        <span>{t('bodyFat')} (%) · {t('bodyOptional')}</span>
+        <input inputmode="decimal" autocomplete="off" bind:value={fatText} aria-invalid={error === t('bodyBad') ? 'true' : undefined} />
+      </label>
+      <label class="field">
+        <span>{t('leanMass')} ({t('kg')}) · {t('bodyOptional')}</span>
+        <input inputmode="decimal" autocomplete="off" bind:value={leanText} aria-invalid={error === t('bodyBad') ? 'true' : undefined} />
+      </label>
+    </div>
   </form>
   {#if error}<p class="note warn" role="alert">{error}</p>{/if}
 
@@ -177,8 +201,10 @@
 </div>
 
 <style>
-  .entry { display: flex; gap: 10px; align-items: flex-end; }
+  .entry { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
   .entry .field { flex: 1; }
+  .body { order: 3; flex-basis: 100%; display: flex; gap: 10px; }
+  .body .field { min-width: 0; }
   .card { background: var(--green); color: #fff; border-radius: 36px 36px 36px 12px; padding: 20px 22px; }
   .kpi { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
   .kpi > div { display: flex; flex-direction: column; gap: 2px; }

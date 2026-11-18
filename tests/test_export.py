@@ -39,7 +39,7 @@ def log(client, food, day=DAY, amount=50, meal="lunch"):
 def fill(client, food, day=DAY):
     """One of everything on `day`."""
     log(client, food, day)
-    assert client.put(f"/api/v1/weights/{day}", json={"kg": 71.5}).status_code == 200
+    assert client.put(f"/api/v1/weights/{day}", json={"kg": 71.5, "body_fat_pct": 22.4, "lean_kg": 55.5}).status_code == 200
     assert client.put(f"/api/v1/water/{day}", json={"ml": 1750}).status_code == 200
     assert client.put(f"/api/v1/activity/{day}", json={"steps": 8123, "active_kcal": 310.5, "distance_m": 6400}).status_code == 200
     assert client.post("/api/v1/workouts", json={"day": day, "kind": "running", "name": "Morning run", "minutes": 30, "kcal": 280.5,
@@ -74,7 +74,8 @@ def test_the_csv_files_hold_the_data_with_the_nutrients_for_the_amount(full):
     assert diary[0][:10] == ["Day", "Meal", "Name", "Brand", "Amount", "Unit", "Energy (kcal)", "Protein (g)", "Carbohydrates (g)", "Fat (g)"]
     assert diary[1][:10] == [DAY, "lunch", "Oats", "Acme", "50", "g", "100", "5", "15", "2"]  # 200 kcal per 100 g, 50 g eaten
     assert len(diary) == 2
-    assert rows(files["weight.csv"]) == [["Day", "Weight (kg)"], [DAY, "71.5"]]
+    assert rows(files["weight.csv"]) == [
+        ["Day", "Weight (kg)", "Body fat (%)", "Lean body mass (kg)"], [DAY, "71.5", "22.4", "55.5"]]
     assert rows(files["water.csv"]) == [["Day", "Water (ml)"], [DAY, "1750"]]
     assert rows(files["activity.csv"]) == [["Day", "Steps", "Active energy (kcal)", "Distance (m)", "Source"], [DAY, "8123", "310.5", "6400", "manual"]]
     workouts = rows(files["workouts.csv"])
@@ -94,7 +95,7 @@ def test_the_json_file_holds_everything_else_too(full):
     assert data["goal"]["kcal"] == 2100 and data["settings"]["playful"] is False
     entry = data["diary"][0]
     assert entry["per_100"]["kcal"] == 200 and entry["nutrients"]["kcal"] == 100 and entry["nutrients"]["protein"] == 5
-    assert data["weight"] == [{"day": DAY, "kg": 71.5}] and data["water"] == [{"day": DAY, "ml": 1750}]
+    assert data["weight"] == [{"day": DAY, "kg": 71.5, "body_fat_pct": 22.4, "lean_kg": 55.5}] and data["water"] == [{"day": DAY, "ml": 1750}]
     assert data["activity"][0]["steps"] == 8123 and data["workouts"][0]["name"] == "Morning run"
     assert data["fasting"][0]["hours"] == 19 and data["fasting"][0]["target_hours"] == 16
     assert [t["name"] for t in data["templates"]] == ["Usual lunch"] and data["templates"][0]["items"][0]["name"] == "Oats"
@@ -148,7 +149,8 @@ def test_the_german_csv_has_semicolons_and_a_decimal_comma(full):
     diary = rows(files["diary.csv"], ";")
     assert diary[0][:7] == ["Tag", "Mahlzeit", "Name", "Marke", "Menge", "Einheit", "Energie (kcal)"]
     assert diary[1][6:10] == ["100", "5", "15", "2"]
-    assert rows(files["weight.csv"], ";") == [["Tag", "Gewicht (kg)"], [DAY, "71,5"]]
+    assert rows(files["weight.csv"], ";") == [
+        ["Tag", "Gewicht (kg)", "Körperfett (%)", "Magermasse (kg)"], [DAY, "71,5", "22,4", "55,5"]]
     assert rows(files["activity.csv"], ";")[1][1:4] == ["8123", "310,5", "6400"]
     assert b";" in files["diary.csv"] and b"71,5" in files["weight.csv"] and b"71.5" not in files["weight.csv"]
     assert json.loads(files["mahlwerk-export.json"])["weight"][0]["kg"] == 71.5  # the JSON file has no locale
@@ -156,14 +158,15 @@ def test_the_german_csv_has_semicolons_and_a_decimal_comma(full):
 
 def test_the_english_csv_has_commas_and_a_decimal_point(full):
     files = open_zip(full.get(EXPORT, params={"lang": "en"}))
-    assert rows(files["weight.csv"]) == [["Day", "Weight (kg)"], [DAY, "71.5"]]
+    assert rows(files["weight.csv"]) == [
+        ["Day", "Weight (kg)", "Body fat (%)", "Lean body mass (kg)"], [DAY, "71.5", "22.4", "55.5"]]
     assert b"71,5" not in files["weight.csv"]
 
 
 def test_without_lang_the_browser_language_decides(full):
-    assert rows(open_zip(full.get(EXPORT, headers={"Accept-Language": "de-DE,de;q=0.9,en;q=0.8"}))["weight.csv"], ";")[0] == ["Tag", "Gewicht (kg)"]
-    assert rows(open_zip(full.get(EXPORT, headers={"Accept-Language": "en-US"}))["weight.csv"])[0] == ["Day", "Weight (kg)"]
-    assert rows(open_zip(full.get(EXPORT))["weight.csv"])[0] == ["Day", "Weight (kg)"]
+    assert rows(open_zip(full.get(EXPORT, headers={"Accept-Language": "de-DE,de;q=0.9,en;q=0.8"}))["weight.csv"], ";")[0][:2] == ["Tag", "Gewicht (kg)"]
+    assert rows(open_zip(full.get(EXPORT, headers={"Accept-Language": "en-US"}))["weight.csv"])[0][:2] == ["Day", "Weight (kg)"]
+    assert rows(open_zip(full.get(EXPORT))["weight.csv"])[0][:2] == ["Day", "Weight (kg)"]
 
 
 def test_other_stored_nutrients_get_their_own_columns(client):
@@ -269,7 +272,7 @@ def test_demo_rows_of_the_own_account_are_left_out(duo):
     ann.put(f"/api/v1/weights/{today}", json={"kg": 80})
     files = open_zip(ann.get(EXPORT))
     assert [r[2] for r in rows(files["diary.csv"])[1:]] == ["Real oats"]
-    assert rows(files["weight.csv"])[1:] == [[today, "80"]]
+    assert rows(files["weight.csv"])[1:] == [[today, "80", "", ""]]
     data = json.loads(files["mahlwerk-export.json"])
     assert data["activity"] == [] and data["workouts"] == [] and data["water"] == []
     assert all(b["code"] for b in data["badges"])

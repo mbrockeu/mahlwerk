@@ -29,6 +29,7 @@ Authorization: Bearer mw_...
 ```json
 {"day": "2026-11-12", "kcal_eaten": 1240.5, "kcal_goal": 2100, "kcal_left": 859.5, "protein": 61.2, "carbs": 140.0,
  "fat": 44.8, "water_ml": 1250, "water_goal_ml": 2000, "weight_kg": 79.4, "weight_day": "2026-11-12",
+ "body_fat_pct": 21.3, "lean_kg": 62.5,
  "fasting": {"active": false, "elapsed_seconds": 0, "target_hours": 16}, "logged_today": true,
  "last_entry_at": 1794518632, "steps": 6240, "steps_goal": 8000, "active_kcal": 310.0, "workouts": 2,
  "kcal_goal_bonus": 0}
@@ -164,7 +165,7 @@ If a reverse proxy does the login, let it pass `/api/` requests that carry `Auth
 "Access keys").
 
 Ready-made shortcut: `scripts/apple-shortcut/README.md` describes a generator (`build_shortcut.py`) and a ready-made
-file that does the steps below for the last days (steps, active energy, weight); only the address and the access key
+file that does the steps below for the last days (steps, active energy, weight, body fat, lean body mass); only the address and the access key
 are asked for on import. The instructions below remain as the alternative if you prefer to build it by hand.
 
 If you wear an Apple Watch, filter both searches by **Quelle** (Source) = your watch: iPhone and watch both record steps and
@@ -203,7 +204,8 @@ To also catch days the watch synced late, put steps 1 to 6 into **Wiederholen** 
 per day: before step 1 use **Berechnen** (Calculate) `Wiederholungsindex` (Repeat Index) minus 1 and **Datum anpassen**
 (Adjust Date) to subtract that many days from the current date; filter the Health samples with "Startdatum ist zwischen"
 (Start Date is between) the start of that day and the start of the next (**Datum anpassen**, "Beginn des Tages abrufen" /
-Get Start of Day, and plus 1 day). Sending a day again changes nothing. Weight (`weight_kg`), distance (`distance_m`) and
+Get Start of Day, and plus 1 day). Sending a day again changes nothing. Weight (`weight_kg`), body fat (`body_fat_pct`, in percent; Health's fraction such as `0.213` is accepted too), lean body
+mass (`lean_kg`), distance (`distance_m`) and
 workouts (`workouts`, see the example below) are added to the same JSON the same way.
 
 Run it once by hand and look at the answer: `new` counts rows that were created, `updated` changed ones, `unchanged` values
@@ -221,6 +223,7 @@ Example of the body the shortcut sends (three days, the second without a weight,
 {
   "days": [
     {"day": "2026-11-12", "steps": 9100, "active_kcal": 420.5, "distance_m": 6500, "weight_kg": 80.2,
+     "body_fat_pct": 21.3, "lean_kg": 63.1,
      "workouts": [
        {"external_id": "7F3A-91", "kind": "running", "started_at": 1794467400, "minutes": 32, "kcal": 310,
         "distance_m": 5200}
@@ -241,7 +244,9 @@ Notes:
   name; unknown names become `other` and keep their text as the name. Without `kcal` the energy is estimated from the kind,
   the minutes and your latest weight.
 - Values you typed in on the day view are not overwritten by the shortcut (add `"overwrite_manual": true` to the body if you
-  want the other way round). A weight or a water amount you entered by hand is never replaced.
+  want the other way round). A weight or a water amount you entered by hand is never replaced, and neither is a body fat or lean mass value you typed
+  in (each value is judged on its own). Body fat and lean mass are stored on the weight of the day: on a day without any
+  weight they are not stored and count as `skipped`. Body fat must be 2 to 75 %, lean mass 20 to 300 kg, else 422.
 - At most 400 days per call; one wrong value (a negative number, a weight below 20 kg, a date that is no date) makes the
   whole call answer 422 and stores nothing, so look at the answer when you build the shortcut.
 - Active energy from a watch is an estimate and often too high. The profile has a switch to add it to the calorie goal; it is

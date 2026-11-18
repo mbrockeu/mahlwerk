@@ -34,6 +34,11 @@
     }
     return best ? Math.round((latest.kg - best.kg) * 10) / 10 : null;
   });
+  // body fat and lean mass of the same day, only the parts that exist
+  const body = $derived([
+    latest?.body_fat_pct != null ? `${fmt1(latest.body_fat_pct)} % ${t('bodyFat')}` : '',
+    latest?.lean_kg != null ? `${fmt1(latest.lean_kg)} ${t('kg')} ${t('leanMass')}` : '',
+  ].filter(Boolean).join(' · '));
   const signed = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${fmt1(Math.abs(v))}`;
   const arrow = (v: number) => (v > 0 ? '↑' : v < 0 ? '↓' : '=');
   const when = $derived(!latest ? '' : latest.day === ui.today ? t('weightToday') : t('wtOn', { date: shortDate(latest.day) }));
@@ -42,11 +47,12 @@
 </script>
 
 {#if points && latest}
-  <a class="wt" href={hrefOf('weight')} aria-label={t('wtTileOpen', { kg: fmt1(latest.kg), when: line })}>
+  <a class="wt" href={hrefOf('weight')} aria-label={t('wtTileOpen', { kg: fmt1(latest.kg), when: body ? `${line}, ${body}` : line })}>
     <span class="ic" aria-hidden="true"><Icon name="trend" size={20} stroke={2.4} /></span>
     <span class="t">
       <span class="micro lab">{t('wtTileTitle')}</span>
       <span class="when">{line}</span>
+      {#if body}<span class="when body">{body}</span>{/if}
     </span>
     <span class="val display" aria-hidden="true">{fmt1(latest.kg)}<small class="mono"> {t('kg')}</small></span>
   </a>

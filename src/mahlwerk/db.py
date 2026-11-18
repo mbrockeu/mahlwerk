@@ -15,7 +15,7 @@ def _json(value) -> str:
     """json.dumps that refuses NaN and infinity: such a value in a food would turn every day sum that uses it into null."""
     return json.dumps(value, allow_nan=False)
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 
 BASE_TABLES = """
 CREATE TABLE user (
@@ -370,7 +370,17 @@ ALTER TABLE food ADD COLUMN created_by INTEGER REFERENCES user(id);
 V17_TABLES = """
 ALTER TABLE food ADD COLUMN drink INTEGER;
 """
-TABLES = BASE_TABLES + V4_TABLES + V5_TABLES + V6_TABLES + V7_TABLES + V8_TABLES + V9_TABLES + V10_TABLES + V11_TABLES + V12_TABLES + V13_TABLES + V14_TABLES + V15_TABLES + V16_TABLES + V17_TABLES
+
+# Version 18: body composition on the weight row. `body_fat_pct` (percent) and `lean_kg` are nullable; they only exist
+# next to a weight (`kg` stays NOT NULL). `*_health` says per value where it came from: 1 = Apple Health (a later sync may
+# replace it), 0 = typed in by hand (the sync leaves it alone).
+V18_TABLES = """
+ALTER TABLE weight ADD COLUMN body_fat_pct REAL;
+ALTER TABLE weight ADD COLUMN lean_kg REAL;
+ALTER TABLE weight ADD COLUMN body_fat_health INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE weight ADD COLUMN lean_health INTEGER NOT NULL DEFAULT 0;
+"""
+TABLES = BASE_TABLES + V4_TABLES + V5_TABLES + V6_TABLES + V7_TABLES + V8_TABLES + V9_TABLES + V10_TABLES + V11_TABLES + V12_TABLES + V13_TABLES + V14_TABLES + V15_TABLES + V16_TABLES + V17_TABLES + V18_TABLES
 DEFAULT_WATER_GOAL = 2000
 MAX_WATER_ML = 10000
 
@@ -425,6 +435,9 @@ MIGRATE_15_TO_16 = V16_TABLES
 # Version 16 had no drink flag; one nullable column is new, nothing existing changes.
 MIGRATE_16_TO_17 = V17_TABLES
 
+# Version 17 had no body composition; four columns are new, nothing existing changes.
+MIGRATE_17_TO_18 = V18_TABLES
+
 # Demo foods are ordinary `food` rows whose JSON `data` carries "demo": true (test-data mode of the own account) or
 # "demo_account": true (the built-in demo account; these are left out of the product list of everybody else).
 DEMO_FOOD = "json_extract(data, '$.demo') = 1"
@@ -458,6 +471,9 @@ INSERT INTO food (code, source, found, data, fetched_at)
     SELECT code, source, found, data, fetched_at FROM food_legacy ORDER BY fetched_at, rowid;
 DROP TABLE food_legacy;
 """
+
+
+KEEP = object()  # "leave the stored value alone" (None means "clear it")
 
 
 class NameTaken(Exception):
@@ -520,7 +536,7 @@ class Store:
                 script += (MIGRATE_10_TO_11 if version < 11 else "") + (MIGRATE_11_TO_12 if version < 12 else "")
                 script += (MIGRATE_12_TO_13 if version < 13 else "") + (MIGRATE_13_TO_14 if version < 14 else "")
                 script += (MIGRATE_14_TO_15 if version < 15 else "") + (MIGRATE_15_TO_16 if version < 16 else "")
-                script += MIGRATE_16_TO_17
+                script += (MIGRATE_16_TO_17 if version < 17 else "") + MIGRATE_17_TO_18
             script += f"PRAGMA user_version = {SCHEMA_VERSION}; COMMIT;"
             try:
                 con.executescript(script)
@@ -1286,18 +1302,33 @@ class Store:
     def weights_between(self, user_id: int, first: str, last: str) -> list[dict]:
         with self._connect() as con:
             rows = con.execute(
-                "SELECT day, kg FROM weight WHERE user_id = ? AND day BETWEEN ? AND ? ORDER BY day",
+                "SELECT day, kg, body_fat_pct, lean_kg FROM weight WHERE user_id = ? AND day BETWEEN ? AND ? ORDER BY day",
                 (user_id, first, last),
             ).fetchall()
-        return [dict(r) for r in rows]
+        # the body values appear only where the day has them (like in the API answer)
+        return [{k: v for k, v in dict(r).items() if v is not None} for r in rows]
 
-    def put_weight(self, user_id: int, day: str, kg: float) -> None:
+    def put_weight(self, user_id: int, day: str, kg: float, body_fat_pct=KEEP, lean_kg=KEEP) -> dict:
+        """Set the weight of a day by hand (it is then no health or demo value any more). `body_fat_pct` and `lean_kg`: a number
+        sets it as a hand-typed value, None clears it, `KEEP` (the default) leaves what is stored. Returns the stored row."""
+        sets, cols, marks, args = [], [], [], []
+        for column, value in (("body_fat_pct", body_fat_pct), ("lean_kg", lean_kg)):
+            if value is KEEP:
+                continue
+            flag = "body_fat_health" if column == "body_fat_pct" else "lean_health"
+            cols += [column, flag]
+            marks += ["?", "0"]
+            args.append(value)
+            sets += [f"{column} = excluded.{column}", f"{flag} = 0"]
         with self._connect() as con:
             con.execute(
-                "INSERT INTO weight (user_id, day, kg) VALUES (?, ?, ?) "
-                "ON CONFLICT(user_id, day) DO UPDATE SET kg = excluded.kg, demo = 0, health = 0, import_id = NULL",
-                (user_id, day, kg),
+                f"INSERT INTO weight (user_id, day, kg{''.join(', ' + c for c in cols)}) VALUES (?, ?, ?{''.join(', ' + m for m in marks)}) "
+                f"ON CONFLICT(user_id, day) DO UPDATE SET kg = excluded.kg, demo = 0, health = 0, import_id = NULL"
+                f"{''.join(', ' + x for x in sets)}",
+                (user_id, day, kg, *args),
             )
+            row = con.execute("SELECT day, kg, body_fat_pct, lean_kg FROM weight WHERE user_id = ? AND day = ?", (user_id, day)).fetchone()
+        return dict(row)
 
     def delete_weight(self, user_id: int, day: str) -> bool:
         with self._connect() as con:
@@ -1476,9 +1507,12 @@ class Store:
         daily activity values are written with source `health` and overwrite earlier health, Yazio and demo values, but
         not a `manual` row (unless `overwrite_manual`); weight and water only where there is none yet or the existing
         one came from here or is demo data; workouts are recognised by `external_id`, a manual one is left alone.
+        Body fat and lean mass live on the weight row (`kg` is NOT NULL), so they are stored only where a weight row exists
+        after the day's weight was handled (stored earlier, or arriving in the same item); on a day without any weight they
+        count as skipped. Each value has its own provenance flag: a value typed in by hand is never replaced.
         Returns the counters per kind (new, updated, unchanged, skipped) and what changed, for the webhooks.
         """
-        kinds = ("activity", "workouts", "weights", "water")
+        kinds = ("activity", "workouts", "weights", "water", "body_fat", "lean")
         counts = {k: {"new": 0, "updated": 0, "unchanged": 0, "skipped": 0} for k in kinds}
         changed = {"activity": [], "workouts": []}
         now = int(time.time())
@@ -1528,6 +1562,26 @@ class Store:
                         con.execute(
                             f"UPDATE {table} SET {column} = ?, health = 1, demo = 0 WHERE user_id = ? AND day = ?",
                             (value, user_id, day))
+                        counts[kind]["updated"] += 1
+                for column, flag, key, kind in (("body_fat_pct", "body_fat_health", "body_fat_pct", "body_fat"),
+                                                ("lean_kg", "lean_health", "lean_kg", "lean")):
+                    value = item.get(key)
+                    if value is None:
+                        continue
+                    row = con.execute(
+                        f"SELECT {column} AS v, {flag} AS health FROM weight WHERE user_id = ? AND day = ?", (user_id, day)
+                    ).fetchone()
+                    if row is None:
+                        counts[kind]["skipped"] += 1
+                    elif row["v"] is None:
+                        con.execute(f"UPDATE weight SET {column} = ?, {flag} = 1 WHERE user_id = ? AND day = ?", (value, user_id, day))
+                        counts[kind]["new"] += 1
+                    elif not row["health"]:
+                        counts[kind]["skipped"] += 1
+                    elif row["v"] == value:
+                        counts[kind]["unchanged"] += 1
+                    else:
+                        con.execute(f"UPDATE weight SET {column} = ? WHERE user_id = ? AND day = ?", (value, user_id, day))
                         counts[kind]["updated"] += 1
                 for w in item.get("workouts") or []:
                     row = con.execute(
@@ -2237,7 +2291,7 @@ class Store:
     def latest_weight(self, user_id: int) -> dict | None:
         with self._connect() as con:
             row = con.execute(
-                "SELECT day, kg FROM weight WHERE user_id = ? ORDER BY day DESC LIMIT 1", (user_id,)
+                "SELECT day, kg, body_fat_pct, lean_kg FROM weight WHERE user_id = ? ORDER BY day DESC LIMIT 1", (user_id,)
             ).fetchone()
         return dict(row) if row else None
 
@@ -2306,7 +2360,7 @@ class Store:
         return [{**r, "per_100": json.loads(r["per_100"]), "extra": json.loads(r["extra"] or "{}")} for r in rows]
 
     def export_weights(self, user_id: int, first: str, last: str, demo: bool) -> list[dict]:
-        return self._export_days("weight", "day, kg", user_id, first, last, demo, "day")
+        return self._export_days("weight", "day, kg, body_fat_pct, lean_kg", user_id, first, last, demo, "day")
 
     def export_water(self, user_id: int, first: str, last: str, demo: bool) -> list[dict]:
         return self._export_days("water", "day, ml", user_id, first, last, demo, "day")

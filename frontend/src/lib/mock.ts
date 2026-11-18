@@ -172,15 +172,21 @@ if (new URLSearchParams(location.search).get('mock') === 'history') {
 }
 
 const weights = new Map<string, number>();
+// body fat (percent) and lean mass (kg) of a day, only next to a weight
+const bodyComp = new Map<string, { body_fat_pct?: number; lean_kg?: number }>();
 {
   let kg = 82.4;
   for (let back = 89; back >= 0; back -= 1) {
     if (back % 3 === 1 || back % 7 === 4) continue;
     kg += Math.sin(back * 1.7) * 0.25 - 0.018;
     weights.set(shiftDay(t0, -back), Math.round(kg * 10) / 10);
+    if (back % 2 === 0) {
+      const fat = Math.round((22 + back * 0.02 + Math.sin(back) * 0.3) * 10) / 10;
+      bodyComp.set(shiftDay(t0, -back), { body_fat_pct: fat, lean_kg: Math.round(kg * (1 - fat / 100) * 10) / 10 });
+    }
   }
 }
-if (new URLSearchParams(location.search).get('mock') === 'noweight') weights.clear(); // empty state of the weight tile
+if (new URLSearchParams(location.search).get('mock') === 'noweight') { weights.clear(); bodyComp.clear(); } // empty state of the weight tile
 
 // demo data: remembers what it created so DELETE removes exactly that
 const demoEntryIds = new Set<number>();
@@ -453,6 +459,7 @@ function baseInsights(from: string, to: string): Insights {
   const weight = ws.length ? {
     first: ws[0].kg, last: ws[ws.length - 1].kg, change: Math.round((ws[ws.length - 1].kg - ws[0].kg) * 100) / 100,
     trend: ws.map((w) => ({ day: w.day, kg: Math.round(mean(ws.filter((o) => Math.abs((fromDay(o.day).getTime() - fromDay(w.day).getTime()) / 86400000) <= 3).map((o) => o.kg)) * 100) / 100 })),
+    body_fat: ws.filter((w) => bodyComp.get(w.day)?.body_fat_pct != null).map((w) => ({ day: w.day, pct: bodyComp.get(w.day)!.body_fat_pct as number })),
   } : null;
   let adherence: Insights['adherence'] = null;
   if (goal) {
@@ -1680,14 +1687,27 @@ export async function mockRequest(method: string, path: string, body?: unknown, 
   if (p === 'weights') {
     const n = Number(url.searchParams.get('days') ?? 90);
     const from = shiftDay(today(), -(n - 1));
-    return [...weights.entries()].filter(([d]) => d >= from).sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([day, kg]) => ({ day, kg }));
+    return [...weights.entries()].filter(([d]) => d >= from).sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([day, kg]) => ({ day, kg, ...bodyComp.get(day) }));
   }
   if ((r = m(/^weights\/(\d{4}-\d{2}-\d{2})$/))) {
-    if (method === 'DELETE') { weights.delete(r[1]); return undefined; }
-    const kg = (body as { kg: number }).kg;
+    if (method === 'DELETE') { weights.delete(r[1]); bodyComp.delete(r[1]); return undefined; }
+    const b = body as { kg: number; body_fat_pct?: number | null; lean_kg?: number | null };
+    const kg = b.kg;
     if (!(kg >= 20 && kg <= 400)) throw new ApiError(422, 'kg');
+    const comp = { ...bodyComp.get(r[1]) };
+    if ('body_fat_pct' in b) {
+      // a fraction below 1 is read as such, like the server does
+      const f = b.body_fat_pct == null ? null : b.body_fat_pct > 0 && b.body_fat_pct < 1 ? b.body_fat_pct * 100 : b.body_fat_pct;
+      if (f != null && !(f >= 2 && f <= 75)) throw new ApiError(422, 'body_fat_pct');
+      if (f == null) delete comp.body_fat_pct; else comp.body_fat_pct = Math.round(f * 10) / 10;
+    }
+    if ('lean_kg' in b) {
+      if (b.lean_kg != null && !(b.lean_kg >= 20 && b.lean_kg <= 300)) throw new ApiError(422, 'lean_kg');
+      if (b.lean_kg == null) delete comp.lean_kg; else comp.lean_kg = b.lean_kg;
+    }
     weights.set(r[1], kg);
-    return { day: r[1], kg };
+    bodyComp.set(r[1], comp);
+    return { day: r[1], kg, ...comp };
   }
   void fromDay;
   throw new ApiError(404, `mock: ${method} ${path}`);

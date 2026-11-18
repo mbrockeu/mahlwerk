@@ -326,6 +326,9 @@ export interface HistoryDay {
 export interface WeightPoint {
   day: string;
   kg: number;
+  /** Percent, only where the day has a value. */
+  body_fat_pct?: number;
+  lean_kg?: number;
 }
 
 export interface LabelScan {
@@ -395,7 +398,7 @@ export interface InsightMicro {
 export type Granularity = 'day' | 'week' | 'month';
 type Averages = Record<'kcal' | 'protein' | 'carbs' | 'fat' | 'sugars' | 'fiber' | 'salt' | 'saturated_fat' | 'water_ml' | 'steps' | 'active_kcal' | 'workout_minutes', number>;
 type Adherence = { in_range_days: number; over_days: number; under_days: number };
-type InsightWeight = { first: number; last: number; change: number; trend: { day: string; kg: number }[]; raw?: { day: string; kg: number }[] };
+type InsightWeight = { first: number; last: number; change: number; trend: { day: string; kg: number }[]; raw?: { day: string; kg: number }[]; body_fat?: { day: string; pct: number }[] };
 
 /** One section (day, ISO week or month) of the range: means per logged day. */
 export interface Section {

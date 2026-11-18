@@ -55,6 +55,8 @@ def summary_today(user: dict = Depends(current_user), store: Store = Depends(get
         "water_drinks_ml": day_drinks_ml(store, uid, day),
         "weight_kg": weight["kg"] if weight else None,
         "weight_day": weight["day"] if weight else None,
+        "body_fat_pct": weight["body_fat_pct"] if weight else None,
+        "lean_kg": weight["lean_kg"] if weight else None,
         "fasting": fast,
         "logged_today": bool(rows),
         "last_entry_at": store.last_entry_at(uid),

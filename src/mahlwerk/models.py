@@ -536,8 +536,16 @@ class HealthDay(BaseModel):
     active_kcal: float | None = Field(None, ge=0, le=activity.MAX_ACTIVE_KCAL)
     distance_m: float | None = Field(None, ge=0, le=activity.MAX_DISTANCE_M)
     weight_kg: float | None = Field(None, ge=20, le=400)
+    body_fat_pct: float | None = Field(
+        None, description="body fat in percent (2-75); a fraction between 0 and 1 is read as such (Health reports 0.213 for 21.3 %)")
+    lean_kg: float | None = Field(None, ge=20, le=300, description="lean body mass in kg")
     water_ml: int | None = Field(None, ge=0, le=10000)
     workouts: list[HealthWorkout] = Field(default_factory=list, max_length=50)
+
+    @field_validator("body_fat_pct")
+    @classmethod
+    def _body_fat(cls, v):
+        return None if v is None else normalize_body_fat(v)
 
 
 class HealthSync(BaseModel):
@@ -558,6 +566,8 @@ class HealthSyncResult(BaseModel):
     workouts: SyncCounts
     weights: SyncCounts
     water: SyncCounts
+    body_fat: SyncCounts = Field(default_factory=SyncCounts, description="stored on a weight row only; without a weight a value counts as skipped")
+    lean: SyncCounts = Field(default_factory=SyncCounts, description="like body_fat")
 
 
 class Day(BaseModel):
@@ -586,13 +596,32 @@ class HistoryDay(BaseModel):
     logged: bool
 
 
+def normalize_body_fat(v: float) -> float:
+    """Body fat in percent: 0 < v < 1 is a fraction (x 100), then 2 to 75 % counts; rounded to 0.1 %."""
+    if 0 < v < 1:
+        v = v * 100
+    if not 2 <= v <= 75:
+        raise ValueError("body fat must be between 2 and 75 percent")
+    return round(v, 1)
+
+
 class WeightIn(BaseModel):
     kg: float = Field(ge=20, le=400)
+    body_fat_pct: float | None = Field(
+        None, description="body fat in percent (2-75, a fraction below 1 is read as such); null clears it, omitted leaves it as stored")
+    lean_kg: float | None = Field(None, ge=20, le=300, description="lean body mass in kg; null clears it, omitted leaves it as stored")
+
+    @field_validator("body_fat_pct")
+    @classmethod
+    def _body_fat(cls, v):
+        return None if v is None else normalize_body_fat(v)
 
 
 class Weight(BaseModel):
     day: str
     kg: float
+    body_fat_pct: float | None = None
+    lean_kg: float | None = None
 
 
 class InsightRange(BaseModel):
@@ -671,12 +700,18 @@ class InsightTrendPoint(BaseModel):
     kg: float
 
 
+class InsightBodyFat(BaseModel):
+    day: str
+    pct: float
+
+
 class InsightWeight(BaseModel):
     first: float
     last: float
     change: float
     trend: list[InsightTrendPoint]
     raw: list[InsightTrendPoint] = Field(default_factory=list, description="the measured values, oldest first")
+    body_fat: list[InsightBodyFat] = Field(default_factory=list, description="body fat in percent on the days that have it, oldest first")
 
 
 class InsightAdherence(BaseModel):

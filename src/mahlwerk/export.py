@@ -32,7 +32,10 @@ DIARY_COLUMNS = (
     ("saturated_fat", "Saturated fat (g)", "Gesättigte Fettsäuren (g)"), ("sugars", "Sugars (g)", "Zucker (g)"),
     ("fiber", "Fiber (g)", "Ballaststoffe (g)"), ("salt", "Salt (g)", "Salz (g)"),
 )
-WEIGHT_COLUMNS = (("day", "Day", "Tag"), ("kg", "Weight (kg)", "Gewicht (kg)"))
+WEIGHT_COLUMNS = (
+    ("day", "Day", "Tag"), ("kg", "Weight (kg)", "Gewicht (kg)"), ("body_fat_pct", "Body fat (%)", "Körperfett (%)"),
+    ("lean_kg", "Lean body mass (kg)", "Magermasse (kg)"),
+)
 ACTIVITY_COLUMNS = (
     ("day", "Day", "Tag"), ("steps", "Steps", "Schritte"), ("active_kcal", "Active energy (kcal)", "Aktive Energie (kcal)"),
     ("distance_m", "Distance (m)", "Strecke (m)"), ("source", "Source", "Quelle"),

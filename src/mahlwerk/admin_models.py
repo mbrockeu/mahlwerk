@@ -96,6 +96,8 @@ class SummaryToday(BaseModel):
     kcal_goal_bonus: int = Field(0, description="kcal the active energy adds to kcal_goal (0 unless activity.add_to_goal is on)")
     weight_kg: float | None = Field(description="the latest recorded weight")
     weight_day: str | None
+    body_fat_pct: float | None = Field(None, description="body fat of that day, null without a value")
+    lean_kg: float | None = Field(None, description="lean body mass of that day, null without a value")
     fasting: FastingToday | None = Field(description="null when the fasting timer is off and no fast is running")
     logged_today: bool
     last_entry_at: int | None = Field(description="unix seconds of the latest entry ever made")

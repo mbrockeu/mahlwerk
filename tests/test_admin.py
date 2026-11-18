@@ -86,7 +86,7 @@ def test_a_token_never_opens_the_admin_area(monkeypatch, tmp_path):
 def test_overview(client, food, tmp_path):
     client.post("/api/v1/diary/2026-01-10/entries", json={"food_id": food["id"], "meal": "lunch", "amount": 100})
     body = client.get("/api/v1/admin/overview").json()
-    assert body["version"] == __version__ and body["auth_mode"] == "single" and body["schema_version"] == 17
+    assert body["version"] == __version__ and body["auth_mode"] == "single" and body["schema_version"] == 18
     assert body["db_size_bytes"] > 0 and body["users"] == 1 and body["entries"] == 1 and body["foods"] == 1
     assert body["catalog"] == {"products": 0, "updated_at": None, "bls": {"products": 0, "updated_at": None}}
 
@@ -281,7 +281,7 @@ def test_migration_from_version_7_keeps_the_data(tmp_path):
     con.close()
     store = Store(path)
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 17
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 18
     assert {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")} >= {
         "access_token", "webhook", "webhook_delivery", "setting"}
     assert con.execute("SELECT kg FROM weight").fetchone()[0] == 80.5

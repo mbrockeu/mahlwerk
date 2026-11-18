@@ -210,8 +210,8 @@ Editing or deleting the food later does not change past days; deleting sets `foo
 | GET | `/api/v1/insights/nutrient?key=&from=&to=&granularity=` | – | NutrientCurve | see Insights, nutrient curve |
 | GET | `/api/v1/insights/foods?from=&to=&q=&sort=&limit=&offset=` | – | FoodList | see Insights, foods |
 | GET | `/api/v1/insights/foods/detail?key=&from=&to=` | – | FoodDetail | see Insights, foods; 404 when the food has no entry in the period |
-| GET | `/api/v1/weights?days=` | – | `[{day, kg}]` | last N days (default 90, max 3660), oldest first |
-| PUT | `/api/v1/weights/{day}` | `{kg}` | `{day, kg}` | 20–400 kg, one value per day |
+| GET | `/api/v1/weights?days=` | – | `[{day, kg, body_fat_pct?, lean_kg?}]` | last N days (default 90, max 3660), oldest first; the two body values are left out where there is none |
+| PUT | `/api/v1/weights/{day}` | `{kg, body_fat_pct?, lean_kg?}` | `{day, kg, body_fat_pct?, lean_kg?}` | 20–400 kg, one value per day; `body_fat_pct` 2–75 % (a fraction below 1 is read as such, `0.213` = 21.3 %), `lean_kg` 20–300; a body value left out keeps what is stored, `null` clears it; typed values are never replaced by a Health sync |
 | DELETE | `/api/v1/weights/{day}` | – | 204 | |
 | POST | `/api/v1/water/{day}` | `{add_ml}` | Water | add (or take back) −2000…2000 ml; the total is kept between 0 and 10000 |
 | PUT | `/api/v1/water/{day}` | `{ml}` | Water | set the day's total directly, 0–10000 |
@@ -805,7 +805,7 @@ adds tables and columns, nothing existing changes.
   adherence of the insights (counts, bars, calendar, series, hints), the gap of the expenditure estimate (the estimate itself
   measures the total and does not change), the weekly review (day states, strength "days in range") and the badge
   `balanced_week`. A day without a value adds 0; without a goal there is no effective goal.
-- **`POST /health/sync`**, body `{days:[{day, steps?, active_kcal?, distance_m?, weight_kg?, water_ml?, workouts?:[{external_id,
+- **`POST /health/sync`**, body `{days:[{day, steps?, active_kcal?, distance_m?, weight_kg?, body_fat_pct?, lean_kg?, water_ml?, workouts?:[{external_id,
   kind|name, started_at?, minutes, kcal?, distance_m?}]}], overwrite_manual?:bool}`, at most 400 days (more → 422); any invalid
   value stops the whole call with 422 and stores nothing. Everything is written in one transaction with source `health` and is
   idempotent (the same call twice changes nothing). Rules: daily values overwrite earlier `health`, Yazio and demo values but not
@@ -813,8 +813,11 @@ adds tables and columns, nothing existing changes.
   there is none, or the existing one came from a sync or is demo data (never over a value typed in, also with `overwrite_manual`);
   workouts are recognised by `external_id`, one the user changed by hand stays as it is (unless `overwrite_manual`). The kind
   comes from `kind` or the name (Health names such as "Functional Strength Training" are understood), else `other`. Answer:
-  `{days, activity, workouts, weights, water}`, each `{new, updated, unchanged, skipped}` (`skipped` = protected by a manual value).
-  A read key answers 403.
+  `{days, activity, workouts, weights, water, body_fat, lean}`, each `{new, updated, unchanged, skipped}` (`skipped` = protected by a manual value).
+  Body fat (`body_fat_pct`: 2–75 %, a fraction between 0 and 1 is read as such and multiplied by 100, rounded to 0.1 %) and lean mass
+  (`lean_kg`: 20–300 kg) are stored on the weight row of the day, each with its own origin: a value typed in by hand is never
+  replaced, an empty or earlier Health value is. The weight row needs a `kg` value, so on a day without any weight (stored
+  before or sent in the same item) the two values are not stored and count as `skipped`. A read key answers 403.
 - **Webhook events** `activity.recorded` (a day's values were set by hand or changed by a sync; data `{day, steps, active_kcal,
   distance_m, source}`) and `workout.created` (data: the Workout; for syncs only new workouts).
 - `summary/today` also returns `steps, steps_goal, active_kcal, workouts` (number today) and `kcal_goal_bonus`; `kcal_goal` and
@@ -852,8 +855,8 @@ most once per minute.
 ### Summary for home automation
 
 `GET /summary/today` (any token scope): `{day, kcal_eaten, kcal_goal, kcal_left, protein, carbs, fat, water_ml,
-water_goal_ml, water_drinks_ml, steps, steps_goal, active_kcal, workouts, kcal_goal_bonus, weight_kg, weight_day, fasting, logged_today, last_entry_at}`. `kcal_goal` and `kcal_left` are null
-without a goal (`kcal_left` is negative above the goal). `weight_kg` is the latest value of any day. `fasting` is
+water_goal_ml, water_drinks_ml, steps, steps_goal, active_kcal, workouts, kcal_goal_bonus, weight_kg, weight_day, body_fat_pct, lean_kg, fasting, logged_today, last_entry_at}`. `kcal_goal` and `kcal_left` are null
+without a goal (`kcal_left` is negative above the goal). `weight_kg` is the latest value of any day (`body_fat_pct` and `lean_kg` come from the same day, null without a value). `fasting` is
 `{active, elapsed_seconds, target_hours}`, or null when the timer is off and no fast runs. `last_entry_at` is unix
 seconds of the latest entry ever made. "Today" is the server's date.
 

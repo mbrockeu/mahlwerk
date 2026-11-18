@@ -5,7 +5,7 @@ import sqlite3
 from datetime import date, timedelta
 
 import pytest
-from conftest import DROP_V9
+from conftest import DROP_V9, DROP_V18
 from fastapi.testclient import TestClient
 
 from mahlwerk import activity
@@ -79,7 +79,7 @@ def test_version_8_database_gets_activity_without_losing_data(tmp_path):
     store = Store(path)
 
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 17
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 18
     tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert {"activity_day", "workout"} <= tables
     assert con.execute("SELECT name, amount FROM diary_entry").fetchall() == [("Rice", 150)]
@@ -92,6 +92,31 @@ def test_version_8_database_gets_activity_without_losing_data(tmp_path):
     assert store.activity_between(1, "2026-01-01", "2026-01-31")["2026-01-02"]["steps"] == 5000
     Store(path)  # a second start changes nothing
     assert store.activity_between(1, "2026-01-01", "2026-01-31")["2026-01-02"]["steps"] == 5000
+
+
+def test_version_17_database_gets_the_body_columns(tmp_path):
+    path = str(tmp_path / "v17.db")
+    Store(path)
+    con = sqlite3.connect(path)
+    con.executescript(DROP_V18)
+    con.executescript(
+        """
+        INSERT INTO user (id, username, display_name, created_at) VALUES (1, 'a', 'A', 1);
+        INSERT INTO weight (user_id, day, kg, health) VALUES (1, '2026-01-02', 80.5, 1);
+        PRAGMA user_version = 17;
+        """
+    )
+    con.commit()
+    con.close()
+    store = Store(path)
+    con = sqlite3.connect(path)
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 18
+    assert con.execute("SELECT kg, health, body_fat_pct, lean_kg, body_fat_health, lean_health FROM weight").fetchall() == [
+        (80.5, 1, None, None, 0, 0)]
+    con.close()
+    assert store.weights_between(1, "2026-01-01", "2026-01-31") == [
+        {"day": "2026-01-02", "kg": 80.5}]
+    Store(path)  # a second start changes nothing
 
 
 def test_workout_kinds_and_names():
@@ -256,7 +281,7 @@ def test_sync_creates_and_is_idempotent(client):
     assert first == {
         "days": 3,
         "activity": {**ZERO, "new": 3}, "workouts": {**ZERO, "new": 2}, "weights": {**ZERO, "new": 1},
-        "water": {**ZERO, "new": 1}}
+        "water": {**ZERO, "new": 1}, "body_fat": ZERO, "lean": ZERO}
     a = day_of(client, d(0))
     assert a["activity"]["steps"] == 9000 and a["activity"]["active_kcal"] == 450.5 and a["activity"]["source"] == "health"
     assert a["activity"]["distance_m"] == 6400 and a["water"]["ml"] == 1500
@@ -271,7 +296,7 @@ def test_sync_creates_and_is_idempotent(client):
     assert second == {
         "days": 3,
         "activity": {**ZERO, "unchanged": 3}, "workouts": {**ZERO, "unchanged": 2}, "weights": {**ZERO, "unchanged": 1},
-        "water": {**ZERO, "unchanged": 1}}
+        "water": {**ZERO, "unchanged": 1}, "body_fat": ZERO, "lean": ZERO}
     with sqlite3.connect(client.app.state.store.path) as con:
         assert con.execute("SELECT count(*) FROM workout").fetchone()[0] == 2
         assert con.execute("SELECT count(*) FROM activity_day").fetchone()[0] == 3
@@ -307,6 +332,65 @@ def test_sync_protects_manual_values_unless_told_otherwise(client):
     a = day_of(client, d(0))
     assert a["activity"]["steps"] == 9000 and a["activity"]["source"] == "health"
     assert a["water"]["ml"] == 750  # weight and water are never replaced
+
+
+def test_sync_body_fat_as_fraction_and_percent_is_idempotent(client):
+    first = sync(client, [{"day": d(0), "weight_kg": 80.2, "body_fat_pct": 0.213, "lean_kg": 63.1}])
+    assert first["body_fat"] == {**ZERO, "new": 1} and first["lean"] == {**ZERO, "new": 1}
+    assert client.get("/api/v1/weights?days=3660").json() == [{"day": d(0), "kg": 80.2, "body_fat_pct": 21.3, "lean_kg": 63.1}]
+    again = sync(client, [{"day": d(0), "weight_kg": 80.2, "body_fat_pct": 21.3, "lean_kg": 63.1}])  # percent: same value
+    assert again["body_fat"] == {**ZERO, "unchanged": 1} and again["lean"] == {**ZERO, "unchanged": 1}
+    changed = sync(client, [{"day": d(0), "body_fat_pct": 0.2, "lean_kg": 64}])
+    assert changed["body_fat"]["updated"] == 1 and changed["lean"]["updated"] == 1 and changed["weights"] == ZERO
+    assert client.get("/api/v1/summary/today").status_code == 200
+    (w,) = client.get("/api/v1/weights?days=3660").json()
+    assert w["body_fat_pct"] == 20.0 and w["lean_kg"] == 64
+
+
+@pytest.mark.parametrize("value", [0, 1, 1.5, 1.9, 76, 90, -3])
+def test_sync_rejects_a_body_fat_outside_the_range(client, value):
+    r = client.post("/api/v1/health/sync", json={"days": [{"day": d(0), "weight_kg": 80, "body_fat_pct": value}]})
+    assert r.status_code == 422, value
+
+
+def test_sync_rejects_a_lean_mass_outside_the_range(client):
+    for value in (19, 301):
+        assert client.post("/api/v1/health/sync", json={"days": [{"day": d(0), "weight_kg": 80, "lean_kg": value}]}).status_code == 422
+
+
+def test_sync_body_composition_needs_a_weight_row(client):
+    lone = sync(client, [{"day": d(0), "body_fat_pct": 0.2, "lean_kg": 60}])
+    assert lone["body_fat"] == {**ZERO, "skipped": 1} and lone["lean"] == {**ZERO, "skipped": 1}
+    assert client.get("/api/v1/weights?days=3660").json() == []
+    client.put(f"/api/v1/weights/{d(1)}", json={"kg": 79})  # a weight typed in by hand is enough for the values to land
+    stored = sync(client, [{"day": d(1), "body_fat_pct": 22, "lean_kg": 61}])
+    assert stored["weights"] == ZERO and stored["body_fat"]["new"] == 1 and stored["lean"]["new"] == 1
+    assert client.get("/api/v1/weights?days=3660").json() == [{"day": d(1), "kg": 79, "body_fat_pct": 22, "lean_kg": 61}]
+
+
+def test_sync_never_overwrites_a_body_value_typed_in_by_hand(client):
+    client.put(f"/api/v1/weights/{d(0)}", json={"kg": 79, "body_fat_pct": 25})  # fat by hand, lean not given
+    result = sync(client, [{"day": d(0), "weight_kg": 80, "body_fat_pct": 0.2, "lean_kg": 60}])
+    assert result["weights"]["skipped"] == 1 and result["body_fat"]["skipped"] == 1
+    assert result["lean"]["new"] == 1  # per value: the empty one may come from Health
+    assert client.get("/api/v1/weights?days=3660").json() == [{"day": d(0), "kg": 79, "body_fat_pct": 25, "lean_kg": 60}]
+    # typing the lean mass by hand takes it over from Health; omitting a field keeps it, null clears it
+    client.put(f"/api/v1/weights/{d(0)}", json={"kg": 79, "lean_kg": 59})
+    assert sync(client, [{"day": d(0), "lean_kg": 60}])["lean"]["skipped"] == 1
+    assert client.get("/api/v1/weights?days=3660").json() == [{"day": d(0), "kg": 79, "body_fat_pct": 25, "lean_kg": 59}]
+    client.put(f"/api/v1/weights/{d(0)}", json={"kg": 79, "body_fat_pct": None})
+    assert client.get("/api/v1/weights?days=3660").json() == [{"day": d(0), "kg": 79, "lean_kg": 59}]
+
+
+def test_weight_put_validates_and_returns_body_values(client):
+    r = client.put(f"/api/v1/weights/{d(0)}", json={"kg": 80, "body_fat_pct": 0.185, "lean_kg": 65.3})
+    assert r.status_code == 200 and r.json() == {"day": d(0), "kg": 80, "body_fat_pct": 18.5, "lean_kg": 65.3}
+    assert client.put(f"/api/v1/weights/{d(0)}", json={"kg": 80, "body_fat_pct": 80}).status_code == 422
+    assert client.put(f"/api/v1/weights/{d(0)}", json={"kg": 80, "lean_kg": 10}).status_code == 422
+    assert client.put(f"/api/v1/weights/{d(0)}", json={"kg": 81}).json() == {"day": d(0), "kg": 81, "body_fat_pct": 18.5, "lean_kg": 65.3}
+    today = client.get("/api/v1/summary/today").json()
+    assert today["weight_kg"] == 81 and today["body_fat_pct"] == 18.5 and today["lean_kg"] == 65.3
+    assert client.get(f"/api/v1/insights?from={d(0)}&to={d(1)}").json()["weight"]["body_fat"] == [{"day": d(0), "pct": 18.5}]
 
 
 def test_sync_does_not_touch_a_workout_the_user_changed(client):

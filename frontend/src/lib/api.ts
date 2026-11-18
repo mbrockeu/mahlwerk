@@ -195,7 +195,8 @@ export const api = {
   insightsFoodDetail: (key: string, from: string, to: string, signal?: AbortSignal) =>
     request<FoodDetail>('GET', `insights/foods/detail${q({ key, from, to })}`, undefined, undefined, signal),
   weights: (days = 90) => request<WeightPoint[]>('GET', `weights${q({ days })}`),
-  setWeight: (day: string, kg: number) => request<WeightPoint>('PUT', `weights/${day}`, { kg }),
+  /** `body_fat_pct` / `lean_kg`: a number sets it, null clears it, left out keeps what is stored. */
+  setWeight: (day: string, kg: number, body?: { body_fat_pct?: number | null; lean_kg?: number | null }) => request<WeightPoint>('PUT', `weights/${day}`, { kg, ...body }),
   deleteWeight: (day: string) => request<void>('DELETE', `weights/${day}`),
 
   addWater: (day: string, addMl: number) => request<Day['water']>('POST', `water/${day}`, { add_ml: addMl }),

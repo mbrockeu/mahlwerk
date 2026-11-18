@@ -135,7 +135,7 @@ def patch_settings(body: SettingsPatch, user: dict = Depends(current_user), stor
     return user_settings(store, user["id"])
 
 
-@router.get("/weights", response_model=list[Weight])
+@router.get("/weights", response_model=list[Weight], response_model_exclude_none=True)
 def weights(
     days: int = Query(90, ge=1, le=3660), user: dict = Depends(current_user), store: Store = Depends(get_store)
 ) -> list[dict]:
@@ -143,12 +143,13 @@ def weights(
     return store.weights_between(user["id"], (last - timedelta(days=days - 1)).isoformat(), last.isoformat())
 
 
-@router.put("/weights/{day}", response_model=Weight)
+@router.put("/weights/{day}", response_model=Weight, response_model_exclude_none=True)
 def put_weight(day: str, body: WeightIn, request: Request, user: dict = Depends(current_user), store: Store = Depends(get_store)) -> Weight:
     parse_day(day)
-    store.put_weight(user["id"], day, body.kg)
+    given = {k: getattr(body, k) for k in ("body_fat_pct", "lean_kg") if k in body.model_fields_set}  # omitted = keep what is stored
+    row = store.put_weight(user["id"], day, body.kg, **given)
     emit(request, user, "weight.recorded", {"day": day, "kg": body.kg})
-    return Weight(day=day, kg=body.kg)
+    return Weight(**row)
 
 
 @router.delete("/weights/{day}", status_code=204)

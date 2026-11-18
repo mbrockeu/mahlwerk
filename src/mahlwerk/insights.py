@@ -233,6 +233,7 @@ def weight_summary(weights: list[dict]) -> dict | None:
         "change": _r(kgs[-1] - kgs[0], 2),
         "trend": trend,
         "raw": [{"day": w["day"], "kg": w["kg"]} for w in points],
+        "body_fat": [{"day": w["day"], "pct": w["body_fat_pct"]} for w in points if w.get("body_fat_pct") is not None],
     }
 
 

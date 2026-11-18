@@ -195,7 +195,9 @@ const en = {
 
   // weight
   weightTitle: 'Weight', weightToday: 'Today', kg: 'kg', weightSave: 'Save weight', weightSaved: 'Weight saved',
-  weightBad: 'Enter a weight between 20 and 400 kg.', weightDelete: 'Delete today\'s value', weightEmpty: 'No weight values yet.',
+  weightBad: 'Enter a weight between 20 and 400 kg.', bodyFat: 'Body fat', leanMass: 'Lean mass', bodyOptional: 'optional',
+  bodyBad: 'Body fat must be between 2 and 75 %, lean mass between 20 and 300 kg.', wtBodyFat: 'Body fat, right axis',
+  wtBodyAria: 'Body fat {first} to {last} percent', weightDelete: 'Delete today\'s value', weightEmpty: 'No weight values yet.',
   weightChange: 'since {day}', weightChart: 'Weight, last 90 days', weightLatest: 'Latest', weightDeleted: 'Value deleted',
 
   // profile
@@ -855,7 +857,9 @@ const de: Record<Key, string> = {
   recipeWholeDish: 'ganzes Gericht: {w} g', recipeServing: '1 Portion = {g} g', recipeEmptyResult: 'Füge Zutaten hinzu, dann siehst du die Werte.',
 
   weightTitle: 'Gewicht', weightToday: 'Heute', kg: 'kg', weightSave: 'Gewicht speichern', weightSaved: 'Gewicht gespeichert',
-  weightBad: 'Bitte ein Gewicht zwischen 20 und 400 kg eingeben.', weightDelete: 'Heutigen Wert löschen', weightEmpty: 'Noch keine Gewichtswerte.',
+  weightBad: 'Bitte ein Gewicht zwischen 20 und 400 kg eingeben.', bodyFat: 'Körperfett', leanMass: 'Magermasse', bodyOptional: 'optional',
+  bodyBad: 'Körperfett muss zwischen 2 und 75 % liegen, Magermasse zwischen 20 und 300 kg.', wtBodyFat: 'Körperfett, rechte Achse',
+  wtBodyAria: 'Körperfett {first} bis {last} Prozent', weightDelete: 'Heutigen Wert löschen', weightEmpty: 'Noch keine Gewichtswerte.',
   weightChange: 'seit {day}', weightChart: 'Gewicht, letzte 90 Tage', weightLatest: 'Zuletzt', weightDeleted: 'Wert gelöscht',
 
   goalHint: 'Tagebuch und Ziel sind nur für dich sichtbar.',
