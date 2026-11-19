@@ -267,7 +267,8 @@
       {#if playful}
         <a class="pill on-dark" href="#/badges" aria-label="{t('weekAria')}: {streakText}. {t('streakToBadges')}">
           {@render strokes()}
-          <span>{streakText}</span>
+          <!-- on another day the "Today" button needs the room: the strokes alone still lead to the badges -->
+          {#if ui.day === ui.today}<span class="streak">{streakText}</span>{/if}
         </a>
       {:else}
         <div class="pill on-dark" role="img" aria-label={t('weekAria')}>{@render strokes()}</div>
@@ -442,6 +443,11 @@
     font-size: 13px; font-weight: 600; white-space: nowrap; text-decoration: none; --focus: var(--focus-base);
   }
   a.pill { min-height: 44px; height: 44px; }
+  /* a narrow phone: the pill gives way (text cut with …) instead of pushing the row past the edge */
+  .daybar .pill { min-width: 0; flex-shrink: 1; overflow: hidden; }
+  .streak { overflow: hidden; text-overflow: ellipsis; }
+  .pill svg { flex-shrink: 0; }
+  .arrows { flex-shrink: 0; }
   .skeleton { height: 250px; border-radius: 44px 44px 44px 14px; background: var(--hairline); opacity: 0.5; }
 
   .hero {
