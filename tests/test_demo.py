@@ -140,7 +140,9 @@ def test_weights_form_a_gently_falling_trend(ann):
 
 def test_demo_foods_are_own_foods_without_the_demo_marker_in_the_api(ann):
     ann.post(DEMO, json={"days": 7})
-    listed = ann.get("/api/v1/foods?q=haferflocken").json()
+    # the demo picks its foods at random by date: search one it actually made instead of a fixed name
+    name = ann.get("/api/v1/foods").json()[0]["name"]
+    listed = ann.get("/api/v1/foods", params={"q": name}).json()
     assert listed and listed[0]["source"] == "own" and listed[0]["code"] is None
     assert "demo" not in listed[0]
     one = ann.get(f"/api/v1/foods/{listed[0]['id']}").json()
@@ -151,12 +153,13 @@ def test_demo_foods_are_own_foods_without_the_demo_marker_in_the_api(ann):
 
 def test_editing_a_demo_food_makes_it_a_real_one(ann):
     ann.post(DEMO, json={"days": 7})
-    banana = ann.get("/api/v1/foods?q=banane").json()[0]
-    edited = ann.put(f"/api/v1/foods/{banana['id']}", json={"name": "Banane", "per_100": {"kcal": 90}})
+    made = ann.get("/api/v1/foods").json()  # picked at random by date, so no fixed names
+    banana, other = made[0], made[1]["name"]
+    edited = ann.put(f"/api/v1/foods/{banana['id']}", json={"name": banana["name"], "per_100": {"kcal": 90}})
     assert edited.status_code == 200 and "demo" not in edited.json()
     ann.delete(DEMO)
     assert ann.get(f"/api/v1/foods/{banana['id']}").status_code == 200  # survives the cleanup
-    assert ann.get("/api/v1/foods?q=haferflocken").json() == []  # untouched demo foods are gone
+    assert ann.get("/api/v1/foods", params={"q": other}).json() == []  # untouched demo foods are gone
 
 
 def test_delete_removes_exactly_the_demo_data(ann, food):
