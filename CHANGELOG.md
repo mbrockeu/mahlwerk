@@ -21,6 +21,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- A new version reached iPhones only hours later: `index.html` and the other files outside `assets/` were sent without `Cache-Control`, so Safari and home-screen web apps could reuse the old page. They now get `Cache-Control: no-cache` (checked with the server at each start, the ETag keeps it cheap); the hashed bundles under `assets/` get `public, max-age=31536000, immutable`.
 - Number fields no longer save when they are only tapped and left: on the activity card this marked the day as typed in by hand (and an empty active energy as 0), so the Apple Health shortcut skipped it.
 
 ## [0.2.0] - 2026-11-14

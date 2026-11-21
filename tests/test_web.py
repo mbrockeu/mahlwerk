@@ -21,6 +21,10 @@ def test_single_page_app_fallback(monkeypatch, tmp_path):
     assert "Mahlwerk app" in client.get("/diary/2025-01-01").text
     assert client.get("/assets/app.js").text == "console.log(1)"
     assert "Mahlwerk app" in client.get("/%2e%2e/secret.txt").text  # no escape from the directory
+    # a new version must show up at the next start: the page is revalidated, the hashed bundles are cached for good
+    assert client.get("/").headers["cache-control"] == "no-cache"
+    assert client.get("/diary/2025-01-01").headers["cache-control"] == "no-cache"
+    assert client.get("/assets/app.js").headers["cache-control"] == "public, max-age=31536000, immutable"
 
     assert client.get("/healthz").json()["status"] == "ok"
     missing = client.get("/api/v1/nothing")

@@ -51,11 +51,20 @@ def mount_web(app: FastAPI, web_dir: Path) -> None:
             raise HTTPException(404, "Not Found")
         target = (root / path).resolve()
         if target.is_file() and target.is_relative_to(root):
-            return FileResponse(target)
+            return FileResponse(target, headers=_cache_headers(target.relative_to(root)))
         index = root / "index.html"
         if not index.is_file():
             raise HTTPException(404, "Not Found")
-        return FileResponse(index)
+        return FileResponse(index, headers=_cache_headers(Path("index.html")))
+
+
+def _cache_headers(rel: Path) -> dict[str, str]:
+    """Built files under assets/ carry a hash in their name and never change: cached for a year. Everything else (index.html
+    above all) is checked with the server each time, so a new version shows up at the next start instead of hours later
+    (without a Cache-Control header Safari may reuse a page for a tenth of its age)."""
+    if rel.parts and rel.parts[0] == "assets":
+        return {"Cache-Control": "public, max-age=31536000, immutable"}
+    return {"Cache-Control": "no-cache"}
 
 
 def create_app(
