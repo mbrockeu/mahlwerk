@@ -167,7 +167,7 @@ export const api = {
     request<Entry>('POST', `diary/${day}/entries`, entry),
   copyEntries: (day: string, body: { from_day: string; meal?: Meal; to_meal?: Meal }) =>
     request<{ entries: Entry[] }>('POST', `diary/${day}/copy`, body),
-  patchEntry: (id: number, patch: { amount?: number; meal?: Meal }) =>
+  patchEntry: (id: number, patch: { amount?: number; meal?: Meal; food_id?: number }) =>
     request<Entry>('PATCH', `diary/entries/${id}`, patch),
   deleteEntry: (id: number) => request<void>('DELETE', `diary/entries/${id}`),
 

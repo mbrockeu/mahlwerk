@@ -3,7 +3,7 @@
   import { fmt, t } from '../lib/i18n';
   import { isPortionFood, PORTION_GRAMS, portionsText } from '../lib/portion';
   import { changed, closeAdd, loadMe, loadVision, openAmount, openEditor, toast, ui, visionReady, type AddTab } from '../lib/store.svelte';
-  import { MEALS, type Food, type Meal, type RecentFood, type Template } from '../lib/types';
+  import { MEALS, type Entry, type Food, type Meal, type RecentFood, type Template } from '../lib/types';
   import FoodRow from './FoodRow.svelte';
   import FoodSearch from './FoodSearch.svelte';
   import Icon from './Icon.svelte';
@@ -12,7 +12,7 @@
   import ScanPane from './ScanPane.svelte';
   import Sheet from './Sheet.svelte';
 
-  let { meal: initialMeal, day, tab: initialTab, query: initialQuery = '' }: { meal: Meal; day: string; tab: AddTab; query?: string } = $props();
+  let { meal: initialMeal, day, tab: initialTab, query: initialQuery = '', replace }: { meal: Meal; day: string; tab: AddTab; query?: string; replace?: Entry } = $props();
 
   // svelte-ignore state_referenced_locally
   let meal = $state<Meal>(initialMeal);
@@ -123,7 +123,8 @@
     { id: 'scan', label: () => t('tabScan') },
     { id: 'search', label: () => t('tabSearch') },
     { id: 'recent', label: () => t('tabRecent') },
-    { id: 'templates', label: () => t('tabTemplates') },
+    // swapping the food of one entry: a template or a meal photo would add several, so they are not offered
+    ...(replace ? [] : [{ id: 'templates' as AddTab, label: () => t('tabTemplates') }]),
     ...(ui.me?.features?.cookidoo ? [{ id: 'cookidoo' as AddTab, label: () => t('tabCookidoo') }] : []),
   ]);
 
@@ -135,7 +136,8 @@
   }
 </script>
 
-<Sheet title={t('addTitle')} onclose={closeAdd} tall>
+<Sheet title={replace ? t('swapTitle') : t('addTitle')} onclose={closeAdd} tall>
+  {#if replace}<p class="note">{t('swapNote', { name: replace.name ?? '?' })}</p>{/if}
   <div class="meals" role="group" aria-label={t('meal')}>
     {#each MEALS as m}
       <button class="chip" class:on={meal === m} aria-pressed={meal === m} onclick={() => (meal = m)}>{t(m)}</button>
@@ -216,7 +218,7 @@
 </Sheet>
 
 {#snippet photoButton()}
-  {#if visionReady()}
+  {#if visionReady() && !replace}
     <button type="button" class="btn photo" data-testid="meal-photo" onclick={() => (photo = true)}><Icon name="camera" size={18} />{t('visMealButton')}</button>
   {/if}
 {/snippet}

@@ -1556,7 +1556,14 @@ export async function mockRequest(method: string, path: string, body?: unknown, 
       const i = es.findIndex((e) => e.id === id);
       if (i < 0) continue;
       if (method === 'DELETE') { es.splice(i, 1); return undefined; }
-      const patch = body as { amount?: number; meal?: Meal };
+      const patch = body as { amount?: number; meal?: Meal; food_id?: number };
+      if (patch.food_id != null) {
+        const food = foods.find((f) => f.id === patch.food_id);
+        if (!food) throw new ApiError(404, 'unknown food');
+        const swapped = makeEntry(food, patch.meal ?? es[i].meal, patch.amount ?? es[i].amount);
+        es[i] = { ...swapped, id: es[i].id };
+        return clone(es[i]);
+      }
       const e = es[i];
       const k = patch.amount != null ? patch.amount / e.amount : 1;
       es[i] = {

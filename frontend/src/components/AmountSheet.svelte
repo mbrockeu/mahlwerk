@@ -4,7 +4,7 @@
   import { fmt, inputNumber, parseNumber, t } from '../lib/i18n';
   import { checkPiece, gramsToPieces, isHalfMultiple, MAX_LABEL, piecesToGrams, splitGrams } from '../lib/piece';
   import { isPortionEntry, isPortionFood, PORTION_GRAMS } from '../lib/portion';
-  import { backToAdd, changed, toast, ui, type AmountRequest } from '../lib/store.svelte';
+  import { backToAdd, changed, openSwap, toast, ui, type AmountRequest } from '../lib/store.svelte';
   import { MEALS, type FoodPiece, type Meal } from '../lib/types';
   import Sheet from './Sheet.svelte';
 
@@ -15,6 +15,8 @@
   const food = req.food;
   // svelte-ignore state_referenced_locally
   const entry = req.entry;
+  // svelte-ignore state_referenced_locally
+  const replace = req.replace;  // this food takes the place of an entry's food
   const unit = (food?.unit ?? entry?.unit ?? 'g') as 'g' | 'ml';
   const title = (food?.name ?? entry?.name) || '?';
   const brand = food?.brand ?? entry?.brand ?? null;
@@ -241,6 +243,9 @@
       if (entry) {
         await api.patchEntry(entry.id, { amount: toBooked(amount as number), meal });
         toast(t('changed'));
+      } else if (food && replace) {
+        await api.patchEntry(replace.id, { food_id: food.id, amount: toBooked(amount as number), meal });
+        toast(t('swapped', { name: title }));
       } else if (food) {
         await api.addEntry(req.day, { food_id: food.id, meal, amount: toBooked(amount as number) });
         toast(t('added', { name: title }));
@@ -272,11 +277,15 @@
   }
 </script>
 
-<Sheet title={entry ? t('amountEdit') : t('amount')} onclose={close} onback={req.back ? backToAdd : undefined} label={title}>
+<Sheet title={entry || replace ? t('amountEdit') : t('amount')} onclose={close} onback={req.back ? backToAdd : undefined} label={title}>
   <div class="who">
     <h3>{title}</h3>
     <p class="note">{[brand, p100.kcal != null ? t(byPortion ? 'perPortionShort' : 'per100Short', { kcal: fmt(p100.kcal, 0), unit }) : null].filter(Boolean).join(' · ')}</p>
+    {#if replace}<p class="note">{t('swapNote', { name: replace.name ?? '?' })}</p>{/if}
   </div>
+  {#if entry}
+    <button class="btn quiet-btn swap" onclick={() => openSwap(entry, req.day)} disabled={saving}>{t('swapOpen')}</button>
+  {/if}
 
   <div class="meals" role="group" aria-label={t('meal')}>
     {#each MEALS as m}
@@ -393,7 +402,7 @@
   {#if p100.kcal == null}<p class="note warn">{t('noEnergy')}</p>{/if}
   {#if error}<p class="note warn" role="alert">{error}</p>{/if}
 
-  <button class="btn primary" onclick={save} disabled={saving}>{entry ? t('saveChange') : t('saveToDiary')}</button>
+  <button class="btn primary" onclick={save} disabled={saving}>{entry ? t('saveChange') : replace ? t('swapSave') : t('saveToDiary')}</button>
   {#if entry}
     <button class="btn danger" onclick={remove} disabled={saving}>{confirming ? t('confirmDelete') : t('deleteEntry')}</button>
   {/if}
@@ -401,6 +410,7 @@
 
 <style>
   .who h3 { font-size: 18px; font-weight: 600; line-height: 1.2; }
+  .swap { align-self: flex-start; min-height: 44px; padding: 0 12px; font-size: 14px; }
   .meals { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; flex-shrink: 0; }
   .meals .chip { justify-content: center; }
   .quick { display: flex; flex-wrap: wrap; gap: 8px; }

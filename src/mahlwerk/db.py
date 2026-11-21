@@ -1005,13 +1005,22 @@ class Store:
             row = con.execute("SELECT * FROM diary_entry WHERE id = ? AND user_id = ?", (entry_id, user_id)).fetchone()
         return self._entry(row) if row else None
 
-    def update_entry(self, user_id: int, entry_id: int, amount: float | None, meal: str | None) -> bool:
+    def update_entry(self, user_id: int, entry_id: int, amount: float | None, meal: str | None,
+                     food_id: int | None = None, copy: dict | None = None) -> bool:
+        """Change amount and meal; with `food_id` and its snapshot `copy` the entry becomes that food (day and created_at stay)."""
         with self._connect() as con:
-            return con.execute(
+            changed = con.execute(
                 "UPDATE diary_entry SET amount = COALESCE(?, amount), meal = COALESCE(?, meal), import_id = NULL "
                 "WHERE id = ? AND user_id = ?",
                 (amount, meal, entry_id, user_id),
             ).rowcount > 0
+            if changed and food_id is not None and copy is not None:
+                con.execute(
+                    "UPDATE diary_entry SET food_id = ?, unit = ?, name = ?, brand = ?, per_100 = ?, extra = ? WHERE id = ? AND user_id = ?",
+                    (food_id, copy["unit"], copy["name"], copy["brand"], _json(copy["per_100"]), _json(copy.get("extra") or {}),
+                     entry_id, user_id),
+                )
+            return changed
 
     def delete_entry(self, user_id: int, entry_id: int) -> bool:
         with self._connect() as con:

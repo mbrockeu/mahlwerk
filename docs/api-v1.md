@@ -191,7 +191,7 @@ Editing or deleting the food later does not change past days; deleting sets `foo
 | POST | `/api/v1/label-scans` | image bytes | `{per_100, basis, warnings, text}` | unchanged |
 | GET | `/api/v1/diary/{day}` | – | Day | |
 | POST | `/api/v1/diary/{day}/entries` | `{food_id, meal, amount}` | Entry (201) | amount > 0, ≤ 5000 |
-| PATCH | `/api/v1/diary/entries/{id}` | `{amount?, meal?}` | Entry | only own entries, else 404 |
+| PATCH | `/api/v1/diary/entries/{id}` | `{amount?, meal?, food_id?}` | Entry | only own entries, else 404; `food_id` swaps the food (name, brand, unit and nutrients taken over from it, day stays; unknown food 404, nothing changed) |
 | DELETE | `/api/v1/diary/entries/{id}` | – | 204 | only own entries, else 404 |
 | POST | `/api/v1/diary/{day}/copy` | `{from_day, meal?, to_meal?}` | `{entries:Entry[]}` (201) | see Copying and templates |
 | GET | `/api/v1/templates` | – | Template[] | this user's templates, newest first |

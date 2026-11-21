@@ -44,6 +44,8 @@ const en = {
   pieceSet: 'Set a piece', pieceEdit: 'Change piece', pieceTitle: 'What is one piece?', pieceName: 'Name', pieceNameHint: 'for example slice',
   pieceNameDefault: 'Piece', pieceGrams: 'Weight of one piece ({unit})', pieceSave: 'Save piece', pieceRemove: 'Remove piece',
   pieceBad: 'Give the piece a name (up to 30 characters) and a weight above 0 up to 5000.', pieceHelp: 'Say it once, then count pieces next time.',
+  // swapping the food of an entry (the photo saw nuts, the scan finds the real product)
+  swapOpen: 'Other food', swapTitle: 'Swap food', swapNote: 'Replaces: {name}', swapSave: 'Swap', swapped: 'Swapped for {name}',
   // a share of a whole (cake of 1250 g cut into 8, ate 2)
   splitOpen: 'Divide', splitTitle: 'Weigh the whole, say how many parts and how many you ate.', splitTotal: 'Whole ({unit})',
   splitParts: 'Parts', splitEaten: 'Eaten', splitResult: '= {g} (1 part = {one})', splitTake: 'Use amount', splitBad: 'Whole above 0, parts above 0, eaten up to the number of parts, at most 5000 in total.',
@@ -714,6 +716,7 @@ const de: Record<Key, string> = {
   pieceSet: 'Stück festlegen', pieceEdit: 'Stück ändern', pieceTitle: 'Was ist ein Stück?', pieceName: 'Name', pieceNameHint: 'z. B. Scheibe',
   pieceNameDefault: 'Stück', pieceGrams: 'Gewicht eines Stücks ({unit})', pieceSave: 'Stück speichern', pieceRemove: 'Stück entfernen',
   pieceBad: 'Gib dem Stück einen Namen (bis 30 Zeichen) und ein Gewicht über 0 bis 5000.', pieceHelp: 'Einmal festlegen, beim nächsten Mal Stück zählen.',
+  swapOpen: 'Anderes Lebensmittel', swapTitle: 'Lebensmittel tauschen', swapNote: 'Ersetzt: {name}', swapSave: 'Austauschen', swapped: 'Getauscht gegen {name}',
   splitOpen: 'Aufteilen', splitTitle: 'Ganzes wiegen, sagen in wie viele Teile geteilt und wie viele gegessen.', splitTotal: 'Ganzes ({unit})',
   splitParts: 'Teile', splitEaten: 'Gegessen', splitResult: '= {g} (1 Teil = {one})', splitTake: 'Menge übernehmen', splitBad: 'Ganzes über 0, Teile über 0, gegessen höchstens so viele wie Teile, insgesamt bis 5000.',
   amount: 'Menge', amountEdit: 'Eintrag ändern', portion: '1 Portion ({s})', stepLess: 'Weniger ({s})', stepMore: 'Mehr ({s})', hundred: '100 {unit}', lastAmount: 'zuletzt {a} {unit}',

@@ -3,6 +3,7 @@ import { api, hooks, view } from './api';
 import { t } from './i18n';
 import { today } from './date';
 import { DEMO } from './demo';
+import { isPortionEntry, isPortionFood } from './portion';
 import type { Account, BadgeCode, SignInMode, Food, Entry, Me, Meal, Recipe, VisionState, Workout } from './types';
 
 export type AddTab = 'scan' | 'search' | 'recent' | 'templates' | 'cookidoo';
@@ -17,8 +18,10 @@ export interface AmountRequest {
   amount?: number;
   /** The add sheet it was opened from (meal, tab, search text): "Back" returns there instead of closing everything. */
   back?: AddState;
+  /** A diary entry that gets this food instead of its own (the nuts the photo saw become the scanned product). */
+  replace?: Entry;
 }
-export interface AddState { meal: Meal; day: string; tab: AddTab; query?: string }
+export interface AddState { meal: Meal; day: string; tab: AddTab; query?: string; replace?: Entry }
 export interface EditorRequest {
   food: Food | null;
   code?: string | null;
@@ -81,8 +84,13 @@ export const closeAdd = () => { ui.add = null; };
 export const openAmount = (req: AmountRequest) => {
   const back = ui.add ? { ...ui.add } : undefined;  // the add sheet keeps its meal, tab and search text up to date in ui.add
   ui.add = null;
-  ui.amount = { back, ...req };
+  const replace = req.replace ?? back?.replace;
+  // swapping the food keeps the amount, unless one is counted in portions and the other in grams
+  const amount = req.amount ?? (replace && req.food && isPortionFood(req.food) === isPortionEntry(replace) ? replace.amount : undefined);
+  ui.amount = { back, ...req, replace, amount };
 };
+/** Pick another food for an entry: the add sheet (search, scan, recent) opens for it, the choice replaces the entry's food. */
+export const openSwap = (entry: Entry, day: string) => { ui.amount = null; ui.add = { meal: entry.meal, day, tab: 'search', replace: entry }; };
 /** From the amount dialog back to the add sheet it came from (a wrong pick), as it was. */
 export const backToAdd = () => { const back = ui.amount?.back; ui.amount = null; if (back) ui.add = back; };
 /** True while an admin looks at the built-in demo account: shared products and recipes are read-only there (the server says no as well). */

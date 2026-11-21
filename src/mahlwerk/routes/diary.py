@@ -156,22 +156,27 @@ def get_day(day: str, user: dict = Depends(current_user), store: Store = Depends
     )
 
 
-@router.post("/diary/{day}/entries", response_model=Entry, status_code=201)
-def add_entry(
-    day: str, body: EntryIn, request: Request, user: dict = Depends(current_user), store: Store = Depends(get_store)
-) -> Entry:
-    parse_day(day)
-    food = store.get_food(body.food_id, demo_view=bool(user.get("is_demo")))
+def _food_copy(store: Store, user: dict, food_id: int) -> tuple[dict, dict]:
+    """The food an entry is booked from and the snapshot the entry keeps of it (404 for an unknown food)."""
+    food = store.get_food(food_id, demo_view=bool(user.get("is_demo")))
     if food is None or not food["found"]:
         raise HTTPException(404, "unknown food")
     data = food["data"]
-    copy = {
+    return food, {
         "name": data.get("name") or food["code"] or "Unnamed",
         "brand": data.get("brand"),
         "unit": data.get("unit") or "g",
         "per_100": data["per_100"],
         "extra": nutrients.clean(data.get("extra")),
     }
+
+
+@router.post("/diary/{day}/entries", response_model=Entry, status_code=201)
+def add_entry(
+    day: str, body: EntryIn, request: Request, user: dict = Depends(current_user), store: Store = Depends(get_store)
+) -> Entry:
+    parse_day(day)
+    food, copy = _food_copy(store, user, body.food_id)
     entry_id = store.add_entry(user["id"], day, body.meal, food["id"], body.amount, copy)
     row = store.get_entry(user["id"], entry_id)
     emit_entries(request, store, user, [row])
@@ -200,9 +205,10 @@ def patch_entry(
     entry_id: int, body: EntryPatch, request: Request, user: dict = Depends(current_user), store: Store = Depends(get_store)
 ) -> Entry:
     _own_entry(store, user["id"], entry_id)
-    if body.amount is None and body.meal is None:
+    if body.amount is None and body.meal is None and body.food_id is None:
         raise HTTPException(422, "nothing to change")
-    store.update_entry(user["id"], entry_id, body.amount, body.meal)
+    food, copy = _food_copy(store, user, body.food_id) if body.food_id is not None else (None, None)
+    store.update_entry(user["id"], entry_id, body.amount, body.meal, food["id"] if food else None, copy)
     row = store.get_entry(user["id"], entry_id)
     emit(request, user, "entry.updated", entry_event(store, user["id"], row))
     return entry_out(row)

@@ -89,6 +89,23 @@ def test_entry_validation(client, food):
     assert client.get("/api/v1/diary/2025-3-1").status_code == 422
 
 
+def test_patch_swaps_the_food(client, food):
+    entry = log(client, food, 30, "snack")
+    nuts = client.post("/api/v1/foods", json={"name": "Cashews", "brand": "Nutty", "unit": "g",
+                                              "per_100": {"kcal": 600, "protein": 20, "carbs": 30, "fat": 45}}).json()
+    swapped = client.patch(f"/api/v1/diary/entries/{entry['id']}", json={"food_id": nuts["id"]}).json()
+    assert swapped["id"] == entry["id"] and swapped["food_id"] == nuts["id"]
+    assert (swapped["name"], swapped["brand"], swapped["amount"], swapped["meal"]) == ("Cashews", "Nutty", 30, "snack")
+    assert (swapped["kcal"], swapped["protein"], swapped["fat"]) == (180, 6, 13.5)
+    # with amount and meal in the same call; the day stays
+    both = client.patch(f"/api/v1/diary/entries/{entry['id']}", json={"food_id": food["id"], "amount": 50, "meal": "lunch"}).json()
+    assert (both["name"], both["amount"], both["meal"], both["kcal"]) == ("Oats", 50, "lunch", 100)
+    day = client.get(f"/api/v1/diary/{DAY}").json()
+    assert [e["id"] for m in day["meals"].values() for e in m["entries"]] == [entry["id"]]
+    assert client.patch(f"/api/v1/diary/entries/{entry['id']}", json={"food_id": 99999}).status_code == 404
+    assert client.get(f"/api/v1/diary/{DAY}").json()["totals"]["kcal"] == 100  # the refused swap changed nothing
+
+
 def test_ml_food_gets_ml_entries(client):
     f = client.post("/api/v1/foods", json={"name": "Milk", "unit": "ml", "per_100": {"kcal": 64}}).json()
     assert log(client, f, 250)["unit"] == "ml"

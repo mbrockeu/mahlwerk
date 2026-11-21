@@ -375,6 +375,7 @@ class EntryIn(BaseModel):
 class EntryPatch(BaseModel):
     amount: float | None = Field(None, gt=0, le=5000)
     meal: Meal | None = None
+    food_id: int | None = Field(None, description="swap the food: name, brand, unit and nutrients are taken over from it, day and time stay")
 
 
 class Entry(BaseModel):
