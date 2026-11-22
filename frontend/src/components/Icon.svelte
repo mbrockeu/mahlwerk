@@ -1,6 +1,6 @@
 <script lang="ts">
   type Name = 'home' | 'bars' | 'list' | 'trend' | 'scan' | 'plus' | 'left' | 'right' | 'down' | 'close' | 'camera' | 'user' | 'check' | 'search' | 'clock' | 'more' | 'repeat' | 'bookmark' | 'edit' | 'drop' | 'shield' | 'copy' | 'pot' | 'medal' | 'logout'
-    | 'steps' | 'flame' | 'walk' | 'run' | 'bike' | 'mountain' | 'swim' | 'dumbbell' | 'lotus' | 'bolt' | 'stairs' | 'ball' | 'music' | 'folder' | 'up' | 'grip' | 'eye' | 'eyeoff' | 'sliders' | 'wide' | 'narrow' | 'help';
+    | 'steps' | 'flame' | 'walk' | 'run' | 'bike' | 'mountain' | 'swim' | 'dumbbell' | 'lotus' | 'bolt' | 'stairs' | 'ball' | 'music' | 'folder' | 'up' | 'grip' | 'eye' | 'eyeoff' | 'sliders' | 'wide' | 'narrow' | 'help' | 'info';
   let { name, size = 24, stroke = 2.2 }: { name: Name; size?: number; stroke?: number } = $props();
 </script>
 
@@ -52,6 +52,7 @@
   {:else if name === 'wide'}<rect x="3.5" y="7" width="17" height="10" rx="2" />
   {:else if name === 'narrow'}<rect x="3.5" y="7" width="7.5" height="10" rx="2" /><rect x="13" y="7" width="7.5" height="10" rx="2" />
   {:else if name === 'help'}<circle cx="12" cy="12" r="8.5" /><path d="M9.6 9.6a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.6M12 17.2v.1" />
+  {:else if name === 'info'}<circle cx="12" cy="12" r="8.5" /><path d="M12 11v5.2M12 7.8v.1" />
   {:else if name === 'music'}<path d="M9 18V6.5l10-2V16M9 18a2.4 2.4 0 1 1-2.4-2.4A2.4 2.4 0 0 1 9 18zM19 16a2.4 2.4 0 1 1-2.4-2.4A2.4 2.4 0 0 1 19 16z" />
   {/if}
 </svg>

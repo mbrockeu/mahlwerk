@@ -80,6 +80,7 @@
     go(prev);
   }
   const openDay = (day: string) => { ui.day = day; navigate('today'); };
+  let calInfo = $state(false);
 
   // ---- loading (below)
 
@@ -440,10 +441,18 @@
           </section>
 
           <section class="card" aria-labelledby="h-cal">
-            <h3 id="h-cal" class="micro quiet">{t('calTitle')}</h3>
+            <div class="info-head">
+              <h3 id="h-cal" class="micro quiet">{t('calTitle')}</h3>
+              {#if goal && data.calendar && data.calendar.length}
+                <button class="info-btn" aria-expanded={calInfo} aria-controls="cal-info" aria-label={t('calRangeInfo')} title={t('calRangeInfo')}
+                  onclick={() => (calInfo = !calInfo)}><Icon name="info" size={18} /></button>
+              {/if}
+            </div>
+            {#if goal && calInfo && data.calendar && data.calendar.length}
+              <p id="cal-info" class="info-box">{t('calRangeNote', { kcal: fmt(goal.kcal), low: fmt(Math.round(goal.kcal * 0.9)), high: fmt(Math.round(goal.kcal * 1.1)) })}{#if goalAdded} {t('calRangeActive')}{/if}</p>
+            {/if}
             {#if data.calendar && data.calendar.length}
               <CalendarHeat cal={data.calendar} days={data.days} onopen={openDay} />
-              {#if goal}<p class="note">{t('calRangeNote', { kcal: fmt(goal.kcal), low: fmt(Math.round(goal.kcal * 0.9)), high: fmt(Math.round(goal.kcal * 1.1)) })}{#if goalAdded} {t('calRangeActive')}{/if}</p>{/if}
             {:else}<p class="note">{t('calTooLong')}</p><button class="chip small cal-year" onclick={() => choose('365')}>{t('calShowYear')}</button>{/if}
           </section>
         </section>
@@ -549,6 +558,10 @@
   .dates .field { min-width: 0; }
   .dates input { min-width: 0; }
   .cal-year { align-self: flex-start; }
+  .info-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -8px -8px 0 0; }
+  .info-btn { width: 36px; height: 36px; border-radius: 18px; display: inline-flex; align-items: center; justify-content: center; color: var(--quiet); }
+  .info-btn:hover, .info-btn[aria-expanded='true'] { background: var(--track); color: var(--text); }
+  .info-box { background: var(--stone); border-radius: 16px 16px 16px 6px; padding: 10px 14px; font-size: 13px; line-height: 1.45; }
   .rowb { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 18px; }
   .jump { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0; }
   .jump .chip { flex-shrink: 0; }
