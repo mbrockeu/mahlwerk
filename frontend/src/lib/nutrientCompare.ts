@@ -147,3 +147,17 @@ export function markerPath(shape: Shape, x: number, y: number, r: number): strin
   if (shape === 'diamond') return `M${f(x)} ${f(y - r * 1.25)}L${f(x + r * 1.25)} ${f(y)}L${f(x)} ${f(y + r * 1.25)}L${f(x - r * 1.25)} ${f(y)}z`;
   return `M${f(x - r)} ${f(y)}a${f(r)} ${f(r)} 0 1 0 ${f(2 * r)} 0a${f(r)} ${f(r)} 0 1 0 ${f(-2 * r)} 0z`;
 }
+
+export interface AxisChart { left: string; right: string | null; series: number[] }
+/** Several nutrients in their own units: one chart per two units, the first unit on the left axis, the second on the right;
+ *  nutrients with the same unit share an axis. Units in the order the nutrients were chosen. */
+export function unitCharts(units: string[]): AxisChart[] {
+  const order: string[] = [];
+  for (const u of units) if (!order.includes(u)) order.push(u);
+  const out: AxisChart[] = [];
+  for (let k = 0; k < order.length; k += 2) {
+    const left = order[k], right = order[k + 1] ?? null;
+    out.push({ left, right, series: units.map((u, i) => (u === left || u === right ? i : -1)).filter((i) => i >= 0) });
+  }
+  return out;
+}

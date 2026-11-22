@@ -443,6 +443,7 @@
             <h3 id="h-cal" class="micro quiet">{t('calTitle')}</h3>
             {#if data.calendar && data.calendar.length}
               <CalendarHeat cal={data.calendar} days={data.days} onopen={openDay} />
+              {#if goal}<p class="note">{t('calRangeNote', { kcal: fmt(goal.kcal), low: fmt(Math.round(goal.kcal * 0.9)), high: fmt(Math.round(goal.kcal * 1.1)) })}{#if goalAdded} {t('calRangeActive')}{/if}</p>{/if}
             {:else}<p class="note">{t('calTooLong')}</p><button class="chip small cal-year" onclick={() => choose('365')}>{t('calShowYear')}</button>{/if}
           </section>
         </section>

@@ -1,10 +1,11 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { api, ApiError } from '../lib/api';
-  import { directory, ensureNutrients, nutrientName, QUIET_COVERAGE } from '../lib/nutrients.svelte';
-  import { CORE_KEYS, normalizePick, pickGroup, refOf, SERIES_STYLES, summaryOf, type PickItem, type Ref } from '../lib/nutrientCompare';
+  import { directory, ensureNutrients, nutrientName } from '../lib/nutrients.svelte';
+  import { CORE_KEYS, normalizePick, pickGroup, refOf, summaryOf, unitCharts, type PickItem, type Ref } from '../lib/nutrientCompare';
   import { t } from '../lib/i18n';
   import type { Granularity, Insights, NutrientCurve } from '../lib/types';
+  import NutrientAxes from './NutrientAxes.svelte';
   import NutrientChart from './NutrientChart.svelte';
   import NutrientCompare from './NutrientCompare.svelte';
   import NutrientPicker from './NutrientPicker.svelte';
@@ -63,7 +64,8 @@
   const list = $derived(shown.map((k) => curves[k]).filter(Boolean));
   const single = $derived(shown.length === 1);
   const refs = $derived(shown.map((k) => ref(k) as Ref));
-  // several nutrients: one chart each in its own unit (default), or together on one axis in percent of the reference
+  // several nutrients: in their own units on a left and a right axis (default; more than two units make a second chart),
+  // or together on one axis in percent of the reference
   const VIEW_KEY = 'mahlwerk.nutView';
   const readView = () => { try { return localStorage.getItem(VIEW_KEY) === 'pct' ? 'pct' : 'units'; } catch { return 'units'; } };
   let view = $state<'units' | 'pct'>(readView());
@@ -71,8 +73,7 @@
     view = v;
     try { localStorage.setItem(VIEW_KEY, v); } catch { /* private mode: only for this visit */ }
   }
-  const unitOf = (c: NutrientCurve) => c.unit;
-  const anyLow = $derived(list.some((c) => c.series.some((p) => p.average != null && p.coverage > 0 && p.coverage < QUIET_COVERAGE)));
+  const charts = $derived(unitCharts(list.map((c) => c.unit)));
   const summaries = $derived(shown.map((k, i) => summaryOf(k, curves[k]?.series ?? [], refs[i], data.micros, data.averages as unknown as Record<string, number>)));
 </script>
 
@@ -90,24 +91,17 @@
   </div>
   {#if view === 'pct'}<NutrientCompare curves={list} names={shown.map(nameOf)} {refs} {summaries} />
   {:else}
-    <div class="multi">
-      {#each list as c, i (shown[i])}
-        <section class="one" aria-label={nameOf(shown[i])}>
-          <h4>{nameOf(shown[i])} <span class="mono unit">{unitOf(c)}</span></h4>
-          {#if c.has_data}<NutrientChart curve={c} name={nameOf(shown[i])} compact color={SERIES_STYLES[i].color} />{:else}<p class="note">{t('nutRowNone')}</p>{/if}
-        </section>
-      {/each}
-    </div>
-    {#if anyLow}<p class="note">{t('nutLow')}</p>{/if}
+    {#if charts.length > 1}<p class="note">{t('nutAxesSplit')}</p>{/if}
+    {#each charts as ch (ch.left + (ch.right ?? ''))}
+      <NutrientAxes curves={list} names={shown.map(nameOf)} refs={shown.map((k) => ref(k))} {summaries} chart={ch} />
+    {/each}
+    <p class="note keyline"><svg width="26" height="10" aria-hidden="true"><path d="M1 5H25" stroke="var(--quiet)" stroke-width="1.2" stroke-dasharray="2 4" /></svg>{t('nutRefLine')}</p>
   {/if}
 {/if}
 
 <style>
+  .keyline { display: flex; align-items: center; gap: 8px; font-size: 12px; }
   .seg-ctl { display: flex; flex-wrap: wrap; gap: 6px; }
   .seg-ctl .chip { min-height: 40px; padding: 0 14px; font-size: 13px; }
-  .multi { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px 22px; }
-  .one { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  h4 { font-size: 15px; font-weight: 700; }
-  .unit { font-size: 12px; font-weight: 500; color: var(--quiet); margin-left: 4px; }
   .skel { height: 160px; border-radius: 28px 28px 28px 8px; background: var(--hairline); opacity: 0.5; }
 </style>

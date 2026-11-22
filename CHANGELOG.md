@@ -7,8 +7,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- Nutrient over time: several nutrients are now drawn as one small chart each, in its own unit (g, mg, kcal …) and in the
-  colour of its chip; "Together in %" keeps the shared percent axis. The choice is remembered on the device.
+- Nutrient over time: several nutrients are now drawn in their own units, the first unit on a left axis and a second one on
+  a right axis (g and kcal, for example; a third unit gets a second chart). Each nutrient's reference (goal or EU reference
+  amount) is a dotted line in its colour, and the rows name the axis and the reference. "Together in %" keeps the shared
+  percent axis. The choice is remembered on the device.
+- Calendar: a note says what "within the range" means, with the numbers for your goal (90–110 %, only calories count).
 - Help: "Help" in the menu (phone), in the rail (wide) and on the evaluation page opens one sheet. It starts the tour of
   the day view and has an overview of every evaluation card – what it shows, what it needs (e.g. the estimated
   expenditure: 21 days, 6 weights …) and the hidden controls (zoom by tapping a bar, opening a day from the calendar);

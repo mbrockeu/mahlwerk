@@ -119,3 +119,10 @@ test('summary: exact range figures when there are some, else the mean of the sec
   assert.deepEqual([none.mean, none.coverage, none.pct, none.low], [null, null, null, false]);
   assert.equal(n.summaryOf('fiber', [sec('a', 20, 1)], null, [], { fiber: 20 }).pct, null);
 });
+
+test('unitCharts: two units share one chart, more units make another', () => {
+  assert.deepEqual(n.unitCharts(['g']), [{ left: 'g', right: null, series: [0] }]);
+  assert.deepEqual(n.unitCharts(['g', 'kcal', 'g']), [{ left: 'g', right: 'kcal', series: [0, 1, 2] }]);
+  assert.deepEqual(n.unitCharts(['mg', 'g', 'kcal', 'µg']), [{ left: 'mg', right: 'g', series: [0, 1] }, { left: 'kcal', right: 'µg', series: [2, 3] }]);
+  assert.deepEqual(n.unitCharts(['mg', 'g', 'kcal']), [{ left: 'mg', right: 'g', series: [0, 1] }, { left: 'kcal', right: null, series: [2] }]);
+});
