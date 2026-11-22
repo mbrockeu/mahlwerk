@@ -39,7 +39,7 @@ maintainer, so replies may take a few days.
   name resolution cannot be interrupted, so its thread lives on until the resolver answers (at most 8 such threads exist). The saved address
   including its query is visible to the household: do not use links with personal tokens. Report bypasses privately.
 - **Photo recognition** (off by default) sends photos to an image model that the **operator** configures in the environment
-  (`MAHLWERK_VISION_URL`, `MAHLWERK_VISION_MODEL`, optional `MAHLWERK_VISION_KEY`). The address may be internal (a local model): nobody but the operator
+  (`MAHLWERK_VISION_URL`, `MAHLWERK_VISION_MODEL`, optional `MAHLWERK_VISION_KEY`, and the same for a fallback model with `MAHLWERK_VISION_FALLBACK_*`). The address may be internal (a local model): nobody but the operator
   can set it, so it is not a way into your network for users; **do not point it at something you would not give a photo to**. With a hosted provider
   photos leave your server. Before sending, the photo is decoded in the picture child process (below) and re-encoded as a new JPEG of at most 1568
   pixels without any metadata (no EXIF, no GPS). Redirects are not followed (they would carry the key and the photo elsewhere), the call has fixed limits (connect 5 s,

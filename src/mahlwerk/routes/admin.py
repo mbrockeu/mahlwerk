@@ -81,11 +81,14 @@ def _vision_connector(request: Request) -> dict:
     """The card of photo recognition: switch, whether the operator configured a model, its name (never the address or the key)."""
     features: Features = request.app.state.features
     settings = vision.settings_from_env()
+    fallback = vision.fallback_from_env()
     return {"key": "vision", "kind": "source", "enabled": features.vision,
             "status": "not_configured" if settings is None else "ready" if features.vision else "off", "configurable": True,
             "locked": _locked(features, "vision.enabled"), "config": {},
-            "info": {"model": settings.model if settings else None, "per_hour": vision.per_hour_from_env(),
-                     "env": "MAHLWERK_VISION_URL, MAHLWERK_VISION_MODEL, MAHLWERK_VISION_KEY"}}
+            "info": {"model": settings.model if settings else None,
+                     "fallback_model": fallback.model if fallback else None,
+                     "per_hour": vision.per_hour_from_env(),
+                     "env": "MAHLWERK_VISION_URL, MAHLWERK_VISION_MODEL, MAHLWERK_VISION_KEY (and _FALLBACK_URL, _FALLBACK_MODEL, _FALLBACK_KEY)"}}
 
 
 def connector_list(request: Request) -> list[dict]:

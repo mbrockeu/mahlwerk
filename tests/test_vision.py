@@ -60,9 +60,13 @@ class Model:
         self.status = 200
         self.raw: bytes | None = None
         self.error: Exception | None = None
+        self.refuse: dict[str, int] = {}  # address prefix -> status, for the tests of the fallback
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
+        for prefix, status in self.refuse.items():
+            if str(request.url).startswith(prefix):
+                return httpx.Response(status, content=b"refused")
         if self.error:
             raise self.error
         if self.raw is not None:
@@ -728,3 +732,52 @@ def test_the_child_runs_the_code_of_this_copy_of_the_package():
     found = subprocess.run([sys.executable, "-I", "-c", imageproc.CHILD_CODE.replace("from mahlwerk.imageproc import _main; sys.exit(_main())", "import mahlwerk; print(mahlwerk.__file__)"),
                             imageproc.PACKAGE_ROOT], capture_output=True, text=True, check=True).stdout.strip()
     assert found == mahlwerk.__file__
+
+
+def test_the_temperature_can_be_left_out_for_models_that_refuse_it(ann, model, monkeypatch):
+    assert upload(ann).status_code == 200 and model.body()["temperature"] == 0
+    monkeypatch.setenv("MAHLWERK_VISION_TEMPERATURE", "off")
+    assert upload(ann).status_code == 200 and "temperature" not in model.body()
+
+
+FALLBACK = "http://bridge.internal:8123/v1"
+
+
+@pytest.fixture
+def fallback(monkeypatch):
+    monkeypatch.setenv("MAHLWERK_VISION_FALLBACK_URL", FALLBACK)
+    monkeypatch.setenv("MAHLWERK_VISION_FALLBACK_MODEL", "bridge-model")
+    monkeypatch.setenv("MAHLWERK_VISION_FALLBACK_KEY", "fallback-key")
+
+
+@pytest.mark.parametrize("status", [400, 401, 402, 429, 500, 503])
+def test_the_fallback_is_asked_when_the_first_model_refuses_or_is_busy(ann, model, fallback, status):
+    model.refuse[BASE] = status
+    r = upload(ann)
+    assert r.status_code == 200, r.text
+    assert [str(q.url) for q in model.requests] == [BASE + "/chat/completions", FALLBACK + "/chat/completions"]
+    assert model.requests[1].headers["authorization"] == "Bearer fallback-key" and model.body(1)["model"] == "bridge-model"
+
+
+def test_when_the_fallback_fails_too_its_error_is_shown(ann, model, fallback):
+    model.refuse[BASE], model.refuse[FALLBACK] = 400, 503
+    assert upload(ann).status_code == 429 and len(model.requests) == 2
+
+
+def test_without_a_fallback_the_error_stays(ann, model):
+    model.status, model.raw = 400, b"refused"
+    assert upload(ann).status_code == 502 and len(model.requests) == 1
+
+
+def test_no_fallback_after_a_timeout_or_an_unusable_answer(ann, model, fallback):
+    model.reply = "no json at all"
+    assert upload(ann).status_code == 502 and len(model.requests) == 1
+    model.error = httpx.ReadTimeout("slow")
+    assert upload(ann).status_code == 504 and len(model.requests) == 2
+
+
+def test_the_card_names_the_fallback_model_but_not_its_address_or_key(app, configured, fallback):
+    admin = person(app, "root", "admin")
+    assert card(admin)["info"]["fallback_model"] == "bridge-model"
+    text = json.dumps(admin.get("/api/v1/admin/connectors").json())
+    assert "fallback-key" not in text and "bridge.internal" not in text

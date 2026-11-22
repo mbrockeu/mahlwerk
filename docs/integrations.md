@@ -405,6 +405,8 @@ JSON object (the prompt says so; the shapes are in api-v1.md).
 | `MAHLWERK_VISION_URL` | The base address of the API, normally ending in `/v1`, e.g. `http://127.0.0.1:11434/v1`. `/chat/completions` is added. `http` or `https`, no user name in it. |
 | `MAHLWERK_VISION_MODEL` | The name of a model that can read images (a "vision" model). |
 | `MAHLWERK_VISION_KEY` | Optional. Sent as `Authorization: Bearer ...`. |
+| `MAHLWERK_VISION_TEMPERATURE` | Optional. `off` leaves out `temperature: 0` (some hosted models refuse it, e.g. Anthropic's newer models with `https://api.anthropic.com/v1`). |
+| `MAHLWERK_VISION_FALLBACK_URL`, `_MODEL`, `_KEY`, `_TEMPERATURE` | Optional. A second model, asked when the first one cannot be reached, refuses the request (any status other than 200, e.g. no credit left) or is busy. Not after a timeout (the person would wait twice) and not after an unusable answer. Only the model name shows on the admin card. |
 | `MAHLWERK_VISION` | `on` / `off` fixes the switch (the admin area shows it as fixed). Without it the admin decides; default off. |
 | `MAHLWERK_VISION_PER_HOUR` | Photos per person and hour, default 30 (1 to 10000). |
 | `MAHLWERK_VISION_PARALLEL` | Runs at the same time on the whole server, default 2 (1 to 8). Set it to what your model can really do at once; a local model often manages one. |

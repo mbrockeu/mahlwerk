@@ -99,7 +99,14 @@ async def _run(request: Request, user: dict, kind: str, lang: str) -> dict:
             raise HTTPException(429, "too many photos lately, try again later", headers={"Retry-After": str(wait)})
         try:
             jpeg = await run_in_threadpool(imageproc.for_model, image)
-            return await run_in_threadpool(hub.client.describe, settings, kind, lang, jpeg)
+            try:
+                return await run_in_threadpool(hub.client.describe, settings, kind, lang, jpeg)
+            except vision.VisionError as exc:
+                second = vision.fallback_from_env()
+                if second is None or exc.kind not in vision.FALLBACK_ON:
+                    raise
+                log.warning("image model failed (%s), asking the fallback", exc.kind)
+                return await run_in_threadpool(hub.client.describe, second, kind, lang, jpeg)
         except imageproc.ImageRejected as exc:
             raise HTTPException(STATUS.get(exc.kind, 422), str(exc), headers={"Retry-After": "5"} if exc.kind == "busy" else None) from None
         except vision.VisionError as exc:

@@ -10,7 +10,10 @@ can stand in for the model.
     per portion if the page has one). The method text is NOT taken over: only name, portions, ingredients and values.
 
 Configuration is the environment only (the operator sets it, nobody else): MAHLWERK_VISION_URL (the base address, e.g.
-`http://127.0.0.1:11434/v1`), MAHLWERK_VISION_MODEL and, optionally, MAHLWERK_VISION_KEY (sent as a Bearer token). An internal
+`http://127.0.0.1:11434/v1`), MAHLWERK_VISION_MODEL and, optionally, MAHLWERK_VISION_KEY (sent as a Bearer token) and
+MAHLWERK_VISION_TEMPERATURE=off (some hosted models refuse the parameter; by default `temperature: 0` is sent). A second model,
+MAHLWERK_VISION_FALLBACK_URL / _MODEL / _KEY / _TEMPERATURE, is asked when the first one cannot be reached, refuses the request
+or is busy (not after a timeout, the person would wait twice, and not after an unusable answer). An internal
 address is allowed on purpose: a local model lives in the LAN, and only the operator can set it. Redirects are not followed
 (a redirect would send the key and the photo somewhere else), the time limits are fixed, the size of the answer is limited, and
 the key is never part of a log line, an error text or an API answer.
@@ -78,16 +81,19 @@ class Settings:
     base: str
     model: str
     key: str | None
+    temperature: bool = True  # send `temperature: 0`
 
     def __repr__(self) -> str:  # a settings object in a traceback or a log line must not show the key
         return f"Settings(model={self.model!r})"
 
 
-def settings_from_env() -> Settings | None:
-    """The configuration, or None while the address or the model is missing or the address is not an http(s) address."""
-    base = os.environ.get("MAHLWERK_VISION_URL", "").strip().rstrip("/")
-    model = os.environ.get("MAHLWERK_VISION_MODEL", "").strip()
-    key = os.environ.get("MAHLWERK_VISION_KEY", "").strip() or None
+def settings_from_env(prefix: str = "MAHLWERK_VISION") -> Settings | None:
+    """The configuration, or None while the address or the model is missing or the address is not an http(s) address.
+    `prefix` MAHLWERK_VISION_FALLBACK reads the second model."""
+    base = os.environ.get(f"{prefix}_URL", "").strip().rstrip("/")
+    model = os.environ.get(f"{prefix}_MODEL", "").strip()
+    key = os.environ.get(f"{prefix}_KEY", "").strip() or None
+    temperature = os.environ.get(f"{prefix}_TEMPERATURE", "").strip().lower() not in ("off", "none", "no", "0", "false")
     if not base or not model or len(model) > 200:
         return None
     try:
@@ -96,7 +102,15 @@ def settings_from_env() -> Settings | None:
                  and not parts.fragment and not parts.query and "?" not in base and "#" not in base)
     except ValueError:
         return None
-    return Settings(base, model, key) if valid else None
+    return Settings(base, model, key, temperature) if valid else None
+
+
+def fallback_from_env() -> Settings | None:
+    """The second model, or None."""
+    return settings_from_env("MAHLWERK_VISION_FALLBACK")
+
+
+FALLBACK_ON = ("unavailable", "busy")  # the errors after which the second model is asked
 
 
 def parallel_from_env() -> int:
@@ -343,10 +357,12 @@ class Client:
         Blocks: call it from a thread. Raises VisionError."""
         url = "data:image/jpeg;base64," + base64.b64encode(jpeg).decode("ascii")
         body = {
-            "model": settings.model, "temperature": 0, "max_tokens": MAX_TOKENS, "stream": False,
+            "model": settings.model, "max_tokens": MAX_TOKENS, "stream": False,
             "messages": [{"role": "user", "content": [
                 {"type": "text", "text": prompt(kind, lang)}, {"type": "image_url", "image_url": {"url": url}}]}],
         }
+        if settings.temperature:
+            body["temperature"] = 0
         headers = {"Authorization": f"Bearer {settings.key}"} if settings.key else {}
         headers["Accept-Encoding"] = "identity"  # the size limit counts what arrives, so nothing may be compressed
         # The hard limit for the whole call: a timer closes the connection when the time is up, whatever the read is waiting for
