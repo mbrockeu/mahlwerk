@@ -6,6 +6,7 @@
   import ExpenditureCard from '../components/ExpenditureCard.svelte';
   import FoodsCard from '../components/FoodsCard.svelte';
   import Icon from '../components/Icon.svelte';
+  import InsightsHelp from '../components/InsightsHelp.svelte';
   import KcalChart from '../components/KcalChart.svelte';
   import MacroChart from '../components/MacroChart.svelte';
   import MicroRow from '../components/MicroRow.svelte';
@@ -16,6 +17,7 @@
   import WeightChart from '../components/WeightChart.svelte';
   import { api, ApiError } from '../lib/api';
   import { fromDay } from '../lib/date';
+  import { scrollTarget } from '../lib/help';
   import { fmt, fmt1, lang, t } from '../lib/i18n';
   import { DETAIL_DAYS, parseQuery, period, PRESETS, shifted, toParams, zoomTarget, type Q, type RangeKey } from '../lib/insightsRange';
   import { microTab, type MicroTab } from '../lib/nutrients.svelte';
@@ -213,7 +215,13 @@
     { id: 'sec-ov', label: () => t('jumpOverview') }, { id: 'sec-tr', label: () => t('jumpTrends') },
     { id: 'sec-mix', label: () => t('jumpMix') }, { id: 'sec-foods', label: () => t('jumpFoods') },
   ];
-  const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' });
+  const jump = (id: string) => scrollTarget(document.getElementById(id))?.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' });
+  // ---- help: a sheet with every card; its "show" closes the sheet first, then scrolls (the sheet locks the page scroll)
+  let helpOpen = $state(false);
+  function helpJump(id: string) {
+    helpOpen = false;
+    requestAnimationFrame(() => requestAnimationFrame(() => jump(id)));
+  }
   const titleOfGran = $derived(gran === 'day' ? t('chartKcal') : gran === 'week' ? t('chartKcalWeekly') : t('chartKcalMonthly'));
 </script>
 
@@ -254,6 +262,7 @@
         {#each JUMPS as j (j.id)}<button class="chip small" onclick={() => jump(j.id)}>{j.label()}</button>{/each}
       </nav>
     {/if}
+    <button class="chip small help" onclick={() => (helpOpen = true)} aria-label={t('hlpOpenAria')} aria-haspopup="dialog"><span class="q" aria-hidden="true">?</span>{t('hlpOpen')}</button>
   </div>
   {#if q.range === 'custom'}
     <div class="dates">
@@ -523,6 +532,7 @@
     </div>
   {/if}
 </div>
+{#if helpOpen}<InsightsHelp onclose={() => (helpOpen = false)} onjump={helpJump} />{/if}
 
 <style>
   /* phone: the menu button takes the right end of the title row, so the period sits under the title instead of wrapping */
@@ -549,6 +559,9 @@
   .rowb { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 18px; }
   .jump { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0; }
   .jump .chip { flex-shrink: 0; }
+  .chip.help { gap: 7px; padding: 0 14px 0 8px; }
+  .q { width: 22px; height: 22px; border-radius: 11px; background: var(--sel-bg); color: var(--sel-fg); display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; }
+  .card, .body :global(.panel) { scroll-margin-top: 70px; }
 
   .body { display: flex; flex-direction: column; gap: 26px; transition: opacity 160ms; }
   .body.stale { opacity: 0.55; }

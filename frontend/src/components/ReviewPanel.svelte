@@ -38,7 +38,7 @@
   const atLatest = $derived(mondayOfWeek(week) >= weekStart(shiftDay(ui.today, -7)));
 </script>
 
-<div class="panel">
+<div class="panel" id="h-review">
   <div class="picker">
     <button class="round" onclick={() => step(-1)} aria-label={t('revPrev')}><Icon name="left" size={22} /></button>
     <button class="round" onclick={() => step(1)} disabled={atLatest} aria-label={t('revNext')}><Icon name="right" size={22} /></button>
