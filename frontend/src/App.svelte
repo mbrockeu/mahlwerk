@@ -11,7 +11,7 @@
   import RecipeEditor from './components/RecipeEditor.svelte';
   import WorkoutSheet from './components/WorkoutSheet.svelte';
   import { router } from './lib/router.svelte';
-  import { auth, endMoment, loadAuth, loadMe, markTourSeen, mealByTime, openAdd, runToastAction, tourSeen, ui } from './lib/store.svelte';
+  import { auth, endMoment, loadAuth, loadMe, loadVision, markTourSeen, mealByTime, openAdd, runToastAction, tourSeen, ui, visionReady } from './lib/store.svelte';
   import { parseDeepLink, stripDeepLink } from './lib/deeplink';
   import Gate from './views/Gate.svelte';
   import Admin from './views/Admin.svelte';
@@ -54,13 +54,15 @@
   let deepLink = parseDeepLink(location.search);
   $effect(() => {
     if (!deepLink || !auth.signedIn || !ui.me) return;
-    const { tab, meal } = deepLink;
+    const { tab, meal, photo } = deepLink;
     deepLink = null;
     history.replaceState(null, '', `${location.pathname}${stripDeepLink(location.search)}#/`);
     router.route = 'today';
     router.query = new URLSearchParams();
     ui.day = ui.today;
-    openAdd(meal ?? mealByTime(), ui.today, tab);
+    if (!photo) { openAdd(meal ?? mealByTime(), ui.today, tab); return; }
+    // the photo view only where photo recognition is ready; otherwise just today, as for an unknown target
+    void loadVision().then(() => { if (visionReady()) openAdd(meal ?? mealByTime(), ui.today, tab, true); });
   });
 
   onMount(() => { void (async () => { await loadAuth(); if (auth.signedIn) await loadMe(); })(); });
@@ -90,7 +92,7 @@
 <Nav />
 <PullRefresh />
 
-{#if ui.add}{#key ui.add}<AddSheet meal={ui.add.meal} day={ui.add.day} tab={ui.add.tab} query={ui.add.query} replace={ui.add.replace} />{/key}{/if}
+{#if ui.add}{#key ui.add}<AddSheet meal={ui.add.meal} day={ui.add.day} tab={ui.add.tab} query={ui.add.query} replace={ui.add.replace} photo={ui.add.photo} />{/key}{/if}
 {#if ui.amount}{#key ui.amount}<AmountSheet req={ui.amount} />{/key}{/if}
 {#if ui.recipe}{#key ui.recipe}<RecipeEditor req={ui.recipe} />{/key}{/if}
 {#if ui.editor}{#key ui.editor}<ProductEditor req={ui.editor} />{/key}{/if}

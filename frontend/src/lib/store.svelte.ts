@@ -21,7 +21,7 @@ export interface AmountRequest {
   /** A diary entry that gets this food instead of its own (the nuts the photo saw become the scanned product). */
   replace?: Entry;
 }
-export interface AddState { meal: Meal; day: string; tab: AddTab; query?: string; replace?: Entry }
+export interface AddState { meal: Meal; day: string; tab: AddTab; query?: string; replace?: Entry; photo?: boolean }
 export interface EditorRequest {
   food: Food | null;
   code?: string | null;
@@ -79,7 +79,7 @@ export function mealByTime(date = new Date()): Meal {
   return 'dinner';
 }
 
-export const openAdd = (meal: Meal, day = ui.day, tab: AddTab = 'search') => { ui.add = { meal, day, tab }; };
+export const openAdd = (meal: Meal, day = ui.day, tab: AddTab = 'search', photo = false) => { ui.add = { meal, day, tab, photo }; };
 export const closeAdd = () => { ui.add = null; };
 export const openAmount = (req: AmountRequest) => {
   const back = ui.add ? { ...ui.add } : undefined;  // the add sheet keeps its meal, tab and search text up to date in ui.add

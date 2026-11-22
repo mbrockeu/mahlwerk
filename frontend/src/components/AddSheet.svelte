@@ -12,7 +12,7 @@
   import ScanPane from './ScanPane.svelte';
   import Sheet from './Sheet.svelte';
 
-  let { meal: initialMeal, day, tab: initialTab, query: initialQuery = '', replace }: { meal: Meal; day: string; tab: AddTab; query?: string; replace?: Entry } = $props();
+  let { meal: initialMeal, day, tab: initialTab, query: initialQuery = '', replace, photo: initialPhoto = false }: { meal: Meal; day: string; tab: AddTab; query?: string; replace?: Entry; photo?: boolean } = $props();
 
   // svelte-ignore state_referenced_locally
   let meal = $state<Meal>(initialMeal);
@@ -21,12 +21,14 @@
   // svelte-ignore state_referenced_locally
   let query = $state(initialQuery);
   // kept in ui.add, so that "Back" in the amount dialog brings the sheet back as it was
-  $effect(() => { const add = ui.add; if (add) { add.meal = meal; add.tab = tab; add.query = query; } });
+  $effect(() => { const add = ui.add; if (add) { add.meal = meal; add.tab = tab; add.query = query; add.photo = photo; } });
 
   if (!ui.me) void loadMe();
   void loadVision();
-  // "Photo of the meal" (only where photo recognition is on and ready): it takes over the sheet below the meal chips until the person goes back
-  let photo = $state(false);
+  // "Photo of the meal" (only where photo recognition is on and ready): it takes over the sheet below the meal chips until the person goes back;
+  // a direct link (/?go=photo) opens the sheet on it
+  // svelte-ignore state_referenced_locally
+  let photo = $state(initialPhoto && !replace);
 
   // recent
   let recent = $state<RecentFood[] | null>(null);
