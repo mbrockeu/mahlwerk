@@ -103,13 +103,13 @@
       <path d="M{PL} {y(g)}H{width - PR}" stroke="var(--hairline)" stroke-width={g === 0 ? 2 : 1.5} stroke-dasharray={g === 0 ? undefined : '3 4'} />
       <text x={PL - 7} y={y(g) + 4} text-anchor="end" class="lab">{g} %</text>
     {/each}
-    <path d="M{PL} {y(100)}H{width - PR}" stroke="var(--text)" stroke-width="2.4" />
+    <path d="M{PL} {y(100)}H{width - PR}" stroke="var(--text)" stroke-width="1.6" />
     <text x={PL - 7} y={y(100) + 4} text-anchor="end" class="lab strong">100 %</text>
     {#if sel != null}<rect x={PL + step * sel} y={PT - 2} width={step} height={plotH + 2} fill="var(--text)" opacity="0.1" />{/if}
     {#each segs as list, si}
       {@const st = SERIES_STYLES[si]}
       {#each list as sg}
-        <path d={sg.d} fill="none" stroke={st.color} stroke-width={sg.low ? 1.8 : 3} stroke-dasharray={st.dash} opacity={sg.low ? 0.6 : 1} stroke-linecap="round" stroke-linejoin="round" />
+        <path d={sg.d} fill="none" stroke={st.color} stroke-width={sg.low ? 1.4 : 2} stroke-dasharray={st.dash} opacity={sg.low ? 0.6 : 1} stroke-linecap="round" stroke-linejoin="round" />
       {/each}
     {/each}
     {#each pts as s, si}

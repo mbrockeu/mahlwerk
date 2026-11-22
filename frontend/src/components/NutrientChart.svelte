@@ -7,7 +7,9 @@
 
   // One nutrient over time: a line of the mean per day with entries. Where fewer than 20 % of the calories have a value
   // the line is thin and dashed and the points are hollow: the figure is probably too low there.
-  let { curve, name }: { curve: NutrientCurve; name: string } = $props();
+  // `compact`: one of several small charts below each other (lower, the note about few values is shown once by the card)
+  // `color`: the nutrient's colour from the picker when several are shown
+  let { curve, name, compact = false, color = 'var(--bar)' }: { curve: NutrientCurve; name: string; compact?: boolean; color?: string } = $props();
 
   const gran = $derived(curve.granularity);
   const series = $derived(curve.series);
@@ -18,7 +20,7 @@
     : curve.goal != null ? { v: curve.goal, label: t('nutRefGoal', { n: fmt(curve.goal), unit: curve.unit }) } : null);
 
   let width = $state(320);
-  const H = $derived(width > 700 ? 280 : 210);
+  const H = $derived(compact ? (width > 700 ? 180 : 160) : width > 700 ? 280 : 210);
   const PL = 46, PR = 8, PT = 14, PB = 26;
   const plotW = $derived(Math.max(80, width - PL - PR));
   const plotH = $derived(H - PT - PB);
@@ -88,17 +90,17 @@
       <text x={PL - 7} y={y(g) + 4} text-anchor="end" class="lab">{axis(g)}</text>
     {/each}
     {#if ref && ref.v <= vmax}
-      <path d="M{PL} {y(ref.v)}H{width - PR}" stroke="var(--text)" stroke-width="2" stroke-dasharray="7 4" />
+      <path d="M{PL} {y(ref.v)}H{width - PR}" stroke="var(--text)" stroke-width="1.5" stroke-dasharray="6 4" />
       <text x={width - PR - 2} y={y(ref.v) - 5} text-anchor="end" class="lab halo">{ref.label}</text>
     {/if}
     {#if sel != null}<rect x={PL + step * sel} y={PT - 2} width={step} height={plotH + 2} fill="var(--text)" opacity="0.1" />{/if}
     {#each segs as sg}
-      <path d={sg.d} fill="none" stroke="var(--bar)" stroke-width={sg.low ? 1.8 : 3.5} stroke-dasharray={sg.low ? '3 5' : undefined} stroke-linecap="round" stroke-linejoin="round" />
+      <path d={sg.d} fill="none" stroke={color} stroke-width={sg.low ? 1.4 : 2} stroke-dasharray={sg.low ? '3 5' : undefined} stroke-linecap="round" stroke-linejoin="round" />
     {/each}
     {#if dots}
       {#each series as p, i (p.start)}
         {#if known(p)}
-          <circle cx={cx(i)} cy={y(p.average as number)} r={low(p) ? 3 : 3.4} fill={low(p) ? 'var(--paper)' : 'var(--bar)'} stroke="var(--bar)" stroke-width="1.8" />
+          <circle cx={cx(i)} cy={y(p.average as number)} r={low(p) ? 2.6 : 2.8} fill={low(p) ? 'var(--paper)' : color} stroke={color} stroke-width="1.4" />
         {/if}
       {/each}
     {/if}
@@ -113,12 +115,12 @@
       onpointerdown={(e) => (sel = at(e))} onpointerleave={(e) => { if (e.pointerType === 'mouse') sel = null; }} />
   </svg>
   <ul class="legend mono">
-    <li><svg width="22" height="10" aria-hidden="true"><path d="M1 5H21" stroke="var(--bar)" stroke-width="3.5" stroke-linecap="round" /></svg>{t('nutMean')} {fmtV(mean)}</li>
+    <li><svg width="22" height="10" aria-hidden="true"><path d="M1 5H21" stroke={color} stroke-width="2" stroke-linecap="round" /></svg>{t('nutMean')} {fmtV(mean)}</li>
     {#if anyLow}
-      <li><svg width="22" height="10" aria-hidden="true"><path d="M1 5H21" stroke="var(--bar)" stroke-width="1.8" stroke-dasharray="3 5" stroke-linecap="round" /><circle cx="11" cy="5" r="3" fill="var(--paper)" stroke="var(--bar)" stroke-width="1.8" /></svg>&lt; 20 %</li>
+      <li><svg width="22" height="10" aria-hidden="true"><path d="M1 5H21" stroke={color} stroke-width="1.4" stroke-dasharray="3 5" stroke-linecap="round" /><circle cx="11" cy="5" r="2.6" fill="var(--paper)" stroke={color} stroke-width="1.4" /></svg>&lt; 20 %</li>
     {/if}
   </ul>
-  {#if anyLow}<p class="note">{t('nutLow')}</p>{/if}
+  {#if anyLow && !compact}<p class="note">{t('nutLow')}</p>{/if}
 </div>
 
 <style>

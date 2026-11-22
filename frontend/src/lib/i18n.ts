@@ -678,6 +678,7 @@ const en = {
   demoViewNow: 'You are now looking at the demo account.', demoViewOwn: 'You are back in your own account.',
   pullDown: 'Pull to refresh', pullRelease: 'Release to refresh', pullBusy: 'Refreshing …', refreshed: 'Updated',
   // help for the evaluation page (lib/help.ts)
+  nutViewLabel: 'Display', nutViewUnits: 'Each in its unit', nutViewPct: 'Together in %',
   hlpOpen: 'Help', hlpOpenAria: 'Help: what the evaluation shows', hlpTitle: 'Help',
   hlpTourT: 'Day view: the tour', hlpTourText: 'A short walk through the day view: the ring, the macro scales, logging a meal, the scanner and where to find the rest.', hlpTourStart: 'Start the tour',
   hlpToInsights: 'To the evaluation', hlpIntroElsewhere: 'The evaluation sums up your diary for a period. Here is what each card shows; on the evaluation “Show” jumps straight to it.',
@@ -694,7 +695,7 @@ const en = {
   hlp_macros: 'At the top the share of protein, carbohydrates and fat in your calories per section, below the grams per day on average next to your goal. Plus sugar, fibre, salt and, if logged, water.',
   hlp_weight: 'How your weight changed in the period, with the measurements and a trend line (7-day mean). “Average balance to the goal” is how many calories per day you were above or below your goal on average. The pace in kg per week needs 4 weights over 10 days. With at least 4 body fat values over 14 days the card splits the change into fat and lean mass.',
   hlp_expenditure: 'Estimates from what you ate and how your weight changed how many calories you actually burn, and puts your goal next to it. It is a rough estimate, not a measurement.',
-  hlp_nutrients: 'One nutrient over time, such as magnesium or fibre. With “Add nutrient” you can show up to 4 side by side; the axis then shows per cent of the reference amount. Dashed lines with hollow points mean: there are only few values for that section, so the number is probably too low.',
+  hlp_nutrients: 'One nutrient over time, such as magnesium or fibre. With “Add nutrient” you can show up to 4: each in its own chart with its unit (g, mg, kcal …), or with “Together in %” on one axis in per cent of the reference amount. Dashed lines with hollow points mean: there are only few values for that section, so the number is probably too low.',
   hlp_calendar: 'One square per day, coloured by your calorie goal: below, within, above or nothing logged. Tap a day to see its values; “Open day” jumps to the day view. The calendar shows up to 370 days.',
   hlp_weekdays: 'Your average calories per weekday, so you can see for example whether the weekend looks different.',
   hlp_meals: 'How your calories are shared between breakfast, lunch, dinner and snacks, on average per day.',
@@ -1374,6 +1375,7 @@ const de: Record<Key, string> = {
   demoViewNow: 'Du siehst jetzt das Demo-Konto.', demoViewOwn: 'Du bist wieder in deinem Konto.',
   pullDown: 'Zum Aktualisieren ziehen', pullRelease: 'Loslassen zum Aktualisieren', pullBusy: 'Aktualisiere …', refreshed: 'Aktualisiert',
   // Hilfe zur Auswertung (lib/help.ts)
+  nutViewLabel: 'Darstellung', nutViewUnits: 'Einzeln in g, mg, kcal …', nutViewPct: 'Gemeinsam in %',
   hlpOpen: 'Hilfe', hlpOpenAria: 'Hilfe: Was zeigt die Auswertung?', hlpTitle: 'Hilfe',
   hlpTourT: 'Tagesansicht: die Einführung', hlpTourText: 'Ein kurzer Rundgang durch die Tagesansicht: der Ring, die Makro-Skalen, eine Mahlzeit eintragen, der Scanner und wo der Rest zu finden ist.', hlpTourStart: 'Einführung starten',
   hlpToInsights: 'Zur Auswertung', hlpIntroElsewhere: 'Die Auswertung fasst dein Tagebuch für einen Zeitraum zusammen. Hier steht, was jede Karte zeigt; auf der Auswertung springt „Zeigen“ direkt dorthin.',
@@ -1390,7 +1392,7 @@ const de: Record<Key, string> = {
   hlp_macros: 'Oben der Anteil von Eiweiß, Kohlenhydraten und Fett an deinen Kalorien je Abschnitt, darunter die Gramm im Schnitt pro Tag neben deinem Ziel. Dazu Zucker, Ballaststoffe, Salz und, wenn erfasst, Wasser.',
   hlp_weight: 'Wie sich dein Gewicht im Zeitraum verändert hat, mit den Messwerten und einer Trendlinie (7-Tage-Mittel). „Ø Bilanz zum Ziel“ heißt: so viele Kalorien lagst du im Schnitt pro Tag über oder unter deinem Ziel. Das Tempo in kg pro Woche gibt es ab 4 Gewichtswerten über 10 Tage. Mit mindestens 4 Körperfettwerten über 14 Tage teilt die Karte die Veränderung in Fett und Magermasse auf.',
   hlp_expenditure: 'Schätzt aus dem, was du gegessen hast, und wie sich dein Gewicht verändert hat, wie viele Kalorien du tatsächlich verbrauchst, und stellt dein Ziel daneben. Das ist eine grobe Schätzung, kein Messwert.',
-  hlp_nutrients: 'Ein Nährstoff über die Zeit, etwa Magnesium oder Ballaststoffe. Mit „Nährstoff hinzufügen“ legst du bis zu 4 nebeneinander; die Achse zeigt dann Prozent der Referenzmenge. Gestrichelte Linien mit hohlen Punkten heißen: Für diesen Abschnitt gibt es nur wenige Angaben, die Zahl ist deshalb vermutlich zu niedrig.',
+  hlp_nutrients: 'Ein Nährstoff über die Zeit, etwa Magnesium oder Ballaststoffe. Mit „Nährstoff hinzufügen“ wählst du bis zu 4: jeder in einem eigenen Diagramm mit seiner Einheit (g, mg, kcal …) oder mit „Gemeinsam in %“ auf einer Achse in Prozent der Referenzmenge. Gestrichelte Linien mit hohlen Punkten heißen: Für diesen Abschnitt gibt es nur wenige Angaben, die Zahl ist deshalb vermutlich zu niedrig.',
   hlp_calendar: 'Ein Feld je Tag, gefärbt nach deinem Kalorienziel: darunter, im Bereich, darüber oder nichts erfasst. Ein Tipp auf einen Tag zeigt seine Werte, „Tag öffnen“ springt in die Tagesansicht. Der Kalender zeigt bis zu 370 Tage.',
   hlp_weekdays: 'Deine durchschnittlichen Kalorien je Wochentag. So siehst du zum Beispiel, ob das Wochenende anders aussieht.',
   hlp_meals: 'Wie sich deine Kalorien auf Frühstück, Mittagessen, Abendessen und Snacks verteilen, im Schnitt pro Tag.',

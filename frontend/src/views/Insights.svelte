@@ -622,9 +622,9 @@
   .seg-ctl { display: flex; flex-wrap: wrap; gap: 6px; }
   .seg-ctl .chip { min-height: 40px; padding: 0 14px; font-size: 13px; }
   .top { display: flex; flex-direction: column; gap: 12px; }
-  .top li { display: flex; flex-direction: column; gap: 5px; }
+  .top li { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
   .line { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-  .t { display: flex; flex-direction: column; min-width: 0; }
+  .t { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
   .t strong { font-size: 14px; font-weight: 600; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .t small { font-size: 12px; color: var(--quiet); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .v { font-size: 14px; font-weight: 600; text-align: right; white-space: nowrap; display: flex; flex-direction: column; }
@@ -648,7 +648,7 @@
     .row2.start { align-items: start; }
     .card { padding: 22px 24px 24px; }
     .tile { height: 104px; }
-    .top { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 40px; }
+    .top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px 40px; }
     .mlist { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .sec-h { font-size: 30px; }
   }

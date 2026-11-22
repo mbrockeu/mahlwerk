@@ -7,6 +7,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Nutrient over time: several nutrients are now drawn as one small chart each, in its own unit (g, mg, kcal …) and in the
+  colour of its chip; "Together in %" keeps the shared percent axis. The choice is remembered on the device.
 - Help: "Help" in the menu (phone), in the rail (wide) and on the evaluation page opens one sheet. It starts the tour of
   the day view and has an overview of every evaluation card – what it shows, what it needs (e.g. the estimated
   expenditure: 21 days, 6 weights …) and the hidden controls (zoom by tapping a bar, opening a day from the calendar);
@@ -32,6 +34,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Biggest items: long food names no longer push the second column out of the card on wide screens (they are cut with …).
+- Nutrient charts: thinner lines and points.
 - A new version reached iPhones only hours later: `index.html` and the other files outside `assets/` were sent without `Cache-Control`, so Safari and home-screen web apps could reuse the old page. They now get `Cache-Control: no-cache` (checked with the server at each start, the ETag keeps it cheap); the hashed bundles under `assets/` get `public, max-age=31536000, immutable`.
 - Number fields no longer save when they are only tapped and left: on the activity card this marked the day as typed in by hand (and an empty active energy as 0), so the Apple Health shortcut skipped it.
 
