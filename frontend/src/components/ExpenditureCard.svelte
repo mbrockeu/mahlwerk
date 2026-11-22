@@ -34,6 +34,7 @@
       <text x={width - PX} y={H - 4} text-anchor="end" class="lab">{fmt(hi)}</text>
     </svg>
     <p class="how">{how}</p>
+    <p class="note">{t(`expMethod_${exp.method ?? 'rule'}` as 'expMethod_rule')}</p>
     {#if goal}<p class="gap">{gapText}</p>{:else}<p class="note">{t('expNoGoal')}</p>{/if}
     <p class="note">{t('expNote')}</p>
   </div>

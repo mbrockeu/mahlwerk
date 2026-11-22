@@ -490,18 +490,33 @@ Item { name, brand, amount_total, value, share, times }
 - `expenditure`: the estimated real daily energy expenditure, `kcal = mean intake - slope * 7700`, where `slope`
   (kg per day) is the least-squares line through the weight measurements of the range (not first against last).
   ```
-  Expenditure { kcal, low, high, intake, weight_change_kg, kg_per_week, days, weigh_ins, goal_gap:int|null }
+  Expenditure { kcal, low, high, intake, weight_change_kg, kg_per_week, days, weigh_ins, goal_gap:int|null, method:"composition"|"rule" }
   ```
+  `method` is `composition` when `composition` (below) is available: then the stored energy is fat slope * 9400 plus
+  lean mass slope * 1800 kcal/kg (one regression of that sum, so `low`/`high` follow its standard error), otherwise
+  `rule` (7700 kcal per kg of body weight). `weight_change_kg` and `kg_per_week` always stay the weight figures.
   `low`/`high`: half-width = the larger of two standard errors of the slope (in kcal) and 10 % of the estimate.
   `goal_gap` = calorie goal minus `kcal` (negative: the goal lies below the estimated expenditure). Only delivered
   with at least 21 days, 70 % of them with entries, and at least 6 weight values spread over at least 14 days;
   otherwise `null` and `expenditure_missing` lists `short_period`, `few_logged_days`, `few_weights`,
   `weights_not_spread`. A rough estimate: it moves with the water balance and with how completely the diary is kept.
+- `composition`: what the weight change is made of, `null` with fewer than 4 body-composition measurements or less than
+  14 days between the first and the last; `composition_missing` then lists `few_body_values`, `body_not_spread` (empty
+  without any weight). Fat = kg * body fat % / 100, lean = kg - fat; a weight with only `lean_kg` gets its percent from it.
+  ```
+  Composition { fat_change_kg, lean_change_kg, fat_kg_per_week, lean_kg_per_week, days, measurements }
+  ```
+  The changes come from the least-squares lines over the measurements times the span `days` between the first and the
+  last of them (not first against last).
+- `rate`: `{kg_per_week, pct_per_week, weigh_ins}` from the least-squares line over the weights (percent of the mean body
+  weight, negative = losing); `null` with fewer than 4 weights or less than 10 days between them.
 - `top_foods`: up to 8 items per list, grouped by `food_id` (entries of a deleted food by name + brand), highest
   contribution in the range first. `value` is the summed nutrient, `share` its part of the range total (0..1),
   `amount_total` the summed amount in g/ml, `times` the number of entries. Foods contributing 0 are left out.
 - `weight`: `first`, `last` and `change` use the raw values; `trend` has one point per weight day, the mean of
-  all values within 3 days before and after (a centred 7-day window over the values that exist).
+  all values within 3 days before and after (a centred 7-day window over the values that exist). `body_fat` lists the
+  body fat percent of the days that have it (derived from `lean_kg` where only that was measured) and `body_fat_trend`
+  smooths it with the same window.
 - `adherence`: only days with entries count. In range = day kcal from 90 % to 110 % of the day's goal (`activity.day_goal_kcal`, see Activity), both limits
   included; below is `under`, above is `over`.
 - `micros`: one item per additional nutrient that at least one entry of the range states, most `coverage` first (ties

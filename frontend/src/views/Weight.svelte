@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { api, ApiError } from '../lib/api';
+  import { bodyChange, bodyPoints, type BodyKey } from '../lib/body';
   import { daysBetween, shiftDay, shortDate } from '../lib/date';
   import { fmt, fmt1, inputNumber, parseNumber, t } from '../lib/i18n';
   import { wide } from '../lib/media.svelte';
@@ -104,6 +105,18 @@
     { days: 30, v: changeOver(30), bg: '#ff8a1f', radius: '28px 28px 8px 28px' },
     { days: 90, v: changeOver(DAYS - 1), bg: '#ffb8d6', radius: '28px 28px 28px 8px' },
   ]);
+  // body composition tiles: only with body fat values; fat and lean mass are worked out per day (see lib/body.ts)
+  const body = $derived(bodyPoints(points ?? []));
+  const bodyLatest = $derived(body.length ? body[body.length - 1] : null);
+  const bodyTiles = $derived(bodyLatest ? ([
+    { key: 'pct', label: t('bodyFat'), unit: '%', bg: '#ffb8d6', radius: '28px 28px 28px 8px' },
+    { key: 'fat', label: t('wFatMass'), unit: t('kg'), bg: '#ff8a1f', radius: '28px 28px 8px 28px' },
+    { key: 'lean', label: t('leanMass'), unit: t('kg'), bg: '#c9f04a', radius: '28px' },
+  ] as { key: BodyKey; label: string; unit: string; bg: string; radius: string }[]).map((m) => ({
+    ...m,
+    value: bodyLatest[m.key],
+    changes: [7, 30, DAYS - 1].map((n) => ({ n: n === DAYS - 1 ? DAYS : n, v: bodyChange(body, m.key, shiftDay(bodyLatest.day, -n)) })),
+  })) : []);
   const lowest = $derived(points && points.length ? Math.min(...points.map((p) => p.kg)) : null);
   const highest = $derived(points && points.length ? Math.max(...points.map((p) => p.kg)) : null);
   const recent = $derived(
@@ -166,6 +179,21 @@
       <figcaption class="micro quiet">{t('weightChart')}</figcaption>
     </figure>
   {/if}
+  {#if bodyTiles.length}
+    <section class="btiles" aria-label={t('wBodyTiles')}>
+      {#each bodyTiles as m (m.key)}
+        <div class="btile" style="background:{m.bg}; border-radius:{m.radius}">
+          <span class="tl">{m.label}</span>
+          <span class="tv display">{fmt1(m.value)}<span class="mono unit"> {m.unit}</span></span>
+          <div class="bch">
+            {#each m.changes as c (c.n)}
+              <span><span class="micro bd">{t('wDays', { n: c.n })}</span><span class="mono bv">{c.v == null ? '–' : signed(c.v)}</span></span>
+            {/each}
+          </div>
+        </div>
+      {/each}
+    </section>
+  {/if}
   {#if hasToday}<button class="btn quiet-btn" onclick={removeToday}>{t('weightDelete')}</button>{/if}
   </div>
 
@@ -223,6 +251,13 @@
   .tl { font-size: 13px; font-weight: 600; }
   .tv { font-size: 40px; line-height: 1; letter-spacing: -0.04em; white-space: nowrap; }
   .tv .unit { font-size: 13px; letter-spacing: 0; }
+  .btiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 10px; }
+  .btile { color: var(--on-tile); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .btile .tv { font-size: 34px; }
+  .bch { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .bch > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .bd { font-size: 11px; overflow-wrap: anywhere; }
+  .bv { font-size: 14px; font-weight: 600; white-space: nowrap; }
   .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
   .stats > div { background: var(--paper); border-radius: 24px 24px 24px 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
   .sv { font-size: 30px; line-height: 1; letter-spacing: -0.04em; }

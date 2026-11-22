@@ -25,6 +25,14 @@ EXP_MIN_LOGGED_SHARE = 0.70
 EXP_MIN_WEIGHTS = 6
 EXP_MIN_WEIGHT_SPREAD = 14
 EXP_MIN_MARGIN = 0.10
+# Energy content of the two tissues when the body composition is known (see estimate_expenditure)
+KCAL_PER_KG_FAT = 9400.0
+KCAL_PER_KG_LEAN = 1800.0
+# Body composition and rate of loss: thresholds (see composition, weight_rate)
+COMP_MIN_POINTS = 4
+COMP_MIN_SPREAD = 14
+RATE_MIN_POINTS = 4
+RATE_MIN_SPREAD = 10
 
 
 def _r(value: float, digits: int = 1) -> float:
@@ -181,11 +189,88 @@ def compare_blocks(current: dict, previous: dict) -> tuple[dict, dict | None]:
     return block, deltas
 
 
+# body composition ---------------------------------------------------------------------------------------------
+
+
+def _regress(points: list[tuple[float, float]]) -> tuple[float, float]:
+    """Least-squares slope of y on x and its standard error (0 with fewer than 3 points)."""
+    n = len(points)
+    mx, my = sum(x for x, _ in points) / n, sum(y for _, y in points) / n
+    sxx = sum((x - mx) ** 2 for x, _ in points)
+    slope = sum((x - mx) * (y - my) for x, y in points) / sxx
+    intercept = my - slope * mx
+    resid = sum((y - (intercept + slope * x)) ** 2 for x, y in points)
+    return slope, ((resid / (n - 2) / sxx) ** 0.5 if n > 2 else 0.0)
+
+
+def fat_pct(w: dict) -> float | None:
+    """Body fat in percent of a weight row: the measured value, else derived from the lean mass (null without both)."""
+    if w.get("body_fat_pct") is not None:
+        return w["body_fat_pct"]
+    if w.get("lean_kg") is not None and w["kg"] > 0:
+        return min(max((1 - w["lean_kg"] / w["kg"]) * 100, 0.0), 100.0)
+    return None
+
+
+def body_points(weights: list[dict], first: date) -> list[tuple[int, float, float]]:
+    """(day offset from `first`, fat kg, lean kg) for every weight row with body composition.
+
+    fat = kg * percent / 100 and lean = kg - fat; a row with only the lean mass gets its percent from that.
+    """
+    out = []
+    for w in sorted(weights, key=lambda w: w["day"]):
+        pct = fat_pct(w)
+        if pct is not None:
+            fat = w["kg"] * pct / 100
+            out.append(((date.fromisoformat(w["day"]) - first).days, fat, w["kg"] - fat))
+    return out
+
+
+def composition(points: list[tuple[int, float, float]]) -> tuple[dict | None, list[str]]:
+    """What the weight change is made of: change of fat and lean mass from the least-squares lines.
+
+    `points` = [(day offset, fat kg, lean kg)] as from `body_points`. The change is the slope times the days between
+    the first and the last measurement (not first against last value). Needed: at least 4 measurements spread over
+    at least 14 days; otherwise None and the reasons (`few_body_values`, `body_not_spread`).
+    """
+    missing = []
+    if len(points) < COMP_MIN_POINTS:
+        missing.append("few_body_values")
+    if len(points) < 2 or max(x for x, _, _ in points) - min(x for x, _, _ in points) < COMP_MIN_SPREAD:
+        missing.append("body_not_spread")
+    if missing:
+        return None, missing
+    span = max(x for x, _, _ in points) - min(x for x, _, _ in points)
+    fat_slope, _ = _regress([(x, f) for x, f, _ in points])
+    lean_slope, _ = _regress([(x, m) for x, _, m in points])
+    return {
+        "fat_change_kg": _r(fat_slope * span, 2),
+        "lean_change_kg": _r(lean_slope * span, 2),
+        "fat_kg_per_week": _r(fat_slope * 7, 2),
+        "lean_kg_per_week": _r(lean_slope * 7, 2),
+        "days": span,
+        "measurements": len(points),
+    }, []
+
+
+def weight_rate(weights: list[tuple[int, float]]) -> dict | None:
+    """Speed of the weight change per week from the least-squares line: kg and percent of the mean body weight.
+
+    Needs at least 4 weights spread over at least 10 days, otherwise None. Negative = losing.
+    """
+    if len(weights) < RATE_MIN_POINTS or max(x for x, _ in weights) - min(x for x, _ in weights) < RATE_MIN_SPREAD:
+        return None
+    slope, _ = _regress(weights)
+    mean = _mean(y for _, y in weights)
+    return {"kg_per_week": _r(slope * 7, 2), "pct_per_week": _r(slope * 7 / mean * 100, 2) if mean else 0.0, "weigh_ins": len(weights)}
+
+
 # expenditure --------------------------------------------------------------------------------------------------
 
 
 def estimate_expenditure(
-    n_days: int, logged_days: int, intake: float, weights: list[tuple[int, float]], goal_kcal: float | None = None
+    n_days: int, logged_days: int, intake: float, weights: list[tuple[int, float]], goal_kcal: float | None = None,
+    body: list[tuple[int, float, float]] | None = None,
 ) -> tuple[dict | None, list[str]]:
     """Estimated real daily energy expenditure from mean intake and the weight trend.
 
@@ -197,6 +282,11 @@ def estimate_expenditure(
     Needed: at least 21 days, 70 % of them logged, 6 weights spread over at least 14 days; otherwise the result is
     None and the second value lists the missing prerequisites (`short_period`, `few_logged_days`, `few_weights`,
     `weights_not_spread`).
+
+    With `body` = [(day offset, fat kg, lean kg)] (see `body_points`) that meets the conditions of `composition`, the
+    stored energy is counted per tissue instead: kcal = intake - (fat slope * 9400 + lean slope * 1800), `method` is
+    "composition" (else "rule"). Both slopes come from one regression of fat * 9400 + lean * 1800 on the day, which
+    equals the weighted sum of the two slopes, so the standard error below is exact for the combination.
 
     Range: half-width is the larger of 2 standard errors of the slope (about 95 %, converted to kcal) and 10 % of
     the estimate. The regression term catches a noisy weight curve (water balance), the 10 % floor covers what it
@@ -215,14 +305,13 @@ def estimate_expenditure(
     if missing:
         return None, missing
     n = len(weights)
-    mx, my = sum(x for x, _ in weights) / n, sum(y for _, y in weights) / n
-    sxx = sum((x - mx) ** 2 for x, _ in weights)
-    slope = sum((x - mx) * (y - my) for x, y in weights) / sxx
-    intercept = my - slope * mx
-    resid = sum((y - (intercept + slope * x)) ** 2 for x, y in weights)
-    se = (resid / (n - 2) / sxx) ** 0.5 if n > 2 else 0.0
-    kcal = intake - slope * KCAL_PER_KG
-    half = max(2 * se * KCAL_PER_KG, EXP_MIN_MARGIN * abs(kcal))
+    slope, se = _regress(weights)
+    stored, stored_se, method = slope * KCAL_PER_KG, se * KCAL_PER_KG, "rule"
+    if body and composition(body)[0]:
+        stored, stored_se = _regress([(x, f * KCAL_PER_KG_FAT + m * KCAL_PER_KG_LEAN) for x, f, m in body])
+        method = "composition"
+    kcal = intake - stored
+    half = max(2 * stored_se, EXP_MIN_MARGIN * abs(kcal))
     return {
         "kcal": round(kcal),
         "low": round(kcal - half),
@@ -233,6 +322,7 @@ def estimate_expenditure(
         "days": n_days,
         "weigh_ins": n,
         "goal_gap": round(goal_kcal - kcal) if goal_kcal else None,
+        "method": method,
     }, []
 
 

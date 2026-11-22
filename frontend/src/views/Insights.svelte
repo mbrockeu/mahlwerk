@@ -152,6 +152,12 @@
   const hasActivity = $derived(!!data && (data.averages.steps > 0 || data.averages.active_kcal > 0 || data.averages.workout_minutes > 0));
   const balance = $derived(effGoal && avg && logged ? Math.round(avg.kcal - effGoal.kcal) : null);
   const totalWorkoutMin = $derived((data?.averages.workout_minutes ?? 0) * (data?.range.days ?? 0));
+  // always one decimal and the sign of the rounded value, so a slow pace reads "±0,0" rather than "+0"
+  const signedKg = (v: number) => { const r = Math.round(v * 10) / 10; return `${r > 0 ? '+' : r < 0 ? '−' : '±'}${Math.abs(r).toLocaleString(lang, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`; };
+  const comp = $derived(data?.composition ?? null);
+  const compText = $derived(comp ? t('wtCompOf', { fat: signedKg(comp.fat_change_kg), lean: signedKg(comp.lean_change_kg) }) : '');
+  // "too few values" only for someone who records body fat at all; without any value there is nothing to say
+  const compFew = $derived(!comp && (data?.composition_missing?.length ?? 0) > 0 && (data?.weight?.body_fat?.length ?? 0) > 0);
   const rawWeights = $derived(data?.weight?.raw ?? (data?.days ?? []).filter((d) => d.weight != null).map((d) => ({ day: d.day, kg: d.weight as number })));
 
   // ---- nutrients over time: the choice lives in the URL (?nut=magnesium,calcium), without it the default
@@ -401,7 +407,13 @@
                     {#if balance != null}<span class="num display">{balance > 0 ? '+' : ''}{fmt(balance)}<small class="mono"> {t('wtPerDay')}</small></span>
                       <span class="note">{balance <= 0 ? t('wtBalanceUnder') : t('wtBalanceOver')}</span>
                     {:else}<span class="num display">–</span>{/if}</div>
+                  {#if data.rate}
+                    <div><span class="micro quiet">{t('wtRate')}</span>
+                      <span class="num display">{signedKg(data.rate.kg_per_week)}<small class="mono"> {t('wtRateWeek')}</small></span>
+                      <span class="note">{t('wtRatePct', { pct: signedKg(data.rate.pct_per_week) })}</span></div>
+                  {/if}
                 </div>
+                {#if comp}<p class="comp">{compText}</p>{:else if compFew}<p class="note">{t('wtCompFew')}</p>{/if}
                 <WeightChart from={data.range.from} to={data.range.to} weight={data.weight} raw={rawWeights} />
               {:else}
                 <p class="note">{t('wtNone')} <a href="#/weight">{t('wtAdd')}</a></p>
@@ -587,6 +599,7 @@
   .extras .micro { margin-right: 2px; }
 
   .kpis { display: flex; flex-wrap: wrap; gap: 10px 28px; }
+  .comp { font-size: 14px; font-weight: 600; margin: 4px 0 8px; overflow-wrap: anywhere; }
   .kpis > div { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
   .num { font-size: 30px; line-height: 1.05; }
   .num small { font-size: 12px; font-weight: 500; letter-spacing: 0; margin-left: 3px; }

@@ -398,7 +398,12 @@ export interface InsightMicro {
 export type Granularity = 'day' | 'week' | 'month';
 type Averages = Record<'kcal' | 'protein' | 'carbs' | 'fat' | 'sugars' | 'fiber' | 'salt' | 'saturated_fat' | 'water_ml' | 'steps' | 'active_kcal' | 'workout_minutes', number>;
 type Adherence = { in_range_days: number; over_days: number; under_days: number };
-type InsightWeight = { first: number; last: number; change: number; trend: { day: string; kg: number }[]; raw?: { day: string; kg: number }[]; body_fat?: { day: string; pct: number }[] };
+type InsightWeight = { first: number; last: number; change: number; trend: { day: string; kg: number }[]; raw?: { day: string; kg: number }[]; body_fat?: { day: string; pct: number }[]; body_fat_trend?: { day: string; pct: number }[] };
+
+/** What the weight change is made of (regression lines); fat and lean mass changes in kg. */
+export interface Composition { fat_change_kg: number; lean_change_kg: number; fat_kg_per_week: number; lean_kg_per_week: number; days: number; measurements: number }
+/** Weekly speed of the weight change from the regression line; negative = losing. */
+export interface WeightRate { kg_per_week: number; pct_per_week: number; weigh_ins: number }
 
 /** One section (day, ISO week or month) of the range: means per logged day. */
 export interface Section {
@@ -442,6 +447,8 @@ export interface Expenditure {
   days: number;
   weigh_ins: number;
   goal_gap: number | null;
+  /** composition: fat 9400 and lean mass 1800 kcal/kg; rule: 7700 kcal/kg of body weight */
+  method?: 'composition' | 'rule';
 }
 
 export interface Delta { abs: number; pct: number | null }
@@ -463,6 +470,10 @@ export interface Insights {
   calendar?: { day: string; state: CalendarState }[];
   expenditure?: Expenditure | null;
   expenditure_missing?: string[];
+  composition?: Composition | null;
+  /** few_body_values, body_not_spread */
+  composition_missing?: string[];
+  rate?: WeightRate | null;
   previous?: { range: InsightRange; averages: Averages; adherence: Adherence | null; weight: InsightWeight | null; logged_days: number; series: Section[] } | null;
   deltas?: Record<DeltaKey, Delta | null> | null;
   averages: Averages;

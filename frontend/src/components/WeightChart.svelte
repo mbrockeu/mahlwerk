@@ -7,8 +7,10 @@
 
   let width = $state(320);
   const H = $derived(width > 480 ? 360 : width > 370 ? 300 : 190);
-  // body fat (percent) is a second line on its own right-hand axis, so the kg scale stays untouched
+  // body fat (percent) is a second line on its own right-hand axis, so the kg scale stays untouched: the smoothed line
+  // carries the picture, the measured values are only dots (an older server without a trend draws the raw values as the line)
   const fat = $derived(weight.body_fat ?? []);
+  const fatTrend = $derived(weight.body_fat_trend?.length ? weight.body_fat_trend : fat);
   const PL = 42, PT = 12, PB = 26;
   const PR = $derived(fat.length ? 42 : 10);
   const span = $derived(Math.max(daysBetween(from, to), 1));
@@ -22,11 +24,11 @@
   // with years of data single points would only smear: the trend line carries the picture
   const dots = $derived(raw.length <= 150);
   const grid = $derived([vmin, (vmin + vmax) / 2, vmax]);
-  const fmin = $derived(fat.length ? Math.floor(Math.min(...fat.map((p) => p.pct)) - 0.5) : 0);
-  const fmax = $derived(fat.length ? Math.max(Math.ceil(Math.max(...fat.map((p) => p.pct)) + 0.5), fmin + 2) : 1);
+  const fmin = $derived(fat.length ? Math.floor(Math.min(...fat.map((p) => p.pct), ...fatTrend.map((p) => p.pct)) - 0.5) : 0);
+  const fmax = $derived(fat.length ? Math.max(Math.ceil(Math.max(...fat.map((p) => p.pct), ...fatTrend.map((p) => p.pct)) + 0.5), fmin + 2) : 1);
   const yf = (pct: number) => PT + (H - PT - PB) * (1 - (pct - fmin) / (fmax - fmin));
   const fatGrid = $derived([fmin, (fmin + fmax) / 2, fmax]);
-  const fatLine = $derived(fat.map((p, i) => `${i ? 'L' : 'M'}${x(p.day).toFixed(1)} ${yf(p.pct).toFixed(1)}`).join(''));
+  const fatLine = $derived(fatTrend.map((p, i) => `${i ? 'L' : 'M'}${x(p.day).toFixed(1)} ${yf(p.pct).toFixed(1)}`).join(''));
   const line = $derived(weight.trend.map((p, i) => `${i ? 'L' : 'M'}${x(p.day).toFixed(1)} ${y(p.kg).toFixed(1)}`).join(''));
   const end = $derived(weight.trend[weight.trend.length - 1]);
   const dm = (day: string) => new Intl.DateTimeFormat(lang, span > 366 ? { day: 'numeric', month: 'numeric', year: '2-digit' } : { day: 'numeric', month: 'numeric' }).format(fromDay(day));
@@ -47,7 +49,7 @@
     {#if fat.length}
       {#each fatGrid as g}<text x={width - PR + 7} y={yf(g) + 4} text-anchor="start" class="lab fatlab">{fmt1(g)}</text>{/each}
       <path d={fatLine} fill="none" stroke="var(--orange)" stroke-width="2.5" stroke-dasharray="6 4" stroke-linecap="round" stroke-linejoin="round" />
-      {#if fat.length < 40}{#each fat as p (p.day)}<circle cx={x(p.day)} cy={yf(p.pct)} r="2.5" fill="var(--orange)" />{/each}{/if}
+      {#if dots}{#each fat as p (p.day)}<circle cx={x(p.day)} cy={yf(p.pct)} r="2.5" fill="var(--paper)" stroke="var(--orange)" stroke-width="1.5" />{/each}{/if}
     {/if}
     <path d={line} fill="none" stroke="var(--bar)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
     {#if end}<circle cx={x(end.day)} cy={y(end.kg)} r="7" fill="var(--orange)" stroke="var(--paper)" stroke-width="3" />{/if}

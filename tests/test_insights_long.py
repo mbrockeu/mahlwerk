@@ -407,6 +407,188 @@ def test_expenditure_in_the_response(client, store, uid):
     assert short["expenditure"] is None and "short_period" in short["expenditure_missing"]
 
 
+# --- body composition, rate, expenditure by composition -------------------------------------------------------------
+
+
+def body(n, fat_per_day, lean_per_day, fat0=20.0, lean0=60.0, step=1):
+    """(day offset, fat kg, lean kg) on n days, `step` days apart."""
+    return [(i * step, fat0 + fat_per_day * i * step, lean0 + lean_per_day * i * step) for i in range(n)]
+
+
+def test_composition_uses_the_regression_lines_over_the_measured_span():
+    result, missing = analysis.composition(body(8, -0.1, -0.02, step=4))  # 28 days
+    assert missing == [] and result["days"] == 28 and result["measurements"] == 8
+    assert result["fat_change_kg"] == -2.8 and result["lean_change_kg"] == -0.56
+    assert result["fat_kg_per_week"] == -0.7 and result["lean_kg_per_week"] == -0.14
+
+
+def test_composition_is_not_first_against_last_value():
+    points = [(0, 20.0, 60.0), (5, 19.8, 60.1), (10, 19.5, 60.0), (15, 19.6, 59.9), (20, 19.2, 60.0), (27, 21.0, 60.0)]
+    result, _ = analysis.composition(points)  # the last value is an outlier
+    assert result["fat_change_kg"] > -0.5
+
+
+@pytest.mark.parametrize(("points", "reasons"), [
+    (body(3, -0.1, 0, step=10), ["few_body_values"]),
+    (body(5, -0.1, 0, step=3), ["body_not_spread"]),  # 12 days
+    ([], ["few_body_values", "body_not_spread"]),
+])
+def test_composition_names_what_is_missing(points, reasons):
+    result, missing = analysis.composition(points)
+    assert result is None and missing == reasons
+
+
+def test_composition_exact_thresholds_are_enough():
+    result, missing = analysis.composition([(0, 20.0, 60.0), (5, 20.0, 60.0), (10, 20.0, 60.0), (14, 20.0, 60.0)])
+    assert missing == [] and result["fat_change_kg"] == 0 and result["days"] == 14
+
+
+def test_body_points_from_percent_and_from_lean_only():
+    rows = [{"day": d(0), "kg": 80.0, "body_fat_pct": 25.0}, {"day": d(2), "kg": 80.0, "lean_kg": 60.0},
+            {"day": d(1), "kg": 80.0}, {"day": d(3), "kg": 80.0, "body_fat_pct": 20.0, "lean_kg": 50.0}]
+    pts = analysis.body_points(rows, MON)
+    assert pts == [(0, 20.0, 60.0), (2, 20.0, 60.0), (3, 16.0, 64.0)]  # percent wins over lean, no values: left out
+    assert analysis.fat_pct({"kg": 80.0}) is None
+
+
+def test_weight_rate_kg_and_percent_per_week():
+    rate = analysis.weight_rate(line(15, 80, -0.8 / 7))
+    assert rate["kg_per_week"] == -0.8 and rate["weigh_ins"] == 15
+    assert rate["pct_per_week"] == pytest.approx(-0.8 / (80 - 0.8 / 7 * 7) * 100, abs=0.01)
+    assert analysis.weight_rate(line(12, 80, 0.1))["kg_per_week"] == 0.7  # gaining: positive
+
+
+def test_weight_rate_needs_four_weights_over_ten_days():
+    assert analysis.weight_rate([(0, 80.0), (4, 79.5), (8, 79.0), (10, 78.8)])["weigh_ins"] == 4
+    assert analysis.weight_rate([(0, 80.0), (4, 79.5), (10, 78.8)]) is None  # 3 weights
+    assert analysis.weight_rate([(0, 80.0), (3, 79.5), (6, 79.0), (9, 78.8)]) is None  # 9 days
+
+
+def test_expenditure_by_composition_counts_each_tissue():
+    weights = line(28, 80, -0.05)
+    plain, _ = analysis.estimate_expenditure(28, 28, 2000, weights)
+    assert plain["method"] == "rule" and plain["kcal"] == 2385
+    result, _ = analysis.estimate_expenditure(28, 28, 2000, weights, None, body(28, -0.05, 0.0))
+    assert result["method"] == "composition" and result["kcal"] == 2470  # 2000 + 0.05 * 9400
+    lean, _ = analysis.estimate_expenditure(28, 28, 2000, weights, None, body(28, 0.0, -0.05))
+    assert lean["kcal"] == 2090  # 2000 + 0.05 * 1800
+    assert (result["low"], result["high"]) == (round(2470 - 247), round(2470 + 247))  # exact data: 10 % floor
+    assert result["kg_per_week"] == plain["kg_per_week"]  # the weight figures stay those of the weights
+
+
+def test_noisy_body_values_widen_the_range_beyond_ten_percent():
+    noisy = [(i, 20.0 + (3.0 if i % 2 else -3.0), 60.0) for i in range(28)]
+    result, _ = analysis.estimate_expenditure(28, 28, 2000, line(28, 80, 0.0), None, noisy)
+    assert result["method"] == "composition" and result["high"] - result["low"] > 2 * 0.1 * result["kcal"]
+
+
+def test_too_few_body_values_keep_the_rule_method_unchanged():
+    weights = line(28, 80, -0.05)
+    plain, _ = analysis.estimate_expenditure(28, 28, 2000, weights, 1800)
+    for few in (body(3, -0.05, 0, step=10), body(5, -0.05, 0, step=3), []):
+        result, _ = analysis.estimate_expenditure(28, 28, 2000, weights, 1800, few)
+        assert result == plain
+
+
+def test_composition_and_rate_in_the_response(client, store, uid):
+    goal(client, 1800)
+    for i in range(28):
+        seed(store, uid, d(i), item(2000))
+    for i in range(0, 28, 3):
+        store.put_weight(uid, d(i), round(80 - 0.05 * i, 3), body_fat_pct=round(25 - 0.1 * i, 3))
+    data = get(client, f"from={d(0)}&to={d(27)}")
+    c = data["composition"]
+    assert data["composition_missing"] == [] and c["measurements"] == 10 and c["days"] == 27
+    assert c["fat_change_kg"] == pytest.approx(-2.46, abs=0.05) and c["lean_change_kg"] == pytest.approx(1.11, abs=0.05)
+    assert data["expenditure"]["method"] == "composition"
+    assert data["rate"]["kg_per_week"] == -0.35 and data["rate"]["weigh_ins"] == 10
+    trend = data["weight"]["body_fat_trend"]
+    assert len(trend) == 10 and trend[0]["pct"] == pytest.approx(24.85, abs=0.06)  # days 0 and 3 within 3 days: mean
+    few = get(client, f"from={d(0)}&to={d(5)}")
+    assert few["composition"] is None and few["composition_missing"] == ["few_body_values", "body_not_spread"]
+    assert few["rate"] is None
+
+
+def hint_codes(data):
+    return [h["code"] for h in data["hints"]]
+
+
+def weighed(store, uid, kg_at, fat_at=None, days=range(0, 28, 3)):
+    for i in days:
+        store.put_weight(uid, d(i), round(kg_at(i), 3), **({"body_fat_pct": round(fat_at(i), 3)} if fat_at else {}))
+
+
+def test_fast_loss_hint_above_one_percent_a_week(client, store, uid):
+    for i in range(14):
+        seed(store, uid, d(i), item(2000))
+    weighed(store, uid, lambda i: 80 - 0.7 / 7 * i, days=range(0, 14, 2))  # 0.7 kg a week = 0.9 %
+    assert "fast_loss" not in hint_codes(get(client, f"from={d(0)}&to={d(13)}"))
+    weighed(store, uid, lambda i: 80 - 1.2 / 7 * i, days=range(0, 14, 2))  # 1.2 kg a week = 1.5 %
+    data = get(client, f"from={d(0)}&to={d(13)}")
+    assert "fast_loss" in hint_codes(data) and data["rate"]["pct_per_week"] < -1
+    hint = next(h for h in data["hints"] if h["code"] == "fast_loss")
+    assert hint["params"] == {"pct": 1.5, "kg": 1.2}
+
+
+def test_fast_loss_needs_four_weights(client, store, uid):
+    for i in range(14):
+        seed(store, uid, d(i), item(2000))
+    weighed(store, uid, lambda i: 80 - 3.0 / 7 * i, days=[0, 6, 13])
+    data = get(client, f"from={d(0)}&to={d(13)}")
+    assert data["rate"] is None and "fast_loss" not in hint_codes(data)
+
+
+def test_fast_loss_not_for_gaining(client, store, uid):
+    for i in range(14):
+        seed(store, uid, d(i), item(2000))
+    weighed(store, uid, lambda i: 80 + 1.2 / 7 * i, days=range(0, 14, 2))
+    assert "fast_loss" not in hint_codes(get(client, f"from={d(0)}&to={d(13)}"))
+
+
+def lean_case(client, store, uid, protein, lean_drop):
+    goal(client, 2000)  # protein goal 100 g
+    for i in range(28):
+        seed(store, uid, d(i), item(2000, protein=protein))
+    # fat stays 20 kg, lean falls by `lean_drop` kg in 27 days
+    for i in range(0, 28, 3):
+        kg = 80 - lean_drop / 27 * i
+        store.put_weight(uid, d(i), round(kg, 4), body_fat_pct=round(20 / kg * 100, 4))
+    return get(client, f"from={d(0)}&to={d(27)}")
+
+
+def test_lean_loss_hint_needs_lean_drop_and_protein_below_goal(client, store, uid):
+    data = lean_case(client, store, uid, protein=60, lean_drop=0.8)
+    assert data["composition"]["lean_change_kg"] == pytest.approx(-0.8, abs=0.02)
+    codes = hint_codes(data)
+    assert "lean_loss" in codes and codes.index("lean_loss") < codes.index("low_fiber")
+    hint = next(h for h in data["hints"] if h["code"] == "lean_loss")
+    assert hint["params"] == {"lean": 0.8, "avg": 60, "goal": 100}
+
+
+def test_lean_loss_not_with_enough_protein_or_small_drop(client, store, uid):
+    assert "lean_loss" not in hint_codes(lean_case(client, store, uid, protein=100, lean_drop=0.8))
+
+
+def test_lean_loss_not_for_a_small_drop(client, store, uid):
+    assert "lean_loss" not in hint_codes(lean_case(client, store, uid, protein=60, lean_drop=0.3))
+
+
+def test_without_body_values_the_response_is_as_before(client, store, uid):
+    for i in range(28):
+        seed(store, uid, d(i), item(2000))
+        store.put_weight(uid, d(i), 80.0)
+    data = get(client, f"from={d(0)}&to={d(27)}")
+    assert data["composition"] is None and data["expenditure"]["method"] == "rule"
+    assert data["weight"]["body_fat"] == [] and data["weight"]["body_fat_trend"] == []
+
+
+def test_a_lean_only_weight_gets_its_fat_derived(client, store, uid):
+    for i in range(0, 28, 4):
+        store.put_weight(uid, d(i), 80.0, lean_kg=60.0)
+    data = get(client, f"from={d(0)}&to={d(27)}")
+    assert {p["pct"] for p in data["weight"]["body_fat"]} == {25.0} and data["composition"]["fat_change_kg"] == 0
+
+
 # --- separation, speed ---------------------------------------------------------------------------------------------
 
 

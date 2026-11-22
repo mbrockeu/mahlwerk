@@ -460,7 +460,12 @@ function baseInsights(from: string, to: string): Insights {
     first: ws[0].kg, last: ws[ws.length - 1].kg, change: Math.round((ws[ws.length - 1].kg - ws[0].kg) * 100) / 100,
     trend: ws.map((w) => ({ day: w.day, kg: Math.round(mean(ws.filter((o) => Math.abs((fromDay(o.day).getTime() - fromDay(w.day).getTime()) / 86400000) <= 3).map((o) => o.kg)) * 100) / 100 })),
     body_fat: ws.filter((w) => bodyComp.get(w.day)?.body_fat_pct != null).map((w) => ({ day: w.day, pct: bodyComp.get(w.day)!.body_fat_pct as number })),
+    body_fat_trend: [] as { day: string; pct: number }[],
   } : null;
+  if (weight) {
+    // the same centred window as the weight trend, over the days that have body fat
+    weight.body_fat_trend = weight.body_fat.map((f) => ({ day: f.day, pct: r1(mean(weight.body_fat.filter((o) => Math.abs((fromDay(o.day).getTime() - fromDay(f.day).getTime()) / 86400000) <= 3).map((o) => o.pct))) }));
+  }
   let adherence: Insights['adherence'] = null;
   if (goal) {
     adherence = { in_range_days: 0, over_days: 0, under_days: 0 };
@@ -544,19 +549,58 @@ function insights(from: string, to: string, g: string | null = null, compare = f
   if (base.range.logged_days / base.range.days < 0.7) missing.push('few_logged_days');
   if (rawW.length < 6) missing.push('few_weights');
   if (rawW.length < 2 || diffDays(rawW[0].day, rawW[rawW.length - 1].day) < 14) missing.push('weights_not_spread');
+  const r1 = (v: number) => Math.round(v * 10) / 10;
+  // body composition: regression lines of fat and lean mass (as the server does), at least 4 values over 14 days
+  const slopeOf = (pts: [number, number][]) => {
+    const n = pts.length, mx = pts.reduce((a, p) => a + p[0], 0) / n, my = pts.reduce((a, p) => a + p[1], 0) / n;
+    return pts.reduce((a, p) => a + (p[0] - mx) * (p[1] - my), 0) / pts.reduce((a, p) => a + (p[0] - mx) ** 2, 0);
+  };
+  const bodyW = rawW.filter((w) => bodyComp.get(w.day)?.body_fat_pct != null).map((w) => {
+    const fat = (w.kg * (bodyComp.get(w.day)!.body_fat_pct as number)) / 100;
+    return { x: diffDays(from, w.day), fat, lean: w.kg - fat };
+  });
+  const bodySpan = bodyW.length ? bodyW[bodyW.length - 1].x - bodyW[0].x : 0;
+  const bodyMissing: string[] = [];
+  if (bodyW.length < 4) bodyMissing.push('few_body_values');
+  if (bodyW.length < 2 || bodySpan < 14) bodyMissing.push('body_not_spread');
+  let composition: Insights['composition'] = null;
+  const fatSlope = bodyMissing.length ? 0 : slopeOf(bodyW.map((b) => [b.x, b.fat]));
+  const leanSlope = bodyMissing.length ? 0 : slopeOf(bodyW.map((b) => [b.x, b.lean]));
+  if (!bodyMissing.length) {
+    composition = { fat_change_kg: Math.round(fatSlope * bodySpan * 100) / 100, lean_change_kg: Math.round(leanSlope * bodySpan * 100) / 100,
+      fat_kg_per_week: Math.round(fatSlope * 7 * 100) / 100, lean_kg_per_week: Math.round(leanSlope * 7 * 100) / 100, days: bodySpan, measurements: bodyW.length };
+  }
+  let rate: Insights['rate'] = null;
+  if (rawW.length >= 4 && diffDays(rawW[0].day, rawW[rawW.length - 1].day) >= 10) {
+    const sl = slopeOf(rawW.map((w) => [diffDays(from, w.day), w.kg]));
+    const meanKg = rawW.reduce((a, w) => a + w.kg, 0) / rawW.length;
+    rate = { kg_per_week: Math.round(sl * 7 * 100) / 100, pct_per_week: Math.round(((sl * 7) / meanKg) * 10000) / 100, weigh_ins: rawW.length };
+  }
+  if (base.range.logged_days >= 7) {
+    const extra: Insights['hints'] = [];
+    if (composition && base.goal && composition.lean_change_kg <= -0.5 && base.averages.protein < base.goal.protein) {
+      extra.push({ code: 'lean_loss', params: { lean: r1(Math.abs(composition.lean_change_kg)), avg: Math.round(base.averages.protein), goal: Math.round(base.goal.protein) } });
+    }
+    if (rate && rate.pct_per_week < -1) extra.push({ code: 'fast_loss', params: { pct: r1(Math.abs(rate.pct_per_week)), kg: r1(Math.abs(rate.kg_per_week)) } });
+    const lp = base.hints.findIndex((h) => h.code === 'low_protein');
+    base.hints.splice(lp + 1, 0, ...extra); // right after the protein hint, before the positive ones
+    base.hints = base.hints.slice(0, 4);
+  }
   let expenditure: Insights['expenditure'] = null;
   if (!missing.length) {
     const n = rawW.length, xs = rawW.map((w) => diffDays(from, w.day)), mx = xs.reduce((a, b) => a + b, 0) / n, my = rawW.reduce((a, w) => a + w.kg, 0) / n;
     const slope = rawW.reduce((a, w, i) => a + (xs[i] - mx) * (w.kg - my), 0) / xs.reduce((a, x) => a + (x - mx) ** 2, 0);
-    const kcal = base.averages.kcal - slope * 7700;
+    const byComposition = composition != null;
+    const kcal = base.averages.kcal - (byComposition ? fatSlope * 9400 + leanSlope * 1800 : slope * 7700);
     const half = Math.max(0.1 * Math.abs(kcal), 1);
-    expenditure = { kcal: Math.round(kcal), low: Math.round(kcal - half), high: Math.round(kcal + half), intake: Math.round(base.averages.kcal), weight_change_kg: Math.round(slope * base.range.days * 100) / 100, kg_per_week: Math.round(slope * 7 * 100) / 100, days: base.range.days, weigh_ins: n, goal_gap: base.goal ? Math.round(base.goal.kcal - kcal) : null };
+    expenditure = { method: byComposition ? 'composition' : 'rule', kcal: Math.round(kcal), low: Math.round(kcal - half), high: Math.round(kcal + half), intake: Math.round(base.averages.kcal), weight_change_kg: Math.round(slope * base.range.days * 100) / 100, kg_per_week: Math.round(slope * 7 * 100) / 100, days: base.range.days, weigh_ins: n, goal_gap: base.goal ? Math.round(base.goal.kcal - kcal) : null };
   }
   const detailed = base.range.days <= 370;
   const goalK = base.goal?.kcal;
   const result: Insights = {
     ...base, first_day: all[0] ?? null, last_day: all[all.length - 1] ?? null, granularity: gran,
     series: sectionsOf(from, to, gran, base), expenditure, expenditure_missing: missing,
+    composition, composition_missing: rawW.length ? bodyMissing : [], rate,
     weight: trend ? { ...trend, raw: rawW } : null,
     days: detailed ? base.days : [],
     calendar: detailed ? base.days.map((d) => ({ day: d.day, state: !d.logged ? 'none' : !goalK || d.goal_kcal == null ? 'no_goal' : d.kcal > d.goal_kcal * 1.1 ? 'over' : d.kcal < d.goal_kcal * 0.9 ? 'under' : 'in_range' })) : [],

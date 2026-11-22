@@ -20,6 +20,7 @@ RANGE_LOW, RANGE_HIGH = 0.9, 1.1
 EPS = 1e-9
 MIN_LOGGED_DAYS = 7
 MAX_HINTS = 4
+FAST_LOSS_PCT = 1.0  # a loss of more than this percent of the body weight per week gets a hint
 TREND_HALF_WINDOW = 3  # centred 7-day window
 
 
@@ -138,10 +139,10 @@ def compute(
         _r(_mean([day_goal_kcal(goal["kcal"], bonus, d) for d in logged_days]) if logged_days else goal["kcal"]) if goal else None
     )
     resolved = analysis.resolve_granularity(granularity, n_days)
-    expenditure, missing = analysis.estimate_expenditure(
-        n_days, n_logged, averages["kcal"],
-        [((date.fromisoformat(w["day"]) - first).days, w["kg"]) for w in weights], goal_kcal,
-    )
+    weight_points = [((date.fromisoformat(w["day"]) - first).days, w["kg"]) for w in weights]
+    body = analysis.body_points(weights, first)
+    comp, comp_missing = analysis.composition(body)
+    expenditure, missing = analysis.estimate_expenditure(n_days, n_logged, averages["kcal"], weight_points, goal_kcal, body)
     result = {
         "range": {"from": first.isoformat(), "to": last.isoformat(), "days": n_days, "logged_days": n_logged},
         "goal": goal,
@@ -149,6 +150,9 @@ def compute(
         "steps_goal": (goal or {}).get("steps", DEFAULT_STEPS_GOAL),
         "averages": averages,
         "weight": weight,
+        "composition": comp,
+        "composition_missing": comp_missing if weights else [],
+        "rate": analysis.weight_rate(weight_points),
         "adherence": adherence,
         "expenditure": expenditure,
         "expenditure_missing": missing,
@@ -159,7 +163,7 @@ def compute(
         return result
     ctx = Context(
         logged_days=logged_days, totals=totals, averages=averages, goal=goal, by_meal=by_meal,
-        adherence=adherence, foods=foods, grand=grand,
+        adherence=adherence, foods=foods, grand=grand, composition=comp, rate=result["rate"],
     )
     detailed = n_days <= analysis.DETAIL_DAYS  # beyond this the per-day lists would only bloat the response
     return {
@@ -209,32 +213,44 @@ def weight_summary(weights: list[dict]) -> dict | None:
 
     `trend` has one point per weight day (mean of the values within 3 days around it, a sliding window over the sorted
     values, so it stays fast with years of data); `raw` repeats the measured values for clients that have no
-    per-day list (long periods).
+    per-day list (long periods). `body_fat` is the percent of the days that have it (derived from the lean mass where only
+    that was measured) and `body_fat_trend` smooths it the same way.
     """
     if not weights:
         return None
     points = sorted(weights, key=lambda w: w["day"])
-    ords = [date.fromisoformat(w["day"]).toordinal() for w in points]
     kgs = [w["kg"] for w in points]
+    trend = smooth_trend([w["day"] for w in points], kgs, 2)
+    fat = [(w["day"], p) for w in points if (p := analysis.fat_pct(w)) is not None]
+    return {
+        "first": kgs[0],
+        "last": kgs[-1],
+        "change": _r(kgs[-1] - kgs[0], 2),
+        "trend": [{"day": d, "kg": v} for d, v in trend],
+        "raw": [{"day": w["day"], "kg": w["kg"]} for w in points],
+        "body_fat": [{"day": d, "pct": _r(p, 1)} for d, p in fat],
+        "body_fat_trend": [{"day": d, "pct": v} for d, v in smooth_trend([d for d, _ in fat], [p for _, p in fat], 1)],
+    }
+
+
+def smooth_trend(days: list[str], values: list[float], digits: int) -> list[tuple[str, float]]:
+    """Mean of the values within TREND_HALF_WINDOW days around each day; `days` sorted ascending.
+
+    A sliding window over the sorted values, so it stays fast with years of data. One point per day given.
+    """
+    ords = [date.fromisoformat(d).toordinal() for d in days]
     trend = []
     lo = hi = 0  # window [lo, hi) of the points within TREND_HALF_WINDOW days
     running = 0.0
     for i, o in enumerate(ords):
         while hi < len(ords) and ords[hi] <= o + TREND_HALF_WINDOW:
-            running += kgs[hi]
+            running += values[hi]
             hi += 1
         while ords[lo] < o - TREND_HALF_WINDOW:
-            running -= kgs[lo]
+            running -= values[lo]
             lo += 1
-        trend.append({"day": points[i]["day"], "kg": _r(running / (hi - lo), 2)})
-    return {
-        "first": kgs[0],
-        "last": kgs[-1],
-        "change": _r(kgs[-1] - kgs[0], 2),
-        "trend": trend,
-        "raw": [{"day": w["day"], "kg": w["kg"]} for w in points],
-        "body_fat": [{"day": w["day"], "pct": w["body_fat_pct"]} for w in points if w.get("body_fat_pct") is not None],
-    }
+        trend.append((days[i], _r(running / (hi - lo), digits)))
+    return trend
 
 
 # hints ---------------------------------------------------------------------------------------------------------
@@ -258,6 +274,25 @@ def hint_low_protein(c: Context) -> dict | None:
     avg, goal = c.averages["protein"], c.goal["protein"]
     if avg < 0.8 * goal:
         return {"code": "low_protein", "params": {"avg": _r(avg, 0), "goal": _r(goal, 0), "pct": round(avg / goal * 100)}}
+    return None
+
+
+def hint_lean_loss(c: Context) -> dict | None:
+    """Lean mass fell by at least 0.5 kg in the period while protein averages below the protein goal.
+    Why: with too little protein the body gives up muscle; protein and strength training help to keep it."""
+    comp = c.composition
+    if not comp or not c.goal or c.goal["protein"] <= 0 or comp["lean_change_kg"] > -0.5 + EPS:
+        return None
+    if c.averages["protein"] < c.goal["protein"]:
+        return {"code": "lean_loss", "params": {"lean": _r(abs(comp["lean_change_kg"]), 1), "avg": _r(c.averages["protein"], 0), "goal": _r(c.goal["protein"], 0)}}
+    return None
+
+
+def hint_fast_loss(c: Context) -> dict | None:
+    """Weight falls by more than 1 % of the body weight a week (regression line). Why: such a fast loss costs lean mass."""
+    rate = c.rate
+    if rate and rate["pct_per_week"] < -FAST_LOSS_PCT:
+        return {"code": "fast_loss", "params": {"pct": _r(abs(rate["pct_per_week"]), 1), "kg": _r(abs(rate["kg_per_week"]), 1)}}
     return None
 
 
@@ -330,7 +365,7 @@ def hint_in_range(c: Context) -> dict | None:
 
 # order = importance: things to look at first, then the positive notes
 RULES = (
-    hint_low_protein, hint_low_fiber, hint_high_sugar, hint_high_salt, hint_weekend_higher, hint_meal_dominant,
+    hint_low_protein, hint_lean_loss, hint_fast_loss, hint_low_fiber, hint_high_sugar, hint_high_salt, hint_weekend_higher, hint_meal_dominant,
     hint_in_range, hint_protein_goal_met,
 )
 

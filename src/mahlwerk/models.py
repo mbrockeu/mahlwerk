@@ -712,7 +712,8 @@ class InsightWeight(BaseModel):
     change: float
     trend: list[InsightTrendPoint]
     raw: list[InsightTrendPoint] = Field(default_factory=list, description="the measured values, oldest first")
-    body_fat: list[InsightBodyFat] = Field(default_factory=list, description="body fat in percent on the days that have it, oldest first")
+    body_fat: list[InsightBodyFat] = Field(default_factory=list, description="body fat in percent on the days that have it (derived from the lean mass where only that exists), oldest first")
+    body_fat_trend: list[InsightBodyFat] = Field(default_factory=list, description="body fat smoothed like `trend` (mean within 3 days around each day with a value)")
 
 
 class InsightAdherence(BaseModel):
@@ -776,6 +777,22 @@ class InsightExpenditure(BaseModel):
     days: int
     weigh_ins: int
     goal_gap: int | None = Field(description="goal minus estimate, null without a goal")
+    method: Literal["composition", "rule"] = Field("rule", description="composition: fat 9400 and lean mass 1800 kcal/kg; rule: 7700 kcal/kg of body weight")
+
+
+class InsightComposition(BaseModel):
+    fat_change_kg: float = Field(description="change of the fat mass over the measured span, from the regression line")
+    lean_change_kg: float = Field(description="change of the lean mass over the measured span, from the regression line")
+    fat_kg_per_week: float
+    lean_kg_per_week: float
+    days: int = Field(description="days between the first and the last measurement with body composition")
+    measurements: int
+
+
+class InsightRate(BaseModel):
+    kg_per_week: float = Field(description="slope of the regression line over the weights, negative = losing")
+    pct_per_week: float = Field(description="the same in percent of the mean body weight")
+    weigh_ins: int
 
 
 class InsightDelta(BaseModel):
@@ -821,6 +838,9 @@ class Insights(BaseModel):
     calendar: list[InsightCalendarDay] = Field(default_factory=list)
     expenditure: InsightExpenditure | None = None
     expenditure_missing: list[str] = Field(default_factory=list)
+    composition: InsightComposition | None = Field(None, description="change of fat and lean mass in the range, null while there are too few body values")
+    composition_missing: list[str] = Field(default_factory=list, description="why `composition` is null (`few_body_values`, `body_not_spread`); empty without weights")
+    rate: InsightRate | None = Field(None, description="speed of the weight change per week, null with fewer than 4 weights or less than 10 days between them")
     previous: InsightPrevious | None = None
     deltas: InsightDeltas | None = None
     averages: InsightAverages
