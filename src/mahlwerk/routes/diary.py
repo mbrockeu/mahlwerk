@@ -10,7 +10,7 @@ from ..activity_views import day_activities
 from ..auth import current_user
 from ..db import DEFAULT_WATER_GOAL, Store
 from ..deps import get_store
-from ..hydration import day_drinks_ml
+from ..hydration import day_drinks_ml, drinks_by_day
 from ..models import MEALS, CopyIn, Day, Entries, Entry, EntryIn, EntryPatch, HistoryDay
 from ..nutrition import PER_100_KEYS, r1, scale, total
 from ..webhooks import emit
@@ -233,11 +233,17 @@ def history(
     by_day: dict[str, list[dict]] = {}
     for row in store.entries_between(user["id"], first.isoformat(), last.isoformat()):
         by_day.setdefault(row["day"], []).append(_scaled(row))
+    water = store.water_between(user["id"], first.isoformat(), last.isoformat())
+    drinks = (
+        drinks_by_day(store.drink_entries(user["id"], first.isoformat(), last.isoformat()))
+        if store.get_settings(user["id"]).get("water_drinks", True) else {}
+    )
     result = []
     for offset in range(days):
         d = (first + timedelta(days=offset)).isoformat()
         sums = total(by_day.get(d, []))
         result.append(
-            {"day": d, "logged": d in by_day, **{k: r1(sums[k]) for k in ("kcal", "protein", "carbs", "fat")}}
+            {"day": d, "logged": d in by_day, **{k: r1(sums[k]) for k in ("kcal", "protein", "carbs", "fat")},
+             "water_ml": water.get(d, 0), "water_drinks_ml": drinks.get(d, 0)}
         )
     return result

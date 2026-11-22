@@ -594,7 +594,9 @@ class HistoryDay(BaseModel):
     protein: float
     carbs: float
     fat: float
-    logged: bool
+    logged: bool = Field(description="true when the day has diary entries")
+    water_ml: int = Field(0, description="the water counter of the day")
+    water_drinks_ml: int = Field(0, description="water from drinks in the diary (0 with the setting water_drinks off)")
 
 
 def normalize_body_fat(v: float) -> float:

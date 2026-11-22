@@ -171,3 +171,15 @@ def test_version_16_database_gets_the_drink_column(tmp_path):
     assert store.set_food_drink(7, False) and store.get_food(7)["drink"] is False
     assert store.set_food_drink(7, None) and store.get_food(7)["drink"] is None
     assert store.set_food_drink(99, True) is False
+
+
+def test_history_has_the_water_counter_and_the_drinks_per_day(client):
+    from datetime import date, timedelta
+    day = (date.today() - timedelta(days=1)).isoformat()
+    client.post(f"/api/v1/water/{day}", json={"add_ml": 500})
+    log(client, make(client, "Schwarzer Kaffee", *COFFEE), 200, day=day)
+    days = {d["day"]: d for d in client.get("/api/v1/history?days=3").json()}
+    assert (days[day]["water_ml"], days[day]["water_drinks_ml"], days[day]["logged"]) == (500, 199, True)
+    assert (days[date.today().isoformat()]["water_ml"], days[date.today().isoformat()]["water_drinks_ml"]) == (0, 0)
+    client.patch("/api/v1/me/settings", json={"water_drinks": False})
+    assert client.get("/api/v1/history?days=3").json()[1]["water_drinks_ml"] == 0

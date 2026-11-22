@@ -205,7 +205,7 @@ Editing or deleting the food later does not change past days; deleting sets `foo
 | POST | `/api/v1/recipes/ingredients/match` | `{text}` | `{lines:[IngredientLine], ignored}` | reads a pasted ingredient list and looks up foods; writes nothing, see Calculating from an ingredient list |
 | PUT | `/api/v1/recipes/{id}` | as POST | Recipe | recalculates the food; diary entries logged earlier stay unchanged |
 | DELETE | `/api/v1/recipes/{id}` | – | 204 | removes recipe and food; diary copies and templates stay |
-| GET | `/api/v1/history?days=` | – | `[{day, kcal, protein, carbs, fat, logged}]` | last N days (default 14, max 366) ending today, oldest first |
+| GET | `/api/v1/history?days=` | – | `[{day, kcal, protein, carbs, fat, logged, water_ml, water_drinks_ml}]` | last N days (default 14, max 366) ending today, oldest first; `logged` means diary entries, `water_ml` is the water counter, `water_drinks_ml` the water from drinks in the diary (0 with the setting `water_drinks` off) |
 | GET | `/api/v1/insights?from=&to=&range=&granularity=&compare=` | – | Insights | see Insights; default the last 30 days ending today; up to 3660 days (ten years); `range=all` = first to last entry, `range=<n>` = last n days; invalid date, `from` after `to`, too long or an unknown `granularity`/`range`/`compare` value → 422 |
 | GET | `/api/v1/insights/nutrient?key=&from=&to=&granularity=` | – | NutrientCurve | see Insights, nutrient curve |
 | GET | `/api/v1/insights/foods?from=&to=&q=&sort=&limit=&offset=` | – | FoodList | see Insights, foods |

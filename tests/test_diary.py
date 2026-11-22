@@ -153,7 +153,8 @@ def test_history_covers_the_last_days_ending_today(client, food):
     log(client, food, 100, day=(today - timedelta(days=20)).isoformat())
     history = client.get("/api/v1/history", params={"days": 3}).json()
     assert [h["day"] for h in history] == [(today - timedelta(days=n)).isoformat() for n in (2, 1, 0)]
-    assert history[0] == {"day": history[0]["day"], "kcal": 400, "protein": 20, "carbs": 60, "fat": 8, "logged": True}
+    assert history[0] == {"day": history[0]["day"], "kcal": 400, "protein": 20, "carbs": 60, "fat": 8, "logged": True,
+                          "water_ml": 0, "water_drinks_ml": 0}
     assert history[1]["logged"] is False and history[1]["kcal"] == 0
     assert history[2]["kcal"] == 200
     assert len(client.get("/api/v1/history").json()) == 14
