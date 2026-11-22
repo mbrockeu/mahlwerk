@@ -11,7 +11,8 @@
   import RecipeEditor from './components/RecipeEditor.svelte';
   import WorkoutSheet from './components/WorkoutSheet.svelte';
   import { router } from './lib/router.svelte';
-  import { auth, endMoment, loadAuth, loadMe, markTourSeen, runToastAction, tourSeen, ui } from './lib/store.svelte';
+  import { auth, endMoment, loadAuth, loadMe, markTourSeen, mealByTime, openAdd, runToastAction, tourSeen, ui } from './lib/store.svelte';
+  import { parseDeepLink, stripDeepLink } from './lib/deeplink';
   import Gate from './views/Gate.svelte';
   import Admin from './views/Admin.svelte';
   import Badges from './views/Badges.svelte';
@@ -48,6 +49,19 @@
 
   // the phone's more menu (round avatar, top right) is on every main page; profile, badges and admin have their own close button there
   const hasMenu = $derived(['today', 'history', 'products', 'recipes', 'weight'].includes(router.route));
+
+  // direct link (/?go=scan, /?go=add&meal=…): once signed in, open the add sheet for today on the day view, then drop it from the address
+  let deepLink = parseDeepLink(location.search);
+  $effect(() => {
+    if (!deepLink || !auth.signedIn || !ui.me) return;
+    const { tab, meal } = deepLink;
+    deepLink = null;
+    history.replaceState(null, '', `${location.pathname}${stripDeepLink(location.search)}#/`);
+    router.route = 'today';
+    router.query = new URLSearchParams();
+    ui.day = ui.today;
+    openAdd(meal ?? mealByTime(), ui.today, tab);
+  });
 
   onMount(() => { void (async () => { await loadAuth(); if (auth.signedIn) await loadMe(); })(); });
 </script>
