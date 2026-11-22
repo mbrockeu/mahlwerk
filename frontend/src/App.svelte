@@ -12,7 +12,7 @@
   import RecipeEditor from './components/RecipeEditor.svelte';
   import WorkoutSheet from './components/WorkoutSheet.svelte';
   import { router } from './lib/router.svelte';
-  import { auth, endMoment, loadAuth, loadMe, loadVision, markTourSeen, mealByTime, openAdd, runToastAction, tourSeen, ui, visionReady } from './lib/store.svelte';
+  import { auth, endMoment, loadAuth, loadMe, loadVision, markTourSeen, mealByTime, holdToast, openAdd, releaseToast, runToastAction, tourSeen, ui, visionReady } from './lib/store.svelte';
   import { parseDeepLink, stripDeepLink } from './lib/deeplink';
   import Gate from './views/Gate.svelte';
   import Admin from './views/Admin.svelte';
@@ -107,14 +107,17 @@
 {/key}
 {/if}
 
-{#if ui.toast}
-  <div class="toast" role="status">
-    <span>{ui.toast}</span>
-    {#if ui.toastAction}
-      <button class="undo" onclick={runToastAction}>{ui.toastAction.label}</button>
-    {/if}
-  </div>
-{/if}
+<!-- the live region stays in the DOM so that screen readers announce each new message; only its content changes -->
+<div class="toast-live" role="status" aria-live="polite" aria-atomic="true">
+  {#if ui.toast}
+    <div class="toast" role="presentation" onmouseenter={holdToast} onmouseleave={releaseToast} onfocusin={holdToast} onfocusout={releaseToast}>
+      <span>{ui.toast}</span>
+      {#if ui.toastAction}
+        <button class="undo" onclick={runToastAction}>{ui.toastAction.label}</button>
+      {/if}
+    </div>
+  {/if}
+</div>
 
 <style>
   .toast {

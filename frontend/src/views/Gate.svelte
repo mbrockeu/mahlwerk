@@ -173,7 +173,7 @@
   .pw input { padding-right: 84px; }
   .show {
     position: absolute; right: 4px; top: 4px; bottom: 4px; min-width: 64px; padding: 0 12px; border-radius: 12px 12px 12px 5px; font-family: var(--f-mono);
-    font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; background: var(--paper); color: var(--text); border: 2px solid var(--hairline);
+    font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; background: var(--paper); color: var(--text); border: 2px solid var(--field-line);
   }
   .ended { color: var(--text); background: var(--stone); border-radius: 14px 14px 14px 5px; padding: 10px 12px; }
   .go { min-height: 52px; width: 100%; font-size: 16px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }

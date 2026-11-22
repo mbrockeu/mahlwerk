@@ -93,7 +93,7 @@
   .btns { display: flex; gap: 8px; padding-right: 0; }
   .btns button { min-height: 44px; border-radius: 22px 22px 22px 8px; font-weight: 600; font-size: 14px; white-space: nowrap; }
   .add { flex: 1; background: var(--deep); color: var(--on-deep); --focus: var(--focus-base); }
-  .minus { padding: 0 14px; border: 2px solid var(--hairline); color: var(--text); font-family: var(--f-mono); font-size: 13px; }
+  .minus { padding: 0 14px; border: 2px solid var(--field-line); color: var(--text); font-family: var(--f-mono); font-size: 13px; }
   .btns button:active:not([disabled]) { transform: scale(0.97); }
   .btns button[disabled] { opacity: 0.45; cursor: default; }
   @media (min-width: 900px) { .water { justify-content: center; gap: 16px; padding: 18px 18px 18px 22px; } .glasses { height: 56px; } }

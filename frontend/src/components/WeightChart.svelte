@@ -48,18 +48,18 @@
     {/each}
     {#if fat.length}
       {#each fatGrid as g}<text x={width - PR + 7} y={yf(g) + 4} text-anchor="start" class="lab fatlab">{fmt1(g)}</text>{/each}
-      <path d={fatLine} fill="none" stroke="var(--orange)" stroke-width="2.5" stroke-dasharray="6 4" stroke-linecap="round" stroke-linejoin="round" />
-      {#if dots}{#each fat as p (p.day)}<circle cx={x(p.day)} cy={yf(p.pct)} r="2.5" fill="var(--paper)" stroke="var(--orange)" stroke-width="1.5" />{/each}{/if}
+      <path d={fatLine} fill="none" stroke="var(--weight-orange)" stroke-width="2.5" stroke-dasharray="6 4" stroke-linecap="round" stroke-linejoin="round" />
+      {#if dots}{#each fat as p (p.day)}<circle cx={x(p.day)} cy={yf(p.pct)} r="2.5" fill="var(--paper)" stroke="var(--weight-orange)" stroke-width="1.5" />{/each}{/if}
     {/if}
     <path d={line} fill="none" stroke="var(--bar)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
-    {#if end}<circle cx={x(end.day)} cy={y(end.kg)} r="7" fill="var(--orange)" stroke="var(--paper)" stroke-width="3" />{/if}
+    {#if end}<circle cx={x(end.day)} cy={y(end.kg)} r="7" fill="var(--weight-orange)" stroke="var(--paper)" stroke-width="3" />{/if}
     <text x={PL} y={H - 7} text-anchor="start" class="lab">{dm(from)}</text>
     <text x={width - PR} y={H - 7} text-anchor="end" class="lab">{dm(to)}</text>
   </svg>
   <p class="legend mono">
     {#if dots}<span><svg width="16" height="10" aria-hidden="true"><circle cx="8" cy="5" r="3" fill="var(--paper)" stroke="var(--quiet)" stroke-width="1.6" /></svg>{t('wtMeasured')}</span>{/if}
     <span><svg width="16" height="10" aria-hidden="true"><path d="M0 5H16" stroke="var(--bar)" stroke-width="3.5" stroke-linecap="round" /></svg>{t('wtTrend')}</span>
-    {#if fat.length}<span><svg width="16" height="10" aria-hidden="true"><path d="M0 5H16" stroke="var(--orange)" stroke-width="2.5" stroke-dasharray="4 3" /></svg>{t('wtBodyFat')}</span>{/if}
+    {#if fat.length}<span><svg width="16" height="10" aria-hidden="true"><path d="M0 5H16" stroke="var(--weight-orange)" stroke-width="2.5" stroke-dasharray="4 3" /></svg>{t('wtBodyFat')}</span>{/if}
   </p>
   {#if !dots}<p class="note">{t('wtNoLine')}</p>{/if}
 </div>
@@ -67,7 +67,7 @@
 <style>
   svg { display: block; }
   .lab { font-family: var(--f-mono); font-size: 11px; fill: var(--quiet); }
-  .fatlab { fill: var(--orange); }
+  .fatlab { fill: var(--weight-orange); }
   .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--quiet); margin-top: 6px; }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
 </style>

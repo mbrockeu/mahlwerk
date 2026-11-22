@@ -174,7 +174,7 @@
         {/each}
         <path d={chart.line} fill="none" stroke="var(--bar)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
         {#each chart.pts as q}<circle cx={q.x} cy={q.y} r="2.2" fill="var(--bar)" />{/each}
-        <circle cx={chart.end.x} cy={chart.end.y} r="7" fill="var(--orange)" stroke="var(--paper)" stroke-width="3" />
+        <circle cx={chart.end.x} cy={chart.end.y} r="7" fill="var(--weight-orange)" stroke="var(--paper)" stroke-width="3" />
       </svg>
       <figcaption class="micro quiet">{t('weightChart')}</figcaption>
     </figure>

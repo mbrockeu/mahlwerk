@@ -75,7 +75,7 @@
   .when { font-size: 13px; color: var(--quiet); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .val { font-size: 28px; line-height: 1; letter-spacing: -0.03em; white-space: nowrap; }
   .val small { font-size: 12px; letter-spacing: 0; font-weight: 500; }
-  .invite { background: transparent; box-shadow: inset 0 0 0 2px var(--hairline); color: var(--quiet); }
+  .invite { background: transparent; box-shadow: inset 0 0 0 2px var(--field-line); color: var(--quiet); }
   .invite .when { white-space: normal; }
   @media (min-width: 900px) { .wt { min-height: 72px; padding-left: 16px; padding-right: 24px; } .val { font-size: 34px; } }
 </style>

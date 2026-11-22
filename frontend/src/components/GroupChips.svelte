@@ -34,5 +34,5 @@
   .chip { flex-shrink: 0; gap: 8px; max-width: 240px; }
   .lab { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .n { font-size: 12px; font-weight: 600; opacity: 0.8; }
-  .manage { border: 2px solid var(--hairline); }
+  .manage { border: 2px solid var(--field-line); }
 </style>

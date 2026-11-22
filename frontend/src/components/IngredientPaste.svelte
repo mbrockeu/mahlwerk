@@ -132,6 +132,6 @@
 
 <style>
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .paste { width: 100%; min-height: 180px; padding: 14px 16px; border-radius: 22px; background: var(--paper); border: 2px solid var(--hairline); color: var(--text); font-family: var(--f-mono); font-size: max(16px, 1em); line-height: 1.5; resize: vertical; }
+  .paste { width: 100%; min-height: 180px; padding: 14px 16px; border-radius: 22px; background: var(--paper); border: 2px solid var(--field-line); color: var(--text); font-family: var(--f-mono); font-size: max(16px, 1em); line-height: 1.5; resize: vertical; }
   .paste:focus-visible { outline-offset: 0; border-color: var(--focus-base); }
 </style>

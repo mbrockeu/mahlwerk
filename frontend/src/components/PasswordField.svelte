@@ -24,6 +24,6 @@
   label { font-size: 13px; font-weight: 600; color: var(--quiet); }
   .pw { position: relative; display: flex; }
   .pw input { padding-right: 96px; background: var(--stone); }
-  .show { position: absolute; right: 4px; top: 4px; bottom: 4px; min-width: 76px; padding: 0 14px; border-radius: 12px 12px 12px 5px; background: var(--paper); border: 2px solid var(--hairline); font-size: 13px; font-weight: 600; }
+  .show { position: absolute; right: 4px; top: 4px; bottom: 4px; min-width: 76px; padding: 0 14px; border-radius: 12px 12px 12px 5px; background: var(--paper); border: 2px solid var(--field-line); font-size: 13px; font-weight: 600; }
   .show[aria-pressed='true'] { background: var(--sel-bg); color: var(--sel-fg); border-color: var(--sel-bg); }
 </style>

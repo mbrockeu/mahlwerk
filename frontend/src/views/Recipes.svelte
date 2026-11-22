@@ -379,7 +379,7 @@
   .row-pill.thumbed .t { flex: 1; }
   @media (max-width: 400px) { .row-pill.thumbed { gap: 10px; padding-right: 14px; } .row-pill.thumbed :global(.thumb) { width: 40px; height: 40px; } }
   .row-pill.selected { box-shadow: inset 0 0 0 2px var(--green-text); }
-  .add { background: var(--paper); border: 2px solid var(--hairline); }
+  .add { background: var(--paper); border: 2px solid var(--field-line); }
   .per { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
   .per small { font-family: var(--f-body); font-size: 11px; font-weight: 500; color: var(--quiet); }
   .meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }

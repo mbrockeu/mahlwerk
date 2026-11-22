@@ -136,7 +136,7 @@
   .rows .round { background: var(--stone); }
   .alts { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 4px 8px 8px 0; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip { min-height: 40px; padding: 0 14px; border-radius: 20px; background: var(--stone); box-shadow: inset 0 0 0 2px var(--hairline); font-size: 14px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip { min-height: 40px; padding: 0 14px; border-radius: 20px; background: var(--stone); box-shadow: inset 0 0 0 2px var(--field-line); font-size: 14px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .chip.on { background: var(--sel-bg); color: var(--sel-fg); box-shadow: none; }
   .nofood { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 8px 6px 0; }
   .btn.small { min-height: 44px; padding: 0 16px; font-size: 14px; }

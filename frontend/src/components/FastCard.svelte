@@ -198,7 +198,7 @@
   .acts { display: flex; gap: 8px; align-items: center; }
   .end { flex: 1; }
   .edit-btn { background: transparent; border: 2px solid var(--deep-line); color: var(--on-deep); }
-  .idle .edit-btn { border-color: var(--hairline); color: var(--text); background: var(--paper); }
+  .idle .edit-btn { border-color: var(--field-line); color: var(--text); background: var(--paper); }
   .btn.ghost { background: transparent; border-color: var(--deep-line); color: var(--on-deep); }
 
   .edit { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--deep-line); padding-top: 12px; }
@@ -209,7 +209,7 @@
   .idle .edit input { background: var(--stone); }
   .editbtns { display: flex; gap: 8px; }
   .editbtns .btn { flex: 1; }
-  .idle .btn.ghost { color: var(--text); border-color: var(--hairline); }
+  .idle .btn.ghost { color: var(--text); border-color: var(--field-line); }
   .del { align-self: flex-start; min-height: 44px; padding: 0 4px; font-size: 14px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; color: var(--pink); }
   .idle .del { color: var(--warn); }
 

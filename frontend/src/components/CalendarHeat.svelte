@@ -155,7 +155,7 @@
     <div class="blocks area-main">
       {#each blocks as b (b.month)}
         <section class="month" aria-label={monthLongOf(b.month)}>
-          <h4 class="mh display">{monthLongOf(b.month)}</h4>
+          <h3 class="mh display">{monthLongOf(b.month)}</h3>
           <div class="mgrid">
             {#each weekdayNames as w}<span class="wd mono" aria-hidden="true">{w}</span>{/each}
             {#each b.weeks as row}
@@ -226,7 +226,7 @@
   .d.none { box-shadow: inset 0 0 0 1.5px var(--dim); color: var(--quiet); background: transparent; clip-path: none; }
   .d.no_goal { background: var(--track); box-shadow: inset 0 0 0 1.5px var(--dim); }
   .d.on { z-index: 1; box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--text); }
-  .d.out { color: var(--dim); opacity: 0.75; }
+  .d.out { color: var(--quiet); } /* days of the neighbouring month: set apart by their frame, text keeps 4.5:1 */
 
   /* month view */
   .blocks { display: flex; flex-wrap: wrap; gap: 22px 32px; min-width: 0; }

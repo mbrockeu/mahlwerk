@@ -127,13 +127,21 @@ export function checkBadges() {
 export const endMoment = () => { ui.moment = null; };
 
 let toastTimer = 0;
-/** A short message; with an action (e.g. undo) it stays a little longer so it can be reached. */
+let toastMs = 0;
+/** A short message; with an action (e.g. undo) it stays at least 10 s so it can be found and used (WCAG 2.2.1). */
 export function toast(text: string, action?: ToastAction) {
   ui.toast = text;
   ui.toastAction = action ?? null;
-  clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => { ui.toast = ''; ui.toastAction = null; }, action ? 7000 : 2600);
+  toastMs = action ? 10000 : 2600;
+  armToast();
 }
+function armToast() {
+  clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => { ui.toast = ''; ui.toastAction = null; }, toastMs);
+}
+/** Hover or focus on the toast holds it; leaving starts the full time again. */
+export const holdToast = () => clearTimeout(toastTimer);
+export const releaseToast = () => { if (ui.toast) armToast(); };
 
 function dismissToast() {
   clearTimeout(toastTimer);

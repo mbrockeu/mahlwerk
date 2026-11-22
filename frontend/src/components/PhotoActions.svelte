@@ -50,5 +50,5 @@
   .ic { width: 44px; height: 44px; border-radius: 16px 16px 16px 6px; background: var(--paper); color: var(--text); display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(23, 33, 28, 0.18); }
   .ic:disabled { opacity: 0.6; }
   .b.primary { background: var(--primary); color: #fff; }
-  .b.plain { background: var(--stone); color: var(--text); box-shadow: inset 0 0 0 2px var(--hairline); }
+  .b.plain { background: var(--stone); color: var(--text); box-shadow: inset 0 0 0 2px var(--field-line); }
 </style>

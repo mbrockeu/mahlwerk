@@ -501,7 +501,7 @@
   .v { font-family: var(--f-mono); font-size: 16px; font-weight: 600; }
   .plus {
     width: 44px; height: 44px; margin: 0 4px 0 -4px; border-radius: 22px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
-    border: 2px solid var(--hairline); color: var(--text);
+    border: 2px solid var(--field-line); color: var(--text);
   }
   .cta .plus { background: var(--lime); border-color: var(--lime); color: var(--on-lime); }
   .entries { border-top: 1px solid var(--hairline); padding: 4px 0 6px; animation: unfold 220ms ease-out; }

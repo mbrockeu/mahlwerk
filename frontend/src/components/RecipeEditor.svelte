@@ -281,7 +281,7 @@
   .prev img { display: block; width: 100%; height: 100%; object-fit: cover; }
   .pbtns { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
   .b { min-height: 46px; padding: 0 18px; border-radius: 24px 24px 24px 8px; font-weight: 700; font-size: 15px; display: inline-flex; align-items: center; gap: 8px; }
-  .b.plain { background: var(--stone); color: var(--text); box-shadow: inset 0 0 0 2px var(--hairline); }
+  .b.plain { background: var(--stone); color: var(--text); box-shadow: inset 0 0 0 2px var(--field-line); }
   .b:disabled { opacity: 0.6; }
   .pair { display: flex; gap: 10px; align-items: flex-end; }
   .short { width: 104px; flex-shrink: 0; }

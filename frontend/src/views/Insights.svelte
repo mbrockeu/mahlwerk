@@ -51,6 +51,16 @@
     setQuery(params);
     window.scrollTo({ top: 0 });
   }
+  /** Roving tabindex: arrows, Home and End move between the tabs and open the one reached (automatic activation, as in the add sheet). */
+  function tabKey(event: KeyboardEvent, i: number) {
+    const n = INSIGHT_TABS.length;
+    const next = event.key === 'ArrowRight' ? (i + 1) % n : event.key === 'ArrowLeft' ? (i + n - 1) % n : event.key === 'Home' ? 0 : event.key === 'End' ? n - 1 : -1;
+    if (next < 0) return;
+    event.preventDefault();
+    const id = INSIGHT_TABS[next];
+    setTab(id);
+    (document.getElementById(`ins-tab-${id}`) as HTMLElement | null)?.focus();
+  }
   const shown = $derived(data ? { from: data.range.from, to: data.range.to } : want);
 
   const RANGES: { key: RangeKey; label: () => string }[] = [
@@ -263,8 +273,9 @@
     <button class="chip small help" onclick={() => (ui.help = true)} aria-label={t('hlpOpenAria')} aria-haspopup="dialog"><span class="q" aria-hidden="true">?</span>{t('hlpOpen')}</button>
   </div>
   <div class="tabs" role="tablist" aria-label={t('tabsLabel')}>
-    {#each INSIGHT_TABS as tb (tb)}
-      <button role="tab" class="tab" class:on={tab === tb} aria-selected={tab === tb} onclick={() => setTab(tb)}>{t(TAB_LABEL[tb])}</button>
+    {#each INSIGHT_TABS as tb, i (tb)}
+      <button role="tab" id="ins-tab-{tb}" class="tab" class:on={tab === tb} aria-selected={tab === tb} aria-controls="ins-panel" tabindex={tab === tb ? 0 : -1}
+        onclick={() => setTab(tb)} onkeydown={(e) => tabKey(e, i)}>{t(TAB_LABEL[tb])}</button>
     {/each}
   </div>
   {#if q.range === 'custom'}
@@ -275,6 +286,7 @@
     {#if invalid}<p class="note warn" role="alert">{t('rangeBad')}</p>{/if}
   {/if}
 
+  <div class="tabpanel" role="tabpanel" id="ins-panel" aria-labelledby="ins-tab-{tab}">
   {#if invalid}
     <!-- invalid range: the warning above says why; showing the previous range's numbers would mislead -->
   {:else if error && !data}
@@ -285,7 +297,7 @@
   {:else}
     <div class="body" class:stale={loading} data-logged={logged > 0 ? '1' : '0'}>
       {#if tab === 'overview'}
-        <section id="sec-ov" class="sec" aria-label={t('tabOverview')}>
+        <section id="sec-ov" class="sec">
         <div class="hero on-dark">
           <div class="stat">
             <span class="micro lab">{t('insAvgKcal')}</span>
@@ -335,7 +347,7 @@
           <ReviewPanel />
           {#if logged > 0}
             <section class="card" aria-labelledby="h-hints">
-              <h3 id="h-hints" class="micro quiet">{t('hintsTitle')}</h3>
+              <h2 id="h-hints" class="micro quiet">{t('hintsTitle')}</h2>
               <ul class="hints">
                 {#each data.hints as h (h.code)}
                   <li class="hint" class:good={POSITIVE.has(h.code)}>
@@ -350,7 +362,7 @@
           {#if logged > 0}
           <section class="card" aria-labelledby="h-cal">
             <div class="info-head">
-              <h3 id="h-cal" class="micro quiet">{t('calTitle')}</h3>
+              <h2 id="h-cal" class="micro quiet">{t('calTitle')}</h2>
               {#if goal && data.calendar && data.calendar.length}
                 <button class="info-btn" aria-expanded={calInfo} aria-controls="cal-info" aria-label={t('calRangeInfo')} title={t('calRangeInfo')}
                   onclick={() => (calInfo = !calInfo)}><Icon name="info" size={18} /></button>
@@ -374,16 +386,16 @@
         </section>
       {:else if avg}
         {#if tab === 'food'}
-          <section id="sec-food" class="sec" aria-label={t('tabFood')}>
+          <section id="sec-food" class="sec">
           <section class="card" aria-labelledby="h-kcal">
-            <h3 id="h-kcal" class="micro quiet">{titleOfGran}</h3>
+            <h2 id="h-kcal" class="micro quiet">{titleOfGran}</h2>
             <KcalChart {series} previous={q.compare ? prev?.series ?? null : null} goal={effGoal} {gran} onzoom={zoom} />
             {#if !goal}{@render nogoal()}{:else}<p class="note keyline"><span class="swatch band"></span>{t('goalBand')}{#if goalAdded} {t('insGoalWithActive', { n: fmt(effGoal?.kcal ?? 0) })}{/if}</p>{/if}
           </section>
           <section class="card" aria-labelledby="h-macro">
-            <h3 id="h-macro" class="micro quiet">{t('macroTrend')} <span class="sub">· {t('macroTrendNote')}</span></h3>
+            <h2 id="h-macro" class="micro quiet">{t('macroTrend')} <span class="sub">· {t('macroTrendNote')}</span></h2>
             <MacroChart {series} {gran} />
-            <h3 id="h-macro2" class="micro quiet sp">{t('macroTitle')}</h3>
+            <h2 id="h-macro2" class="micro quiet sp">{t('macroTitle')}</h2>
             <div class="tiles">
               {#each tiles as tile}
                 <div class="tile" style="background:{tile.bg}; border-radius:{tile.radius}" role="group"
@@ -404,12 +416,12 @@
           </section>
           <div class="row2">
             <section class="card" aria-labelledby="h-wd">
-              <h3 id="h-wd" class="micro quiet">{t('weekdaysTitle')}</h3>
+              <h2 id="h-wd" class="micro quiet">{t('weekdaysTitle')}</h2>
               <WeekdayChart data={data.by_weekday} goal={effGoal} />
             </section>
 
             <section class="card" aria-labelledby="h-meals">
-              <h3 id="h-meals" class="micro quiet">{t('mealsTitle')}</h3>
+              <h2 id="h-meals" class="micro quiet">{t('mealsTitle')}</h2>
               <div class="stack" role="img" aria-label={t('mealsAria', { list: mealList })}>
                 {#each data.by_meal.filter((m) => m.share > 0) as m}
                   <span style="flex: {m.share} 1 0; background:{MEAL_STYLE[m.meal].bg}; color:{MEAL_STYLE[m.meal].fg}" class="seg mono">{m.share >= 0.1 ? `${Math.round(m.share * 100)}` : ''}</span>
@@ -426,10 +438,10 @@
           </div>
           </section>
         {:else if tab === 'body'}
-          <section id="sec-body" class="sec" aria-label={t('tabBody')}>
+          <section id="sec-body" class="sec">
           <div class="row2">
             <section class="card" aria-labelledby="h-weight">
-              <h3 id="h-weight" class="micro quiet">{t('wtTitle')}</h3>
+              <h2 id="h-weight" class="micro quiet">{t('wtTitle')}</h2>
               {#if data.weight}
                 <div class="kpis">
                   <div><span class="micro quiet">{t('wtChange')}</span>
@@ -459,13 +471,13 @@
             </section>
 
             <section class="card" aria-labelledby="h-exp">
-              <h3 id="h-exp" class="micro quiet">{t('expTitle')}</h3>
+              <h2 id="h-exp" class="micro quiet">{t('expTitle')}</h2>
               <ExpenditureCard exp={data.expenditure ?? null} missing={data.expenditure_missing ?? []} goal={effGoal} />
             </section>
           </div>
           {#if hasActivity}
             <section class="card" aria-labelledby="h-act">
-              <h3 id="h-act" class="micro quiet">{t('insActTitle')} <span class="sub">· {t('insActStepsNote')}</span></h3>
+              <h2 id="h-act" class="micro quiet">{t('insActTitle')} <span class="sub">· {t('insActStepsNote')}</span></h2>
               <ActivityChart {series} previous={q.compare ? prev?.series ?? null : null} goal={data.steps_goal ?? goal?.steps ?? 8000} {gran} />
               <ul class="extras mono">
                 <li><span class="micro quiet">{t('insActAvgSteps')}</span> {fmt(Math.round(avg.steps))} {#if q.compare && D}<Delta d={D.steps} unit="" />{/if}</li>
@@ -476,19 +488,19 @@
             </section>
           {:else}
             <section class="card" aria-labelledby="h-act">
-              <h3 id="h-act" class="micro quiet">{t('insActTitle')}</h3>
+              <h2 id="h-act" class="micro quiet">{t('insActTitle')}</h2>
               <p class="note">{t('insActNone')}</p>
             </section>
           {/if}
           </section>
         {:else if tab === 'nutrients'}
-          <section id="sec-nut" class="sec" aria-label={t('tabNutrients')}>
+          <section id="sec-nut" class="sec">
           <section class="card" aria-labelledby="h-nut">
-            <h3 id="h-nut" class="micro quiet">{t('nutTitle')}</h3>
+            <h2 id="h-nut" class="micro quiet">{t('nutTitle')}</h2>
             <NutrientsCard {data} sel={nutSel} onsel={setNut} />
           </section>
           <section class="card" aria-labelledby="h-micros">
-            <h3 id="h-micros" class="micro quiet">{t('microsTitle')}</h3>
+            <h2 id="h-micros" class="micro quiet">{t('microsTitle')}</h2>
             {#if micros.length}
               <div class="seg-ctl" role="group" aria-label={t('microsTitle')}>
                 {#each MICRO_TABS as g}
@@ -507,9 +519,9 @@
           </section>
           </section>
         {:else if tab === 'foods'}
-          <section id="sec-foods" class="sec" aria-label={t('tabFoods')}>
+          <section id="sec-foods" class="sec">
           <section class="card" aria-labelledby="h-top">
-            <h3 id="h-top" class="micro quiet">{t('topTitle')}</h3>
+            <h2 id="h-top" class="micro quiet">{t('topTitle')}</h2>
             <div class="seg-ctl" role="group" aria-label={t('topTitle')}>
               {#each METRICS as m}
                 <button class="chip" class:on={metric === m.key} aria-pressed={metric === m.key} onclick={() => (metric = m.key)}>{m.label()}</button>
@@ -530,7 +542,7 @@
             {:else}<p class="note">{t('topNone')}</p>{/if}
           </section>
           <section class="card" aria-labelledby="h-foods">
-            <h3 id="h-foods" class="micro quiet">{t('foodsTitle')}</h3>
+            <h2 id="h-foods" class="micro quiet">{t('foodsTitle')}</h2>
             <FoodsCard from={data.range.from} to={data.range.to} />
           </section>
           </section>
@@ -538,6 +550,7 @@
       {/if}
     </div>
   {/if}
+  </div>
 </div>
 
 <style>
@@ -576,6 +589,7 @@
   .q { width: 22px; height: 22px; border-radius: 11px; background: var(--sel-bg); color: var(--sel-fg); display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; }
   .card, .body :global(.panel) { scroll-margin-top: 70px; }
 
+  .tabpanel { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
   .body { display: flex; flex-direction: column; gap: 26px; transition: opacity 160ms; }
   .body.stale { opacity: 0.55; }
   .sec { display: flex; flex-direction: column; gap: 12px; scroll-margin-top: 70px; }
@@ -604,9 +618,9 @@
   .empty p { color: var(--quiet); }
 
   .card { background: var(--paper); border-radius: 28px 28px 28px 8px; padding: 18px 18px 20px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-  .card h3 { font-size: 11px; font-weight: 500; }
-  .card h3 .sub { text-transform: none; letter-spacing: 0; font-family: var(--f-body); font-size: 12px; }
-  .card h3.sp { margin-top: 8px; }
+  .card h2 { font-size: 11px; font-weight: 500; }
+  .card h2 .sub { text-transform: none; letter-spacing: 0; font-family: var(--f-body); font-size: 12px; }
+  .card h2.sp { margin-top: 8px; }
   .nogoal-note { font-size: 13px; color: var(--quiet); }
   .nogoal-note a, .note a { color: var(--green-text); font-weight: 600; }
   .keyline { display: flex; align-items: center; gap: 8px; }

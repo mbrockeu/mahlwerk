@@ -104,7 +104,7 @@
   .sub { font-size: 12px; color: var(--quiet); overflow-wrap: anywhere; }
   .change { min-height: 44px; margin-top: 4px; }
   form { display: flex; flex-direction: column; gap: 8px; width: 100%; align-items: stretch; }
-  input { min-height: 48px; padding: 0 16px; border-radius: 24px 24px 24px 8px; background: var(--stone); border: 2px solid var(--hairline); font-size: 18px; font-weight: 600; width: 100%; min-width: 0; }
+  input { min-height: 48px; padding: 0 16px; border-radius: 24px 24px 24px 8px; background: var(--stone); border: 2px solid var(--field-line); font-size: 18px; font-weight: 600; width: 100%; min-width: 0; }
   input:focus-visible { outline-offset: 0; border-color: var(--focus-base); }
   input[aria-invalid='true'] { border-color: var(--warn); }
   .acts { display: flex; flex-wrap: wrap; gap: 8px; }

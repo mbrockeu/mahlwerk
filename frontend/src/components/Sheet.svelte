@@ -13,14 +13,20 @@
   let body: HTMLDivElement;
   let zone: HTMLDivElement;
   let opener: Element | null = null;
+  // Sheets can be stacked: the page behind is made inert while at least one is open (counted in the DOM, see cleanup).
+  const BEHIND = 'main, nav, [data-menu]';
 
   onMount(() => {
     opener = document.activeElement;
     document.body.classList.add('locked');
+    document.querySelectorAll(BEHIND).forEach((el) => el.setAttribute('inert', ''));
     sheet.focus({ preventScroll: true });
     return () => {
       const others = document.querySelectorAll('.sheet-wrap').length;
-      if (others <= 1) document.body.classList.remove('locked');
+      if (others <= 1) {
+        document.body.classList.remove('locked');
+        document.querySelectorAll(BEHIND).forEach((el) => el.removeAttribute('inert'));
+      }
       if (opener instanceof HTMLElement && document.contains(opener)) opener.focus({ preventScroll: true });
     };
   });
@@ -137,7 +143,7 @@
     if (e.key === 'Escape') { e.stopPropagation(); onclose(); return; }
     if (e.key !== 'Tab') return;
     // keep focus inside the sheet
-    const items = [...sheet.querySelectorAll<HTMLElement>('button, input, select, a[href], [tabindex]:not([tabindex="-1"])')]
+    const items = [...sheet.querySelectorAll<HTMLElement>('button, input, textarea, select, a[href], [tabindex]:not([tabindex="-1"])')]
       .filter((el) => !el.hasAttribute('disabled') && el.offsetParent !== null);
     if (!items.length) return;
     const first = items[0];
