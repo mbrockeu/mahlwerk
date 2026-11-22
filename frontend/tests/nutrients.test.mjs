@@ -126,3 +126,10 @@ test('unitCharts: two units share one chart, more units make another', () => {
   assert.deepEqual(n.unitCharts(['mg', 'g', 'kcal', 'µg']), [{ left: 'mg', right: 'g', series: [0, 1] }, { left: 'kcal', right: 'µg', series: [2, 3] }]);
   assert.deepEqual(n.unitCharts(['mg', 'g', 'kcal']), [{ left: 'mg', right: 'g', series: [0, 1] }, { left: 'kcal', right: null, series: [2] }]);
 });
+
+test('axisMax: close above the top', () => {
+  assert.equal(n.axisMax(259), 300);
+  assert.equal(n.axisMax(2560), 3000);
+  assert.equal(n.axisMax(118), 120);
+  assert.equal(n.axisMax(0.45), 0.5);
+});

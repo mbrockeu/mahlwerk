@@ -3,7 +3,7 @@
   import { diffDays, labelIndexes } from '../lib/insightsRange';
   import { fmt, t } from '../lib/i18n';
   import { sectionLabel, sectionShort } from '../lib/sections';
-  import { markerPath, markerStride, niceMax, pointsOf, SERIES_STYLES, type AxisChart, type Pt, type Ref, type Summary } from '../lib/nutrientCompare';
+  import { axisMax, markerPath, markerStride, pointsOf, SERIES_STYLES, type AxisChart, type Pt, type Ref, type Summary } from '../lib/nutrientCompare';
   import SeriesMark from './SeriesMark.svelte';
   import type { NutrientCurve } from '../lib/types';
 
@@ -29,7 +29,7 @@
   const plotW = $derived(Math.max(80, width - PL - PR));
   const plotH = $derived(H - PT - PB);
   // each axis holds its lines and their references, with some air above
-  const top = (s: 'left' | 'right') => niceMax(1.08 * Math.max(1e-6, ...idx.filter((i) => side(i) === s).flatMap((i) => [
+  const top = (s: 'left' | 'right') => axisMax(1.05 * Math.max(1e-6, ...idx.filter((i) => side(i) === s).flatMap((i) => [
     ...pts[i].map((p) => p.value ?? 0), refs[i]?.value ?? 0,
   ])));
   const vmaxL = $derived(top('left'));

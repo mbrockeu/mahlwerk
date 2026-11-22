@@ -161,3 +161,11 @@ export function unitCharts(units: string[]): AxisChart[] {
   }
   return out;
 }
+
+/** Top of a unit axis: a finer choice than `niceMax` (1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8 or 10 times a power of ten), so
+ *  that the lines fill the chart rather than its lower half; half of it is still a round label. */
+export function axisMax(top: number): number {
+  const t = Math.max(top, 1e-6);
+  const mag = 10 ** Math.floor(Math.log10(t));
+  return [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].map((m) => m * mag).find((c) => c >= t - 1e-9) ?? t;
+}
