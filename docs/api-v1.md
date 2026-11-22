@@ -1,6 +1,6 @@
 # API v1 – contract for the diary MVP
 
-This is the agreed contract between backend and frontend. Swagger at `/docs` is generated from the code and
+This is the agreed contract between backend and frontend. Swagger at `/docs` (with `MAHLWERK_DOCS=1`) is generated from the code and
 must match this file. All bodies are JSON. All routes below `/api/v1` need an authenticated user.
 
 ## Authentication
@@ -72,16 +72,25 @@ User names: 1 to 40 characters `a-z 0-9 . _ -`, starting with a letter or digit,
 | `POST /auth/logout` | – | `204`, session ended, cookie deleted |
 | `POST /auth/password` | `{current_password, new_password}` | `204`; `403` wrong current password; all other sessions of the user end (access keys stay) |
 | `POST /admin/users` | `{username, display_name?, password, is_admin?, household?}` | `201 {username, display_name, is_admin, household}`; `409` name taken; `household` (default true) false makes a guest, see [Guests and the household](#guests-and-the-household) |
-| `PATCH /admin/users/{username}` | `{disabled?, is_admin?, household?}` | `200 {username, display_name, is_admin, disabled, household}`; blocking ends the sessions; `409` if it would leave no active admin |
+| `PATCH /admin/users/{username}` | `{disabled?, is_admin?, household?}` | `200 {username, display_name, is_admin, disabled, household}`; blocking ends the sessions; `409` if it would leave no active admin or blocks the own account. **Every mode**; outside `local` only `disabled` (see below) |
+| `POST /admin/users/{username}/revoke-access` | – | `200 {tokens, sessions}`: revokes all access keys of that user and ends their sessions (counts of what was revoked or ended); the account stays usable. `409` for the own account. **Every mode** |
 | `POST /admin/users/{username}/password` | `{password}` | `204`, sets a new initial password, ends that user's sessions and revokes their access keys; `409` for the own account |
 
 The `admin/users` routes need an admin session (no token). Admin in `local` mode is a stored flag per account; in `proxy`
 mode it still comes only from the groups header. `GET /admin/users` additionally returns `disabled`, `admin`,
-`has_password` per user (false in the other modes).
+`has_password` per user (`admin` and `has_password` false in `proxy` and `single` mode; `disabled` in every mode). The user name in the path is matched exactly first (proxy mode may
+hold names that differ in case only), else without regard to case.
+
+**Blocking and revoking in `proxy` and `single` mode.** The proxy decides who signs in, but an access key (`Authorization:
+Bearer mw_...`) does not pass the proxy's sign-in, so someone taken out at the proxy would keep working keys. `PATCH
+/admin/users/{username}` with `{disabled: true}` blocks them: their keys stop working (`401`, they work again after an
+unblock) and requests with their name in the proxy headers are answered `403` with `this account is blocked: ask an admin of
+this server`. `POST /admin/users/{username}/revoke-access` revokes their keys for good. `is_admin` and `household` are
+refused with `409` (they come from the proxy's groups), and nobody blocks themself.
 
 **Headers on every answer** (all modes): `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`,
 `X-Frame-Options: DENY`; the interface (everything outside `/api/`) also gets a `Content-Security-Policy`, see README.
-Every answer below `/api/` carries `Cache-Control: no-store`. `/docs`, `/redoc` and `/openapi.json` are off in `local` and `oidc` mode unless `MAHLWERK_DOCS=1`.
+Every answer below `/api/` carries `Cache-Control: no-store`. `/docs`, `/redoc` and `/openapi.json` are off in every mode unless `MAHLWERK_DOCS=1`.
 Access keys of a user without a password are invalid in `local` mode.
 
 ## OpenID Connect sign-in
@@ -95,7 +104,7 @@ Only with `MAHLWERK_AUTH=oidc` (schema version 11); in the other modes these end
 | `GET /auth/oidc/login?next=` | `302` to the provider's authorization endpoint (code flow, PKCE S256, `state`, `nonce`, the configured redirect URI and scopes). Sets the cookie `mahlwerk_oidc` (`__Host-mahlwerk_oidc` when Secure; `HttpOnly`, `SameSite=Lax`, `Path=/`, 10 minutes) that holds state, nonce, PKCE verifier, target and expiry, signed with HMAC-SHA256 (nothing is kept on the server), and binds the pending sign-in to this browser. `429` with `Retry-After` beyond 30 requests per address and minute (login and callback each). `next` is an optional path on this site to open afterwards (anything else, an absolute URL, `//host` or a path below `/api`, is ignored). `302` back to the start page with `?auth_error=failed` when the provider cannot be reached or its discovery document is not acceptable. |
 | `GET /auth/oidc/callback?code=&state=` | The provider sends the browser here. Checks the cookie and `state` (used once), swaps the code for the tokens (with the PKCE verifier), checks the ID token, maps the identity to a user, starts the session (cookie `mahlwerk_session`) and answers `303` to `next` or the start page. Every failure is a `303` to the start page with `?auth_error=<word>`, the cookie `mahlwerk_oidc` deleted and no session; the reason goes to the server log without tokens or claim values. |
 | `POST /auth/logout` | `204`, the session ended, cookie deleted (as in `local`). Nothing is sent to the provider. |
-| `PATCH /admin/users/{username}` | `{disabled}`: block or unblock (a block ends sessions). `is_admin` and `household` are refused with `409` (they come from the provider's groups at each sign-in); blocking yourself is refused with `409`. |
+| `PATCH /admin/users/{username}` | `{disabled}`: block or unblock (a block ends sessions). `is_admin` and `household` are refused with `409` (they come from the provider's groups at each sign-in); blocking yourself is refused with `409`. `POST /admin/users/{username}/revoke-access` works as in `local`. |
 
 `auth_error` words: `denied` (the provider reported an error, e.g. the person declined), `failed` (anything wrong with the
 provider's answers or the checks), `expired` (no pending sign-in for this browser: older than 10 minutes, used before, or the
@@ -188,7 +197,7 @@ Editing or deleting the food later does not change past days; deleting sets `foo
 | PUT | `/api/v1/foods/{id}/piece` | FoodPiece | Food | says what one piece is (`Scheibe` = 25 g); not part of the food data, so a reload from Open Food Facts and `PUT /foods/{id}` leave it alone; label empty or longer than 30, grams 0 or over 5000 → 422; unknown food → 404; foods booked in portions (`cookidoo`, `web`) → 409; a write (read access key: 403) |
 | DELETE | `/api/v1/foods/{id}/piece` | – | 204 | removes the piece; 404 / 409 as above |
 | PUT | `/api/v1/foods/{id}/drink` | `{drink:bool\|null}` | Food | whether the food counts towards the day's water ("Drinks count as water" below): `true` always, `false` never, `null` automatic; not part of the food data (kept on a reload); 404 / 409 as for the piece; a write (read access key: 403) |
-| POST | `/api/v1/label-scans` | image bytes | `{per_100, basis, warnings, text}` | unchanged |
+| POST | `/api/v1/label-scans` | image bytes | `{per_100, basis, warnings, text}` | The photo is decoded in the picture child process and only its clean JPEG (at most 3072 px long, no metadata) is read. Counts against the photo brake (20 photos per person in 10 minutes, shared with own recipe pictures): `429` with `Retry-After`; `503` while another label or picture is processed; `422` with a fixed text when the picture or the reading fails |
 | GET | `/api/v1/diary/{day}` | – | Day | |
 | POST | `/api/v1/diary/{day}/entries` | `{food_id, meal, amount}` | Entry (201) | amount > 0, ≤ 5000 |
 | PATCH | `/api/v1/diary/entries/{id}` | `{amount?, meal?, food_id?}` | Entry | only own entries, else 404; `food_id` swaps the food (name, brand, unit and nutrients taken over from it, day stays; unknown food 404, nothing changed) |

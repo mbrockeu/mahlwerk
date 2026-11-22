@@ -88,6 +88,7 @@ export const api = {
   createUser: (body: { username: string; display_name: string; password: string; is_admin: boolean }) => request<Account>('POST', 'admin/users', body),
   patchUser: (username: string, body: { disabled?: boolean; is_admin?: boolean; household?: boolean }) => request<Account>('PATCH', `admin/users/${encodeURIComponent(username)}`, body),
   resetPassword: (username: string, password: string) => request<void>('POST', `admin/users/${encodeURIComponent(username)}/password`, { password }),
+  revokeAccess: (username: string) => request<{ tokens: number; sessions: number }>('POST', `admin/users/${encodeURIComponent(username)}/revoke-access`),
   me: () => request<Me>('GET', 'me'),
   setDisplayName: (display_name: string | null) => request<Me>('PATCH', 'me', { display_name }),
   setGoal: (goal: Goal) => request<Goal>('PUT', 'me/goal', goal),

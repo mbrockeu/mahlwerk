@@ -383,6 +383,7 @@ ALTER TABLE weight ADD COLUMN lean_health INTEGER NOT NULL DEFAULT 0;
 TABLES = BASE_TABLES + V4_TABLES + V5_TABLES + V6_TABLES + V7_TABLES + V8_TABLES + V9_TABLES + V10_TABLES + V11_TABLES + V12_TABLES + V13_TABLES + V14_TABLES + V15_TABLES + V16_TABLES + V17_TABLES + V18_TABLES
 DEFAULT_WATER_GOAL = 2000
 MAX_WATER_ML = 10000
+MAX_SQL_PARAMS = 900  # bound parameters per statement: far below the limit of older SQLite builds (999)
 
 # Version 1 had no demo marker on entries and weights.
 MIGRATE_1_TO_2 = """
@@ -558,12 +559,13 @@ class Store:
                     "INSERT INTO user (username, display_name, created_at, household) VALUES (?, ?, ?, ?)",
                     (username, display_name, int(time.time()), int(household is not False)),
                 )
-                return {"id": cur.lastrowid, "username": username, "display_name": display_name, "household": household is not False}
+                return {"id": cur.lastrowid, "username": username, "display_name": display_name, "household": household is not False, "disabled": False}
             if row["display_name"] != display_name:
                 con.execute("UPDATE user SET display_name = ? WHERE id = ?", (display_name, row["id"]))
             if household is not None and bool(row["household"]) != household:
                 con.execute("UPDATE user SET household = ? WHERE id = ?", (int(household), row["id"]))
-            return {"id": row["id"], "username": username, "display_name": display_name, "household": bool(row["household"]) if household is None else household}
+            return {"id": row["id"], "username": username, "display_name": display_name,
+                    "household": bool(row["household"]) if household is None else household, "disabled": bool(row["disabled"])}
 
 
     def get_goal(self, user_id: int) -> dict | None:
@@ -600,10 +602,13 @@ class Store:
         with self._connect() as con:
             return con.execute("SELECT 1 FROM user WHERE password_hash IS NOT NULL").fetchone() is None
 
-    def local_user(self, username: str) -> dict | None:
-        """The account with this name (case-insensitive) including its password hash, or None."""
+    def local_user(self, username: str, exact: bool = False) -> dict | None:
+        """The account with this name (case-insensitive unless `exact`) including its password hash, or None."""
         with self._connect() as con:
-            row = con.execute("SELECT * FROM user WHERE lower(username) = ?", (username.lower(),)).fetchone()
+            if exact:
+                row = con.execute("SELECT * FROM user WHERE username = ?", (username,)).fetchone()
+            else:
+                row = con.execute("SELECT * FROM user WHERE lower(username) = ?", (username.lower(),)).fetchone()
         return dict(row) if row else None
 
     def setup_first_admin(self, username: str, display_name: str, password_hash: str) -> dict:
@@ -646,8 +651,10 @@ class Store:
         with self._connect() as con:
             con.execute("UPDATE user SET password_hash = ? WHERE id = ?", (password_hash, user_id))
 
-    def change_account(self, user_id: int, disabled: bool | None = None, admin: bool | None = None, household: bool | None = None) -> None:
-        """Block or unblock, give or take the admin right. The last active admin can be neither blocked nor demoted.
+    def change_account(self, user_id: int, disabled: bool | None = None, admin: bool | None = None, household: bool | None = None,
+                       guard_admins: bool = True) -> None:
+        """Block or unblock, give or take the admin right. The last active admin can be neither blocked nor demoted (unless
+        `guard_admins` is False: in proxy and single mode the stored admin flag is a leftover and decides nothing).
         Blocking also ends the user's sessions."""
         with self._connect() as con:
             con.execute("BEGIN IMMEDIATE")
@@ -655,7 +662,7 @@ class Store:
             now_active = bool(row["local_admin"]) and not row["disabled"] and row["password_hash"] is not None
             new_disabled = bool(row["disabled"]) if disabled is None else disabled
             new_admin = bool(row["local_admin"]) if admin is None else admin
-            if now_active and (new_disabled or not new_admin) and self._active_admins(con, besides=user_id) == 0:
+            if guard_admins and now_active and (new_disabled or not new_admin) and self._active_admins(con, besides=user_id) == 0:
                 raise LastAdmin
             con.execute("UPDATE user SET disabled = ?, local_admin = ? WHERE id = ?", (int(new_disabled), int(new_admin), user_id))
             if household is not None or new_admin:  # an admin is always a member: the stored flag says so too (an access key reads it)
@@ -663,9 +670,11 @@ class Store:
             if new_disabled:
                 con.execute("DELETE FROM auth_session WHERE user_id = ?", (user_id,))
 
-    def revoke_user_tokens(self, user_id: int) -> None:
+    def revoke_user_tokens(self, user_id: int) -> int:
+        """Revoke every access token of the user that is not revoked yet; the number revoked."""
         with self._connect() as con:
-            con.execute("UPDATE access_token SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL", (int(time.time()), user_id))
+            cur = con.execute("UPDATE access_token SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL", (int(time.time()), user_id))
+            return cur.rowcount
 
     def has_users(self) -> bool:
         with self._connect() as con:
@@ -751,9 +760,9 @@ class Store:
         with self._connect() as con:
             con.execute("DELETE FROM auth_session WHERE hash = ?", (token_hash,))
 
-    def delete_user_sessions(self, user_id: int, keep_hash: str | None = None) -> None:
+    def delete_user_sessions(self, user_id: int, keep_hash: str | None = None) -> int:
         with self._connect() as con:
-            con.execute("DELETE FROM auth_session WHERE user_id = ? AND hash IS NOT ?", (user_id, keep_hash))
+            return con.execute("DELETE FROM auth_session WHERE user_id = ? AND hash IS NOT ?", (user_id, keep_hash)).rowcount
 
     # foods (shared by all users)
 
@@ -788,6 +797,21 @@ class Store:
         if food and not demo_view and (food["data"] or {}).get("demo_account"):
             return None
         return food
+
+    def get_foods(self, food_ids: list[int], demo_view: bool = False) -> dict[int, dict]:
+        """Several foods at once, by id (missing ones are left out); the same rule for the demo account's sample foods as `get_food`.
+        Asked in chunks, so that a long list stays below SQLite's limit of bound parameters."""
+        found: dict[int, dict] = {}
+        ids = list(dict.fromkeys(food_ids))
+        with self._connect() as con:
+            for start in range(0, len(ids), MAX_SQL_PARAMS):
+                chunk = ids[start:start + MAX_SQL_PARAMS]
+                marks = ", ".join("?" * len(chunk))
+                for row in con.execute(f"{FOOD_SELECT} WHERE food.id IN ({marks})", chunk).fetchall():
+                    food = self._food(row)
+                    if demo_view or not (food["data"] or {}).get("demo_account"):
+                        found[food["id"]] = food
+        return found
 
     def get_food_by_code(self, code: str) -> dict | None:
         with self._connect() as con:

@@ -28,6 +28,7 @@ OIDC_SESSION_MAX_DAYS = 30
 SESSION_DAYS = 30
 SESSION_TTL = SESSION_DAYS * 86400
 SESSION_MAX_AGE = 180 * 86400  # absolute: a session never lives longer than this, however often it is used
+BLOCKED = "this account is blocked: ask an admin of this server"
 MODES = ("single", "proxy", "local", "oidc")
 SESSION_MODES = ("local", "oidc")  # the modes whose sign-in is a session cookie
 
@@ -380,6 +381,8 @@ def _identity(request: Request, response: Response) -> dict:
     admin = _is_admin(request, config)
     household = config.mode == "single" or admin or is_household_group(config, _groups(request, config))
     user = request.app.state.store.get_or_create_user(username, display, household)  # the flag is renewed with every request
+    if user.pop("disabled") and config.mode == "proxy":  # blocked in the admin area: the proxy still lets them in, Mahlwerk does not
+        raise HTTPException(403, BLOCKED)
     return {**user, "is_admin": admin, "via_token": False, "household": household}
 
 

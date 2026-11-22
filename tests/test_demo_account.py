@@ -827,6 +827,7 @@ def test_no_debug_copy_of_a_demo_label_photo(local_app, real, tmp_path, monkeypa
     monkeypatch.setattr(label, "available", lambda: True)
     monkeypatch.setattr(label, "read", lambda image: {"text": "t", "per_100": {}, "basis": "100g", "warnings": [], "values": {}})
     monkeypatch.setattr(foods_routes.imagesize, "dimensions", lambda image: (10, 10))
+    monkeypatch.setattr(foods_routes.imageproc, "for_label", lambda image: image)
     local_app.state.label_debug_dir = str(tmp_path / "dbg")
     seen = []
     monkeypatch.setattr(foods_routes, "keep_for_debugging", lambda *a: seen.append(a))

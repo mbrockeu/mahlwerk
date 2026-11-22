@@ -243,3 +243,13 @@ def test_users_cannot_see_each_others_data(monkeypatch, tmp_path, upstream):
     assert b.get(f"/api/v1/foods/{food['id']}").status_code == 200  # foods are shared
     assert b.delete(f"/api/v1/weights/{today}").status_code == 404
     assert a.get("/api/v1/weights").json() == [{"day": today, "kg": 80}]
+
+
+def test_recent_foods_are_read_in_one_query_in_order(client, food, monkeypatch):
+    milk = client.post("/api/v1/foods", json={"name": "Milk", "per_100": {"kcal": 64}}).json()
+    for item, meal in ((food, "breakfast"), (milk, "lunch"), (food, "dinner")):
+        assert client.post(f"/api/v1/diary/{DAY}/entries", json={"food_id": item["id"], "amount": 40, "meal": meal}).status_code == 201
+    store = client.app.state.store
+    monkeypatch.setattr(store, "get_food", lambda *a, **k: pytest.fail("one query per food"))
+    recent = client.get("/api/v1/foods/recent").json()
+    assert [(r["food"]["name"], r["last_meal"]) for r in recent] == [("Oats", "dinner"), ("Milk", "lunch")]

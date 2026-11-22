@@ -64,6 +64,9 @@ ACCEPTED = ("JPEG", "PNG", "WEBP")
 MODEL_EDGE = 1568  # long edge of the picture sent to an image model
 MODEL_QUALITY = 85
 MAX_MODEL_BYTES = 4 * 1024 * 1024
+LABEL_EDGE = 3072  # long edge of the picture handed to the label reader: small print of a nutrition table needs the pixels
+LABEL_QUALITY = 92
+MAX_LABEL_BYTES = 8 * 1024 * 1024
 
 
 class ImageRejected(Exception):
@@ -124,8 +127,20 @@ def for_model(data: bytes) -> bytes:
     return blob
 
 
+def for_label(data: bytes) -> bytes:
+    """The picture as ONE clean JPEG for the label reader (OCR): like `for_model`, but larger (long edge at most `LABEL_EDGE`) and
+    with less compression, so that small print stays legible. Same child process and limits. Blocks (call it from a thread)."""
+    blob = _run_child(data, "label")
+    if blob[:2] != b"\xff\xd8":
+        raise ImageRejected("broken")
+    size = imagesize.dimensions(blob)
+    if size is None or not (1 <= max(size) <= LABEL_EDGE) or len(blob) > MAX_LABEL_BYTES:
+        raise ImageRejected("broken")
+    return blob
+
+
 def _run_child(data: bytes, mode: str) -> bytes:
-    """The output of the child for `mode` (`recipe`: the three WebP files, `model`: one JPEG), else ImageRejected."""
+    """The output of the child for `mode` (`recipe`: the three WebP files, `model` and `label`: one JPEG), else ImageRejected."""
     if len(data) > MAX_INPUT_BYTES:
         raise ImageRejected("too_large")
     size = imagesize.dimensions(data)
@@ -289,16 +304,16 @@ def _open_upright(data: bytes, draft: int):
     return img
 
 
-def _model_jpeg(data: bytes) -> bytes:
+def _model_jpeg(data: bytes, edge: int = MODEL_EDGE, quality: int = MODEL_QUALITY) -> bytes:
     import io
 
     from PIL import Image
 
-    img = _open_upright(data, MODEL_EDGE * 2)
-    img.thumbnail((MODEL_EDGE, MODEL_EDGE), Image.Resampling.LANCZOS)
+    img = _open_upright(data, edge * 2)
+    img.thumbnail((edge, edge), Image.Resampling.LANCZOS)
     clean = Image.frombytes("RGB", img.size, img.tobytes())  # a new image from the pixels alone: no metadata can come along
     out = io.BytesIO()
-    clean.save(out, "JPEG", quality=MODEL_QUALITY, optimize=True)
+    clean.save(out, "JPEG", quality=quality, optimize=True)
     return out.getvalue()
 
 
@@ -336,8 +351,9 @@ def _main() -> int:
             raise ImageRejected("format")
         if size[0] * size[1] > MAX_PIXELS:
             raise ImageRejected("too_many_pixels")
-        if os.environ.get("MAHLWERK_IMAGE_MODE") == "model":
-            out = _model_jpeg(data)
+        mode = os.environ.get("MAHLWERK_IMAGE_MODE")
+        if mode in ("model", "label"):
+            out = _model_jpeg(data) if mode == "model" else _model_jpeg(data, LABEL_EDGE, LABEL_QUALITY)
             sys.stdout.buffer.write(out)
             sys.stdout.buffer.flush()
             return 0

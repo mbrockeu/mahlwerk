@@ -95,8 +95,8 @@ def create_app(
             app.state.oidc.close()
 
     config = AuthConfig.from_env()
-    # the interactive API docs list every route and invite probing: off in local mode unless MAHLWERK_DOCS=1
-    docs_on = config.mode not in ("local", "oidc") or os.environ.get("MAHLWERK_DOCS", "").strip().lower() in ("1", "true", "yes")
+    # the interactive API docs list every route and invite probing: off in every mode unless MAHLWERK_DOCS=1
+    docs_on = os.environ.get("MAHLWERK_DOCS", "").strip().lower() in ("1", "true", "yes")
     app = FastAPI(
         title="Mahlwerk", version=__version__, lifespan=lifespan,
         docs_url="/docs" if docs_on else None, redoc_url="/redoc" if docs_on else None, openapi_url="/openapi.json" if docs_on else None,

@@ -489,7 +489,7 @@ def test_auth_endpoints_answer_404_in_single_mode_except_status(client):
     assert client.post("/api/v1/auth/logout").status_code == 404
     assert client.post("/api/v1/auth/password", json={"current_password": PW, "new_password": PW2}).status_code == 404
     assert client.post("/api/v1/admin/users", json={"username": "x1", "password": PW}).status_code == 404
-    assert client.patch("/api/v1/admin/users/me", json={"disabled": True}).status_code == 404
+    assert client.patch("/api/v1/admin/users/me", json={"disabled": True}).status_code == 409  # blocking exists in every mode, not for oneself
     assert client.post("/api/v1/admin/users/me/password", json={"password": PW}).status_code == 404
 
 
@@ -604,3 +604,23 @@ def test_version_9_database_gets_accounts_without_losing_data(tmp_path):
     store.create_local_user("sam", "Sam", "scrypt$16$8$1$AAAA$AAAA", False)
     with pytest.raises(NameTaken):
         store.create_local_user("SAM", "Sam", "x", False)
+
+
+def test_an_admin_ends_the_sessions_and_keys_of_someone(browser, admin):
+    add_user(admin, "sam")
+    sam = browser()
+    login(sam, "sam")
+    key = {"Authorization": "Bearer " + sam.post("/api/v1/me/tokens", json={"name": "k", "scope": "read"}).json()["token"]}
+    r = admin.post("/api/v1/admin/users/sam/revoke-access")
+    assert r.status_code == 200 and r.json() == {"tokens": 1, "sessions": 1}
+    assert sam.get("/api/v1/me").status_code == 401
+    assert browser().get("/api/v1/me", headers=key).status_code == 401
+    login(sam, "sam")  # not blocked: the password still works
+    assert sam.get("/api/v1/me").status_code == 200
+
+
+def test_nobody_blocks_themself_even_with_a_second_admin(browser, admin):
+    add_user(admin, "sam", is_admin=True)
+    r = admin.patch("/api/v1/admin/users/alex", json={"disabled": True})
+    assert r.status_code == 409 and r.json()["detail"] == "you cannot block yourself"
+    assert admin.get("/api/v1/me").status_code == 200

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api, ApiError } from '../lib/api';
   import { shrink } from '../lib/image';
+  import { failure, waitText } from '../lib/vision';
   import { inputNumber, parseNumber, t } from '../lib/i18n';
   import { directory, ensureNutrients, GROUP_ORDER, nutrientName } from '../lib/nutrients.svelte';
   import { ROWS } from '../lib/nutrition';
@@ -63,7 +64,9 @@
       warnings = recognised ? scan.warnings : [];
       rawText = scan.text;
     } catch (err) {
-      status = t('readFailed', { reason: err instanceof ApiError ? err.status || err.message : (err as Error).message });
+      // the photo brake (shared with recipe pictures): say how long to wait, with the text of photo recognition
+      if (err instanceof ApiError && err.status === 429) status = t('visErr_busy', waitText(failure(429, err.retryAfter).wait));
+      else status = t('readFailed', { reason: err instanceof ApiError ? err.status || err.message : (err as Error).message });
       statusWarn = true;
     } finally {
       reading = false;

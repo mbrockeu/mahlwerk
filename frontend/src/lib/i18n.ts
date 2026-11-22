@@ -481,6 +481,8 @@ const en = {
   usrBlockedDone: '{name} is blocked.', usrUnblockedDone: '{name} is unblocked.', usrAdminDone: 'Admin right of {name} changed.',
   usrLastAdmin: 'This is the last active admin. Make someone else admin first.', usrTaken: 'That user name is taken.', usrManage: 'Accounts',
   usrManageNote: 'Blocking works at once: sessions and access keys of that person stop. Diary data stays.',
+  usrRevoke: 'Revoke keys and sessions', usrRevokeSure: 'Really revoke all?', usrRevokeDone: '{name}: {tokens} access keys revoked, {sessions} sessions ended.', usrSelf: 'Not possible for your own account.',
+  usrProxyNote: 'Accounts, names and the admin right come from the sign-in proxy. Access keys do not pass the proxy: someone taken out there keeps working keys until you block them here or revoke their keys.',
   admAuthLocal: 'accounts with password', admAuthOidc: 'identity provider (OpenID Connect)',
 
   // wide screens: product detail pane, weight facts
@@ -1184,6 +1186,8 @@ const de: Record<Key, string> = {
   usrBlockedDone: '{name} ist gesperrt.', usrUnblockedDone: '{name} ist entsperrt.', usrAdminDone: 'Admin-Recht von {name} geändert.',
   usrLastAdmin: 'Das ist der letzte aktive Admin. Mach zuerst jemand anderen zum Admin.', usrTaken: 'Dieser Benutzername ist vergeben.', usrManage: 'Konten',
   usrManageNote: 'Sperren wirkt sofort: Sitzungen und Zugriffsschlüssel der Person enden. Die Tagebuchdaten bleiben.',
+  usrRevoke: 'Schlüssel und Sitzungen widerrufen', usrRevokeSure: 'Wirklich alle widerrufen?', usrRevokeDone: '{name}: {tokens} Zugriffsschlüssel widerrufen, {sessions} Sitzungen beendet.', usrSelf: 'Für das eigene Konto nicht möglich.',
+  usrProxyNote: 'Konten, Namen und das Admin-Recht kommen vom Anmelde-Proxy. Zugriffsschlüssel laufen nicht über den Proxy: Wer dort entfernt wird, behält funktionierende Schlüssel, bis du die Person hier sperrst oder ihre Schlüssel widerrufst.',
   admAuthLocal: 'Konten mit Passwort', admAuthOidc: 'Identitätsanbieter (OpenID Connect)',
 
   // große Bildschirme: Detailfläche der Produkte, Gewichts-Kennzahlen

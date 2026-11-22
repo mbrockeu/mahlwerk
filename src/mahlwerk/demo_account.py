@@ -82,7 +82,7 @@ _classify(
     "blocked",
     # the account itself: no name change, no password, no own test data, no accounts
     "PATCH /me", "POST /me/demo-data", "DELETE /me/demo-data", "POST /auth/password",
-    "POST /admin/users", "PATCH /admin/users/{username}", "POST /admin/users/{username}/password",
+    "POST /admin/users", "PATCH /admin/users/{username}", "POST /admin/users/{username}/password", "POST /admin/users/{username}/revoke-access",
     # shared products, recipes, groups and pictures: the household's, read and book yes, change no
     "GET /foods/barcode/{code}",  # a lookup stores the product it finds (and asks Open Food Facts)
     "PUT /foods/barcode/{code}", "POST /foods", "PUT /foods/{food_id}", "DELETE /foods/{food_id}", "POST /catalog/adopt",

@@ -369,7 +369,7 @@
       <p class="note">{t('admUsersNote')}</p>
     </section>
 
-    {#if (overview.auth_mode === 'local' || overview.auth_mode === 'oidc') && auth.mode === overview.auth_mode}
+    {#if auth.mode === overview.auth_mode}
       <UserManager users={users.filter((u) => !u.demo)} onchange={reloadUsers} />
     {/if}
 

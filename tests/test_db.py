@@ -2,6 +2,7 @@ import json
 import sqlite3
 
 from conftest import DROP_V9
+from mahlwerk import db as db_module
 from mahlwerk.db import Store
 
 LEGACY = """
@@ -234,3 +235,12 @@ def test_version_5_database_gets_water_and_fasting_without_losing_data(tmp_path)
     assert store.start_fast(1, 1000, 16) and store.start_fast(1, 2000, 16) is None  # one open fast per user
     Store(path)  # a second start changes nothing
     assert store.get_water(1, "2026-01-02") == 250
+
+
+def test_many_foods_are_read_in_chunks(client, food, monkeypatch):
+    monkeypatch.setattr(db_module, "MAX_SQL_PARAMS", 2)
+    store = client.app.state.store
+    ids = [client.post("/api/v1/foods", json={"name": f"F{i}", "per_100": {"kcal": i}}).json()["id"] for i in range(5)]
+    got = store.get_foods([*ids, food["id"], 999999, ids[0]])
+    assert set(got) == {*ids, food["id"]} and got[ids[3]]["data"]["name"] == "F3"
+    assert store.get_foods([]) == {}

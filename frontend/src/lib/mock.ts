@@ -993,9 +993,10 @@ function mockIntegrations(method: string, p: string, body: unknown): unknown {
     mockAccounts.push({ username: b.username, display_name: b.display_name || b.username, admin: b.is_admin, disabled: false });
     return { username: b.username, display_name: b.display_name || b.username, is_admin: b.is_admin, disabled: false };
   }
-  if ((r = /^admin\/users\/([^/]+)(\/password)?$/.exec(p))) {
+  if ((r = /^admin\/users\/([^/]+)(\/password|\/revoke-access)?$/.exec(p))) {
     const acct = mockAccounts.find((a) => a.username === decodeURIComponent(r![1]));
     if (!acct) throw new ApiError(404, 'unknown user');
+    if (r[2] === '/revoke-access') return { tokens: 1, sessions: localMock || oidcMock ? 1 : 0 };
     if (r[2]) return null;
     const b = body as { disabled?: boolean; is_admin?: boolean };
     const others = mockAccounts.filter((a) => a !== acct && a.admin && !a.disabled).length;

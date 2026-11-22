@@ -1,6 +1,7 @@
 <script lang="ts">
   // Admin area, local sign-in mode: add users, block, reset a password, give or take the admin right.
-  // oidc mode: the list with blocking only (accounts and the admin right come from the provider).
+  // oidc, proxy and single mode: the list with blocking only (accounts and the admin right come from outside).
+  // Every mode: revoke all access keys and sessions of someone else (a key does not pass the proxy's or provider's sign-in).
   import { api, ApiError } from '../lib/api';
   import { nameValid, normalizeName, passwordProblem } from '../lib/account';
   import { t } from '../lib/i18n';
@@ -16,13 +17,20 @@
   let busy = $state('');
   let error = $state('');
   let confirmBlock = $state('');
+  let confirmRevoke = $state('');
   let resetFor = $state('');
   let resetPassword = $state('');
 
   const me = $derived(ui.me?.username);
   const oidc = $derived(auth.mode === 'oidc');
+  // the accounts and the admin right come from outside: only blocking and revoking are done here
+  const outside = $derived(auth.mode !== 'local');
   const fail = (err: unknown) => {
-    if (err instanceof ApiError && err.status === 409) return err.detail === 'this user name is taken' ? t('usrTaken') : t('usrLastAdmin');
+    if (err instanceof ApiError && err.status === 409) {
+      if (err.detail === 'this user name is taken') return t('usrTaken');
+      if (err.detail === 'you cannot block yourself' || (typeof err.detail === 'string' && err.detail.startsWith('use your own'))) return t('usrSelf');
+      return t('usrLastAdmin');
+    }
     if (err instanceof ApiError && err.status === 422) return err.detail === 'this user name is reserved' ? t('usrReserved') : t('authNameBad');
     return t('saveFailed', { reason: err instanceof ApiError ? err.status || err.message : 'error' });
   };
@@ -60,6 +68,18 @@
     void patch(u, { disabled: true }, 'usrBlockedDone');
   };
 
+  async function revoke(u: AdminUser) {
+    if (confirmRevoke !== u.username) { confirmRevoke = u.username; return; }
+    busy = u.username;
+    error = '';
+    try {
+      const done = await api.revokeAccess(u.username);
+      confirmRevoke = '';
+      toast(t('usrRevokeDone', { name: u.username, tokens: done.tokens, sessions: done.sessions }));
+      await onchange();
+    } catch (err) { error = fail(err); } finally { busy = ''; }
+  }
+
   async function reset(e: SubmitEvent, u: AdminUser) {
     e.preventDefault();
     const bad = passwordProblem(resetPassword);
@@ -88,18 +108,21 @@
             {#if u.household === false}<span class="tag">{t('hhGuestTag')}</span>{/if}
             {#if u.disabled}<span class="tag">{t('usrBlockedTag')}</span>{/if}
             {#if oidc}{#if !u.sso}<span class="tag">{t('usrNotSignedIn')}</span>{/if}
-            {:else if !u.has_password}<span class="tag">{t('usrNoPassword')}</span>{/if}
+            {:else if auth.mode === 'local' && !u.has_password}<span class="tag">{t('usrNoPassword')}</span>{/if}
           </span>
         </div>
         <div class="acts">
           {#if u.disabled}
             <button type="button" class="btn small" disabled={busy === u.username} onclick={() => patch(u, { disabled: false }, 'usrUnblockedDone')}>{t('usrUnblock')}</button>
           {:else}
-            <button type="button" class="btn small danger" disabled={busy === u.username || (oidc && u.username === me)} onclick={() => block(u)}>{confirmBlock === u.username ? t('usrBlockSure') : t('usrBlock')}</button>
+            <button type="button" class="btn small danger" disabled={busy === u.username || u.username === me} onclick={() => block(u)}>{confirmBlock === u.username ? t('usrBlockSure') : t('usrBlock')}</button>
           {/if}
-          {#if !oidc}<button type="button" class="btn small" disabled={busy === u.username} onclick={() => patch(u, { is_admin: !u.admin }, 'usrAdminDone')}>{u.admin ? t('usrRemoveAdmin') : t('usrMakeAdmin')}</button>{/if}
+          {#if u.username !== me}
+            <button type="button" class="btn small danger" disabled={busy === u.username} onclick={() => revoke(u)}>{confirmRevoke === u.username ? t('usrRevokeSure') : t('usrRevoke')}</button>
+          {/if}
+          {#if !outside}<button type="button" class="btn small" disabled={busy === u.username} onclick={() => patch(u, { is_admin: !u.admin }, 'usrAdminDone')}>{u.admin ? t('usrRemoveAdmin') : t('usrMakeAdmin')}</button>{/if}
           {#if auth.mode === 'local' && !u.admin && !u.demo}<button type="button" class="btn small" disabled={busy === u.username} onclick={() => patch(u, { household: u.household === false }, 'usrHouseholdDone')}>{u.household === false ? t('usrMakeMember') : t('usrMakeGuest')}</button>{/if}
-          {#if !oidc && u.username !== me}
+          {#if !outside && u.username !== me}
             <button type="button" class="btn small" aria-expanded={resetFor === u.username} onclick={() => { resetFor = resetFor === u.username ? '' : u.username; resetPassword = ''; }}>{t('usrReset')}</button>
           {/if}
         </div>
@@ -119,8 +142,9 @@
   {#if error}<p class="note warn" role="alert">{error}</p>{/if}
   <p class="note">{t('usrManageNote')}</p>
   {#if oidc}<p class="note">{t('usrOidcNote')}</p>{/if}
+  {#if auth.mode === 'proxy'}<p class="note">{t('usrProxyNote')}</p>{/if}
 
-  {#if !oidc}
+  {#if !outside}
   <h3 class="sub">{t('usrAdd')}</h3>
   <p class="note">{t('usrAddText')}</p>
   <form onsubmit={create} novalidate class="add">

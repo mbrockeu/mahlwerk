@@ -45,6 +45,19 @@ All notable changes to this project are documented here. The format follows
 - Nutrient charts: thinner lines and points.
 - A new version reached iPhones only hours later: `index.html` and the other files outside `assets/` were sent without `Cache-Control`, so Safari and home-screen web apps could reuse the old page. They now get `Cache-Control: no-cache` (checked with the server at each start, the ETag keeps it cheap); the hashed bundles under `assets/` get `public, max-age=31536000, immutable`.
 - Number fields no longer save when they are only tapped and left: on the activity card this marked the day as typed in by hand (and an empty active energy as 0), so the Apple Health shortcut skipped it.
+- Accessibility (WCAG 2.2): pinch zoom works again (viewport no longer blocks scaling); borders of buttons, chips, fields, checkboxes and switches reach 3:1 contrast, as do the weight and body-fat orange, the chart pink and the muted green in light mode; the focused control is no longer hidden behind the bottom navigation; the evaluation tabs follow the tabs pattern (arrow keys, Home/End, tab panel); evaluation card titles are level-2 headings (calendar months level 3); toasts live in a permanent live region, pause on hover/focus and the undo toast stays 10 s; sheets make the page behind them inert; each page sets its own document title.
+- The list of recent foods (`GET /api/v1/foods/recent`) reads its foods in one query instead of one per food.
+
+### Changed
+
+- The interactive API docs (`/docs`, `/redoc`, `/openapi.json`) are off in every sign-in mode unless `MAHLWERK_DOCS=1` (before: only in `local` and `oidc`).
+- Blocking a user in the admin area works in every sign-in mode (before: `local` and `oidc` only); outside `local` only blocking is possible there, the admin right and the household still come from the proxy's or provider's groups. Nobody can block themself in any mode.
+
+### Security
+
+- Proxy mode: an admin can now block someone and revoke their access keys. Before, someone removed at the proxy kept working access keys (a `Bearer` key does not pass the proxy's sign-in) and nobody could take them back. A blocked user's keys stop working and their proxy headers are answered `403` ("this account is blocked"). New `POST /api/v1/admin/users/{username}/revoke-access` (every mode) revokes all access keys of a user and ends their sessions; the admin area has "Revoke keys and sessions" with a confirmation, and the user list with blocking now shows in proxy and single mode too.
+- Label photos (`POST /api/v1/label-scans`) are no longer decoded in the server process: the picture child process (limits, reduced rights) turns them into a clean JPEG of at most 3072 px without metadata, and only that is read by the OCR (and kept as the debug copy). Label photos now count against the photo brake (20 per person in 10 minutes, together with own recipe pictures), and their limit is that of the child, 24 megapixels (before 25).
+- Error answers no longer carry internal texts: a failed Open Food Facts lookup is `502 Open Food Facts unavailable` and a failed label reading `422 could not read the image`; the details (network, DNS, OCR engine) go to the server log only.
 
 ## [0.2.0] - 2026-11-14
 

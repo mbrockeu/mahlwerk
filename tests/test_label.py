@@ -1,5 +1,11 @@
-from mahlwerk import label
+import io
+
+import pytest
+from PIL import Image
+
+from mahlwerk import imageproc, label, webrecipes
 from mahlwerk.label import Box
+from mahlwerk.routes import foods as foods_routes
 
 # What the OCR returned for a real phone photo of a curved bottle with a halftone label.
 # Note the lost comma ("85g"), the unit read as a digit ("8,59") and the unreadable "Salz".
@@ -88,3 +94,90 @@ def test_nothing_readable_is_flagged():
     result = label.interpret([Box(100, 100, "Zutaten: Wasser, Apfelsaft")])
     assert result["warnings"] == ["core_values_missing"]
     assert label.interpret([])["warnings"] == ["core_values_missing"]
+
+
+# ---- the route: the photo is decoded in the picture child, braked per person, failures answered with fixed texts ----
+
+
+def _photo(width=4000, height=3000, fmt="PNG"):
+    exif = Image.Exif()
+    exif[0x010E] = "SECRETEXIF"
+    buffer = io.BytesIO()
+    Image.new("RGB", (width, height), (240, 240, 235)).save(buffer, fmt, exif=exif.tobytes())
+    return buffer.getvalue()
+
+
+def test_the_label_picture_is_a_clean_large_jpeg_from_the_child():
+    original = _photo()
+    clean = imageproc.for_label(original)
+    picture = Image.open(io.BytesIO(clean))
+    assert picture.format == "JPEG" and picture.size == (imageproc.LABEL_EDGE, imageproc.LABEL_EDGE * 3 // 4)
+    assert b"SECRETEXIF" not in clean and "exif" not in picture.info
+    small = Image.open(io.BytesIO(imageproc.for_label(_photo(800, 600, "JPEG"))))
+    assert small.size == (800, 600)  # never enlarged
+    with pytest.raises(imageproc.ImageRejected) as caught:
+        imageproc.for_label(b"GIF89a" + b"\0" * 50)
+    assert caught.value.kind == "format"
+
+
+@pytest.fixture
+def reader(monkeypatch):
+    """The OCR replaced by a stand-in that records what it was given."""
+    seen = []
+    monkeypatch.setattr(label, "available", lambda: True)
+
+    def read(image):
+        seen.append(image)
+        return {"per_100": {}, "basis": None, "warnings": [], "text": ""}
+
+    monkeypatch.setattr(label, "read", read)
+    return seen
+
+
+def test_the_ocr_gets_only_the_clean_copy_of_the_child(client, reader, monkeypatch):
+    calls = []
+    monkeypatch.setattr(imageproc, "for_label", lambda image: calls.append(image) or b"\xff\xd8clean")
+    photo = _photo(400, 300)
+    assert client.post("/api/v1/label-scans", content=photo).status_code == 200
+    assert calls == [photo] and reader == [b"\xff\xd8clean"]  # the original bytes never reach the OCR
+
+
+def test_a_picture_the_child_refuses_is_not_read(client, reader, monkeypatch):
+    def refuse(kind):
+        def run(image):
+            raise imageproc.ImageRejected(kind)
+        return run
+
+    monkeypatch.setattr(imageproc, "for_label", refuse("broken"))
+    r = client.post("/api/v1/label-scans", content=_photo(400, 300))
+    assert r.status_code == 422 and r.json()["detail"] == "the picture could not be read" and reader == []
+    monkeypatch.setattr(imageproc, "for_label", refuse("busy"))
+    r = client.post("/api/v1/label-scans", content=_photo(400, 300))
+    assert r.status_code == 503 and r.headers["retry-after"] == "5"
+
+
+def test_label_photos_count_against_the_upload_brake(make_client, reader, monkeypatch):
+    monkeypatch.setattr(imageproc, "for_label", lambda image: image)
+    ann = make_client()
+    ann.app.state.upload_brake = webrecipes.Brake(lambda: 1000.0, per_user=2, total=100)
+    assert foods_routes.OCR_SLOT.acquire(blocking=False)
+    try:  # a busy answer does not count
+        assert ann.post("/api/v1/label-scans", content=_photo(40, 30)).status_code == 503
+    finally:
+        foods_routes.OCR_SLOT.release()
+    assert [ann.post("/api/v1/label-scans", content=_photo(40, 30)).status_code for _ in range(3)] == [200, 200, 429]
+    r = ann.post("/api/v1/label-scans", content=_photo(40, 30))
+    assert r.status_code == 429 and int(r.headers["retry-after"]) > 0 and len(reader) == 2
+
+
+def test_an_ocr_failure_says_nothing_about_the_engine(client, monkeypatch, caplog):
+    monkeypatch.setattr(label, "available", lambda: True)
+    monkeypatch.setattr(imageproc, "for_label", lambda image: image)
+
+    def fail(image):
+        raise label.OcrFailed("onnxruntime: /opt/models/det.onnx failed")
+
+    monkeypatch.setattr(label, "read", fail)
+    r = client.post("/api/v1/label-scans", content=_photo(40, 30))
+    assert r.status_code == 422 and r.json()["detail"] == "could not read the image"
+    assert "det.onnx" in caplog.text  # the details are in the log

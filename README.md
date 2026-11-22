@@ -157,6 +157,10 @@ user can send `Remote-Groups: admin` themselves and become an admin. nginx examp
   }
   ```
 
+  **Access keys pass the proxy's sign-in** (a request with `Authorization: Bearer mw_...` is not a sign-in at the proxy).
+  When you remove someone at the proxy, also block them in the admin area (their keys stop and their name in the headers
+  is answered `403`) or revoke their access keys there ("Revoke keys and sessions").
+
 - `local`: Mahlwerk has its own accounts, so it can run without a login proxy. The first visit shows a setup page that
   creates the first admin (possible only while nobody has a password; do it right after starting, before the address is
   known to others). The admin then adds users in the admin area (initial password, block, reset, admin right).
@@ -166,7 +170,7 @@ user can send `Remote-Groups: admin` themselves and become an admin. nginx examp
   Details: `docs/api-v1.md`. When the database already holds users (a switch from `single` or `proxy`), the setup asks
   for a setup code: `MAHLWERK_SETUP_TOKEN`, or a random code the server writes once to its log at start. An empty
   database needs no code, so set it up right after starting. The interactive API docs (`/docs`, `/redoc`,
-  `/openapi.json`) are off in this mode unless `MAHLWERK_DOCS=1`.
+  `/openapi.json`) are off unless `MAHLWERK_DOCS=1` (in every mode).
 
   **Use HTTPS.** Passwords and the cookie travel in clear text over plain HTTP. Put a TLS-terminating proxy in front.
   Behind such a proxy the app itself only sees HTTP, so set `MAHLWERK_COOKIE_SECURE=1` (or list the proxy in
@@ -390,7 +394,7 @@ All settings are environment variables (see `.env.example`). The Docker image se
 | `MAHLWERK_WEBHOOK_HOSTS` | empty | Comma-separated hosts webhooks may target. Empty: any host with a public address. A listed host is the only kind allowed and may be internal (Home Assistant in the LAN). |
 | `MAHLWERK_ALLOWED_HOSTS` | `single`: `localhost,127.0.0.1,[::1]`; else no check | Host names (no port) the server answers to, `*` = any; others get 421. Set it behind a proxy and when you use a LAN name. `/healthz` is exempt. |
 | `MAHLWERK_SETUP_TOKEN` | random, logged once | `local` mode, database with existing users: code the setup page asks for. |
-| `MAHLWERK_DOCS` | off in `local` and `oidc` | `1` keeps `/docs`, `/redoc` and `/openapi.json` in these modes (always on in the other modes). |
+| `MAHLWERK_DOCS` | off | `1` switches on `/docs`, `/redoc` and `/openapi.json` (in every mode; they list every route, so leave them off on a server others can reach). |
 | `MAHLWERK_OFF_LOOKUP` | on | `off` stops live lookups at Open Food Facts (local catalogue only). |
 | `MAHLWERK_OFF_COUNTRIES` | `en:germany` | Countries of the catalogue refresh in the admin area. |
 | `MAHLWERK_WEB_RECIPES` | off | `on` / `off` fixes the switch of the connector "Recipes from web pages" (the admin area shows it as fixed). Without it the admin decides; default off. The fetch sends `MAHLWERK_CONTACT` in its `User-Agent`. |
@@ -415,9 +419,9 @@ All settings are environment variables (see `.env.example`). The Docker image se
 | `MAHLWERK_CACHE_DAYS` | `30` | How long a looked-up product is trusted before asking again. |
 | `MAHLWERK_DEMO_DATA` | off | `1` or `true` lets each user fill their profile with invented demo entries and remove them again (Profile, section Demo data). Test data in the *own* account; for clean testing use the demo account below. |
 | `MAHLWERK_DEMO_ACCOUNT` | off | `on` / `off` fixes the switch of the built-in demo account that admins can switch to (admin area, Import and demo). Without it the admin decides. |
-| `MAHLWERK_LABEL_DEBUG_DIR` | off | Keep the last 20 label photos and OCR text here. |
+| `MAHLWERK_LABEL_DEBUG_DIR` | off | Keep the last 20 label photos (the cleaned copy that was read, no metadata) and OCR text here. |
 
-API documentation: `/docs` (Swagger UI).
+API documentation: `/docs` (Swagger UI, only with `MAHLWERK_DOCS=1`) and [docs/api-v1.md](docs/api-v1.md).
 
 ## Product catalogue and data sources
 

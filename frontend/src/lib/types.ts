@@ -690,7 +690,7 @@ export interface AdminUser {
   last_day: string | null;
   tokens: number;
   webhooks: number;
-  /** Local sign-in mode only (false in the other modes). */
+  /** Blocked in the admin area (every mode; in proxy mode the proxy's headers of this user are refused too). */
   disabled: boolean;
   admin: boolean;
   /** Member of the household (false: a guest). Local mode: set here; proxy and oidc: as of the last request or sign-in. */

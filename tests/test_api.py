@@ -147,3 +147,10 @@ def test_food_validation(client):
     assert client.post("/api/v1/foods", json={"name": "x", "per_100": {"fat": 101}}).status_code == 422
     assert client.post("/api/v1/foods", json={**ok, "unit": "oz"}).status_code == 422
     assert client.post("/api/v1/foods", json={**ok, "serving_quantity": 0}).status_code == 422
+
+
+def test_an_upstream_failure_says_nothing_about_the_network(client, upstream, caplog):
+    upstream.fail = True
+    r = client.get("/api/v1/foods/barcode/3017620422003")
+    assert r.status_code == 502 and r.json()["detail"] == "Open Food Facts unavailable"
+    assert "HTTP 503" in caplog.text

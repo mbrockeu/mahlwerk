@@ -8,7 +8,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from mahlwerk import imagesize, label, netguard, webhooks
+from mahlwerk import imageproc, imagesize, label, netguard, webhooks
 from mahlwerk.main import create_app
 from mahlwerk.routes import foods
 from conftest import COST, CSRF, PW, PW2
@@ -399,13 +399,15 @@ def test_image_size_is_read_from_the_header():
 def label_ready(monkeypatch):
     monkeypatch.setattr(label, "available", lambda: True)
     monkeypatch.setattr(label, "read", lambda image: {"per_100": {}, "basis": None, "warnings": [], "text": ""})
+    monkeypatch.setattr(imageproc, "for_label", lambda image: image)  # these pictures are headers only; the real child has its own tests
 
 
 def test_a_huge_picture_in_a_small_file_is_refused_before_decoding(client, label_ready):
     r = client.post("/api/v1/label-scans", content=png(20000, 20000))
     assert r.status_code == 413 and "megapixels" in r.json()["detail"]
     assert client.post("/api/v1/label-scans", content=jpeg(8000, 4000)).status_code == 413  # 32 MP
-    assert client.post("/api/v1/label-scans", content=jpeg(5000, 5000)).status_code == 200  # exactly 25 MP
+    assert client.post("/api/v1/label-scans", content=jpeg(5000, 5000)).status_code == 413  # 25 MP: the child's limit is 24
+    assert client.post("/api/v1/label-scans", content=jpeg(6000, 4000)).status_code == 200  # exactly 24 MP
     assert client.post("/api/v1/label-scans", content=b"GIF89a....").status_code == 422
 
 
@@ -479,8 +481,16 @@ def test_the_api_docs_are_off_in_local_mode_unless_asked(monkeypatch, tmp_path, 
     assert all(on.get(p).status_code == 200 for p in ("/docs", "/redoc", "/openapi.json"))
 
 
-def test_the_api_docs_stay_on_in_the_other_modes(client):
-    assert client.get("/openapi.json").status_code == 200 and client.get("/docs").status_code == 200
+def test_the_api_docs_are_off_in_the_other_modes_too_unless_asked(monkeypatch, tmp_path, client):
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        assert client.get(path).status_code == 404, path
+    monkeypatch.setenv("MAHLWERK_AUTH", "proxy")
+    monkeypatch.setenv("MAHLWERK_TRUSTED_PROXIES", "127.0.0.1")
+    proxy = TestClient(create_app(str(tmp_path / "p.db")))
+    assert proxy.get("/openapi.json").status_code == 404
+    monkeypatch.setenv("MAHLWERK_DOCS", "1")
+    on = TestClient(create_app(str(tmp_path / "q.db")))
+    assert all(on.get(p).status_code == 200 for p in ("/docs", "/redoc", "/openapi.json"))
 
 
 def test_every_api_answer_is_not_cached(client, admin):

@@ -1,5 +1,6 @@
 """Food lookup (local first, then Open Food Facts), own foods, search and label reading."""
 
+import logging
 import threading
 import time
 from dataclasses import dataclass
@@ -10,7 +11,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 
-from .. import cookidoo, imagesize, imagestore, label, nutrients, off, webrecipes
+from .. import cookidoo, imageproc, imagesize, imagestore, label, nutrients, off, webrecipes
 from ..auth import current_user
 from ..catalog import OFF, food_data
 from ..db import Store
@@ -23,6 +24,7 @@ router = APIRouter(prefix="/api/v1", dependencies=[Depends(current_user)])
 
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 OCR_SLOT = threading.Semaphore(1)
+log = logging.getLogger("mahlwerk.foods")
 
 
 @dataclass
@@ -144,7 +146,8 @@ def food_by_barcode(code: str, request: Request, user: dict = Depends(current_us
     except off.UpstreamError as exc:
         if cached is not None and cached["found"]:
             return build_food(cached, user, stale=True)
-        raise HTTPException(502, f"Open Food Facts unavailable: {exc}") from exc
+        log.warning("Open Food Facts lookup failed: %s", exc)  # the details (DNS, HTTP status) go to the log, not to the caller
+        raise HTTPException(502, "Open Food Facts unavailable") from exc
     food_id, fetched_at = store.put_food(code, "openfoodfacts", data)
     if data is None:
         raise HTTPException(404, "unknown barcode")
@@ -186,13 +189,10 @@ def search_foods(
 def recent_foods(
     limit: int = Query(20, ge=1, le=200), user: dict = Depends(current_user), store: Store = Depends(get_store)
 ) -> list[RecentFood]:
-    result = []
-    for item in store.recent_foods(user["id"], limit):
-        row = store.get_food(item["food_id"], demo_view=bool(user.get("is_demo")))
-        if row is None:
-            continue
-        result.append(RecentFood(food=build_food(row, user), last_amount=item["amount"], last_meal=item["meal"]))
-    return result
+    items = store.recent_foods(user["id"], limit)
+    rows = store.get_foods([item["food_id"] for item in items], demo_view=bool(user.get("is_demo")))  # one query, not one per food
+    return [RecentFood(food=build_food(rows[item["food_id"]], user), last_amount=item["amount"], last_meal=item["meal"])
+            for item in items if item["food_id"] in rows]
 
 
 @router.post("/foods", response_model=Food, status_code=201)
@@ -289,7 +289,10 @@ def keep_for_debugging(directory: str, image: bytes, text: str, keep: int = 20) 
 
 @router.post("/label-scans", response_model=LabelScan)
 async def label_scan(request: Request, user: dict = Depends(current_user)) -> LabelScan:
-    """Read a photo of a nutrition table. Send the image as the request body (JPEG or PNG)."""
+    """Read a photo of a nutrition table. Send the image as the request body (JPEG, PNG or WebP).
+
+    The photo is never decoded in the server process: the picture child process (imageproc) decodes it with its limits and hands
+    back a clean JPEG (no metadata, at most `imageproc.LABEL_EDGE` pixels long), and only that goes to the OCR."""
     if not label.available():
         raise HTTPException(501, "label reading is not installed (pip install mahlwerk[label])")
     image = await request.body()  # the body limit (8 MB) is enforced before this, while the bytes arrive
@@ -301,17 +304,28 @@ async def label_scan(request: Request, user: dict = Depends(current_user)) -> La
     size = imagesize.dimensions(image)
     if size is None:
         raise HTTPException(422, "the image must be a JPEG, PNG or WebP file")
-    if size[0] * size[1] > imagesize.MAX_PIXELS:
-        raise HTTPException(413, f"image has too many pixels (at most {imagesize.MAX_PIXELS // 1_000_000} megapixels)")
+    if size[0] * size[1] > imageproc.MAX_PIXELS:
+        raise HTTPException(413, f"image has too many pixels (at most {imageproc.MAX_PIXELS // 1_000_000} megapixels)")
     # one reading at a time: it needs a few hundred MB and all CPU cores
     if not OCR_SLOT.acquire(blocking=False):
         raise HTTPException(503, "another label is being read, try again in a moment", headers={"Retry-After": "5"})
     try:
-        result = await run_in_threadpool(label.read, image)
-    except label.OcrFailed as exc:
-        raise HTTPException(422, f"could not read the image: {exc}") from exc
+        # counted only once it may run (a busy answer costs nothing); the same brake as own photos
+        wait = request.app.state.upload_brake.allow(user["id"])
+        if wait:
+            raise HTTPException(429, "too many photos lately, try again in a few minutes", headers={"Retry-After": str(wait)})
+        try:
+            clean = await run_in_threadpool(imageproc.for_label, image)
+        except imageproc.ImageRejected as exc:
+            status = {"too_large": 413, "too_many_pixels": 413, "busy": 503, "unavailable": 501}.get(exc.kind, 422)
+            raise HTTPException(status, str(exc), headers={"Retry-After": "5"} if exc.kind == "busy" else None) from None
+        try:
+            result = await run_in_threadpool(label.read, clean)
+        except label.OcrFailed as exc:
+            log.warning("label OCR failed: %s", exc)  # the engine's text goes to the log, not to the caller
+            raise HTTPException(422, "could not read the image") from exc
     finally:
         OCR_SLOT.release()
     if (debug_dir := request.app.state.label_debug_dir) and not user.get("is_demo"):  # no copy of a demo photo is kept
-        keep_for_debugging(debug_dir, image, result["text"])
+        keep_for_debugging(debug_dir, clean, result["text"])  # the clean copy: no EXIF, no GPS position
     return LabelScan(**result)

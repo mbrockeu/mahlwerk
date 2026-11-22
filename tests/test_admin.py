@@ -290,3 +290,103 @@ def test_migration_from_version_7_keeps_the_data(tmp_path):
     store.set_global("webhooks.hosts", ["a.example"])
     assert store.get_global("webhooks.hosts") == ["a.example"]
     Store(path)  # opening again changes nothing
+
+
+# ---- blocking and revoking in proxy mode: the proxy cannot take back an access key ----
+
+
+def _key(client, scope="write") -> dict:
+    return {"Authorization": "Bearer " + client.post("/api/v1/me/tokens", json={"name": "k", "scope": scope}).json()["token"]}
+
+
+def test_in_proxy_mode_a_blocked_user_is_refused_by_header_and_by_key(monkeypatch, tmp_path):
+    app = proxy_app(monkeypatch, tmp_path)
+    boss, ben = as_user(app, "boss", "admin"), as_user(app, "ben", "family")
+    key = _key(ben)
+    bare = TestClient(app, client=("203.0.113.9", 1))  # a key works from anywhere, past the proxy's sign-in
+    assert bare.get("/api/v1/me", headers=key).status_code == 200
+    r = boss.patch("/api/v1/admin/users/ben", json={"disabled": True})
+    assert r.status_code == 200 and r.json()["disabled"] is True
+    assert bare.get("/api/v1/me", headers=key).status_code == 401
+    r = ben.get("/api/v1/me")
+    assert r.status_code == 403 and r.json()["detail"] == "this account is blocked: ask an admin of this server"
+    assert ben.get("/api/v1/auth/status").json()["authenticated"] is False
+    assert {u["username"]: u["disabled"] for u in boss.get("/api/v1/admin/users").json()} == {"ben": True, "boss": False}
+    assert boss.patch("/api/v1/admin/users/ben", json={"disabled": False}).status_code == 200
+    assert ben.get("/api/v1/me").status_code == 200
+    assert bare.get("/api/v1/me", headers=key).status_code == 200  # an unblock brings the keys back; revoke them to end them
+
+
+def test_in_proxy_mode_an_admin_revokes_all_keys_of_someone(monkeypatch, tmp_path):
+    app = proxy_app(monkeypatch, tmp_path)
+    boss, ben = as_user(app, "boss", "admin"), as_user(app, "ben", "family")
+    keys = [_key(ben), _key(ben, "read")]
+    bare = TestClient(app, client=("203.0.113.9", 1))
+    r = boss.post("/api/v1/admin/users/ben/revoke-access")
+    assert r.status_code == 200 and r.json() == {"tokens": 2, "sessions": 0}
+    assert all(bare.get("/api/v1/me", headers=k).status_code == 401 for k in keys)
+    assert ben.get("/api/v1/me").status_code == 200  # the account itself stays: that is what blocking is for
+    assert boss.post("/api/v1/admin/users/ben/revoke-access").json() == {"tokens": 0, "sessions": 0}
+    assert boss.get("/api/v1/admin/users").json()[0]["tokens"] == 0
+
+
+def test_in_proxy_mode_the_admin_area_sets_neither_admin_right_nor_household_nor_blocks_oneself(monkeypatch, tmp_path):
+    app = proxy_app(monkeypatch, tmp_path)
+    boss, ben = as_user(app, "boss", "admin"), as_user(app, "ben", "family")
+    ben.get("/api/v1/me")
+    r = boss.patch("/api/v1/admin/users/ben", json={"is_admin": True})
+    assert r.status_code == 409 and r.json()["detail"] == "the admin right comes from the proxy's groups"
+    assert boss.patch("/api/v1/admin/users/ben", json={"household": False}).status_code == 409
+    assert boss.patch("/api/v1/admin/users/boss", json={"disabled": True}).status_code == 409
+    assert boss.post("/api/v1/admin/users/boss/revoke-access").status_code == 409
+    assert boss.get("/api/v1/me").status_code == 200
+    assert boss.patch("/api/v1/admin/users/nobody", json={"disabled": True}).status_code == 404
+    assert boss.post("/api/v1/admin/users/~demo/revoke-access").status_code in (404, 409)
+
+
+def test_in_proxy_mode_only_admins_signed_in_normally_block_or_revoke(monkeypatch, tmp_path):
+    app = proxy_app(monkeypatch, tmp_path)
+    boss, ben = as_user(app, "boss", "admin"), as_user(app, "ben", "family")
+    boss.get("/api/v1/me")
+    assert ben.patch("/api/v1/admin/users/boss", json={"disabled": True}).status_code == 403
+    assert ben.post("/api/v1/admin/users/boss/revoke-access").status_code == 403
+    bare = TestClient(app, client=("203.0.113.9", 1), headers=_key(boss))  # a key never makes its owner an admin
+    assert bare.patch("/api/v1/admin/users/ben", json={"disabled": True}).status_code == 403
+    assert bare.post("/api/v1/admin/users/ben/revoke-access").status_code == 403
+    assert TestClient(app, client=("203.0.113.9", 1)).post("/api/v1/admin/users/ben/revoke-access").status_code == 401
+
+
+def test_in_proxy_mode_names_that_differ_in_case_only_are_told_apart(monkeypatch, tmp_path):
+    app = proxy_app(monkeypatch, tmp_path)
+    boss, big, small = as_user(app, "boss", "admin"), as_user(app, "Ben", "family"), as_user(app, "ben", "family")
+    assert big.get("/api/v1/me").status_code == 200 and small.get("/api/v1/me").status_code == 200
+    assert boss.patch("/api/v1/admin/users/ben", json={"disabled": True}).status_code == 200
+    assert small.get("/api/v1/me").status_code == 403 and big.get("/api/v1/me").status_code == 200
+
+
+def test_in_single_mode_blocking_and_revoking_work_but_not_for_oneself(tmp_path):
+    app = create_app(str(tmp_path / "s.db"))
+    me = TestClient(app)
+    name = me.get("/api/v1/me").json()["username"]
+    assert me.patch(f"/api/v1/admin/users/{name}", json={"disabled": True}).status_code == 409
+    assert me.post(f"/api/v1/admin/users/{name}/revoke-access").status_code == 409
+    assert me.get("/api/v1/me").status_code == 200
+
+
+def test_in_proxy_mode_a_leftover_admin_flag_does_not_stop_a_block(monkeypatch, tmp_path):
+    app = proxy_app(monkeypatch, tmp_path)
+    boss, ben = as_user(app, "boss", "admin"), as_user(app, "ben", "family")
+    ben.get("/api/v1/me")
+    with sqlite3.connect(app.state.store.path) as con:  # ben was the only admin of an earlier local mode
+        con.execute("UPDATE user SET local_admin = 1, password_hash = 'x' WHERE username = 'ben'")
+    assert boss.patch("/api/v1/admin/users/ben", json={"disabled": True}).status_code == 200
+    assert ben.get("/api/v1/me").status_code == 403
+
+
+def test_in_single_mode_a_stored_block_never_locks_the_one_user_out(tmp_path):
+    app = create_app(str(tmp_path / "s.db"))
+    me = TestClient(app)
+    assert me.get("/api/v1/me").status_code == 200
+    with sqlite3.connect(app.state.store.path) as con:  # e.g. left over from an earlier local mode
+        con.execute("UPDATE user SET disabled = 1")
+    assert me.get("/api/v1/me").status_code == 200

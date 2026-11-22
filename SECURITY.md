@@ -25,6 +25,11 @@ maintainer, so replies may take a few days.
 - In `proxy` mode the service must be reachable only through the trusted reverse proxy, which has to remove or
   overwrite **`Remote-User`, `Remote-Name` and `Remote-Groups`** on every request. If `Remote-Groups` is not
   overwritten, any signed-in user can make themselves an admin by sending it. See the README for an nginx example.
+  **Access keys do not pass the proxy's sign-in:** someone removed at the proxy keeps working keys. Block them in the admin area
+  (keys stop, their name in the headers gets 403; works in every mode) or revoke all their keys and sessions there
+  (`POST /api/v1/admin/users/{username}/revoke-access`). An admin cannot block themself.
+- The interactive API docs (`/docs`, `/redoc`, `/openapi.json`) list every route: they are off in every mode unless
+  `MAHLWERK_DOCS=1`.
 - Set `MAHLWERK_ALLOWED_HOSTS` to the names you use (DNS rebinding) and a body size limit at the proxy.
 - **Recipes from web pages** (off by default) fetch an address that a signed-in person types. The server resolves the host, requires every
   address to be public (`netguard.py`; no exception list for this feature), connects to exactly the address it checked, follows at
@@ -48,18 +53,22 @@ maintainer, so replies may take a few days.
   keys, no demo account), with a brake per person and hour and two runs at the same time on the server. Estimates are not advice.
 - **Recipe pictures.** Pictures of Cookidoo and web recipes (off by default, a switch per connector) are fetched with the same
   guarded fetcher as web recipes (public addresses only, pinned connection, redirects checked, own hosts blocked, 10 s, at most 6 MB,
-  only `image/jpeg`, `image/png`, `image/webp`). Every picture (also an own upload, at most 8 MB) is decoded in a **child process**
+  only `image/jpeg`, `image/png`, `image/webp`). Every picture (also an own upload, at most 8 MB, and the photo of a nutrition label)
+  is decoded in a **child process**
   (`python -I -c ... mahlwerk.imageproc`) with **resource limits and reduced rights, not a complete sandbox**: an address-space limit (768 MB), a
   CPU limit (20 s), a wall-clock limit (30 s), no files it may write (`RLIMIT_FSIZE` 0), 8 file descriptors, no new processes
   (`RLIMIT_NPROC` 0), all inherited descriptors closed, an empty working directory and, where the system allows it without privileges
   (`os.unshare`, Python 3.12+), an own empty network and user namespace (skipped silently otherwise). It can still read whatever the server's
   user can read, and the decoders (libjpeg, libpng, libwebp inside Pillow) are native code: **keep Pillow up to date**. One child runs at a
-  time, at most two requests wait for it (the rest get 503 at once), and an own photo is limited to 20 per person in 10 minutes. The pixel
+  time, at most two requests wait for it (the rest get 503 at once), and own photos (recipe pictures and label photos together) are limited to 20 per person in 10 minutes. The pixel
   size is read from the header first (at most 24 megapixels, and at most 300 MB of decoded pixels, `Image.MAX_IMAGE_PIXELS` set as well),
   Pillow opens only JPEG, PNG and WebP, only the first frame is read, an embedded colour profile is discarded (no LittleCMS parsing of an
   attacker's profile; pixels count as sRGB), and the result is re-encoded from raw pixels, so no metadata (EXIF/GPS, XMP, ICC, comments)
   survives. The child's answer is checked again by the parent (sizes, byte counts). A crash or hang of the decoder ends that child only and is
-  answered as "could not be read". Files are named by
+  answered as "could not be read". For a **label photo** the child hands back one clean JPEG (at most 3072 pixels long, no
+  metadata); only that JPEG reaches the label reader, which still decodes it in the server process (RapidOCR opens it with
+  Pillow): the attacker's original file never does. Errors of the reader are answered with a fixed text (the details go to the
+  log), and the debug copy of `MAHLWERK_LABEL_DEBUG_DIR` is the clean JPEG. Files are named by
   their content hash (never by input), written atomically with mode `0600`; the delivery route checks the hash strictly
   (32 lower-case hex digits) and the size against a fixed list, serves only pictures a recipe still uses, as `image/webp` with
   `nosniff`, and only to signed-in people. The content security policy is unchanged (`img-src 'self' data: blob:`): the interface never

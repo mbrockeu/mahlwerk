@@ -1,5 +1,6 @@
 """Accounts of this server (MAHLWERK_AUTH=local): first-start setup, sign-in and out, own password, and the admin's
-user management. In the modes `single` and `proxy` these endpoints answer 404, except `status`."""
+user management. In the modes `single` and `proxy` the sign-in endpoints answer 404, except `status`; blocking a user and
+revoking their access keys and sessions work in every mode (the proxy or provider cannot take back an access key)."""
 
 import hmac
 import ipaddress
@@ -32,7 +33,7 @@ def need_local(request: Request) -> None:
 
 
 def need_sessions(request: Request) -> None:
-    """For what works with a session cookie in both modes that have one: sign out, block and unblock."""
+    """For what works with a session cookie in both modes that have one: sign out."""
     if request.app.state.auth.mode not in SESSION_MODES:
         raise HTTPException(404, "not available in this sign-in mode")
 
@@ -250,7 +251,8 @@ def change_password(body: PasswordChange, request: Request, user: dict = Depends
 
 
 def _target(store: Store, username: str) -> dict:
-    row = store.local_user(username.strip())
+    # the exact name first: in proxy mode names come from a header and two may differ in case only
+    row = store.local_user(username, exact=True) or store.local_user(username.strip())
     if row is None:
         raise HTTPException(404, "unknown user")
     if is_reserved_name(row["username"]):  # the demo account is managed on its card in the admin area, never as a user
@@ -269,31 +271,59 @@ def create_user(body: NewUser, request: Request, store: Store = Depends(get_stor
     return {"username": user["username"], "display_name": user["display_name"], "is_admin": body.is_admin, "household": body.household or body.is_admin}
 
 
-@admin_router.patch("/{username}", response_model=Account, dependencies=[Depends(need_sessions)])
+# where the admin right and the household come from in the modes where the admin area cannot set them
+OUTSIDE = {"oidc": "the provider's groups", "proxy": "the proxy's groups", "single": "the configuration"}
+
+
+@admin_router.patch("/{username}", response_model=Account)
 async def patch_user(username: str, body: UserPatch, request: Request, user: dict = Depends(session_user), store: Store = Depends(get_store)) -> dict:
-    """Block or unblock, give or take the admin right. The last active admin can be neither blocked nor demoted.
-    In oidc mode only blocking works: the admin right comes from the provider's groups at every sign-in, and nobody
-    blocks themself (the provider's group would let them back in, the block would not)."""
+    """Block or unblock, give or take the admin right. The last active admin can be neither blocked nor demoted, and nobody
+    blocks themself. In the modes oidc, proxy and single only blocking works: the admin right and the household come from
+    outside (the provider's or the proxy's groups). A block works in every mode: sessions end, access keys stop working
+    (they come back with an unblock), and in proxy mode the headers of a blocked user are answered with 403."""
     row = _target(store, username)
-    if request.app.state.auth.mode == "oidc":
+    if (source := OUTSIDE.get(request.app.state.auth.mode)) is not None:
         if body.is_admin is not None:
-            raise HTTPException(409, "the admin right comes from the provider's groups")
+            raise HTTPException(409, f"the admin right comes from {source}")
         if body.household is not None:
-            raise HTTPException(409, "household membership comes from the provider's groups")
-        if body.disabled and row["id"] == user["id"]:
-            raise HTTPException(409, "you cannot block yourself")
+            raise HTTPException(409, f"household membership comes from {source}")
+    if body.disabled and row["id"] == user["id"]:
+        raise HTTPException(409, "you cannot block yourself")
     try:
-        store.change_account(row["id"], disabled=body.disabled, admin=body.is_admin, household=body.household)
+        store.change_account(row["id"], disabled=body.disabled, admin=body.is_admin, household=body.household,
+                             guard_admins=request.app.state.auth.mode in SESSION_MODES)
     except LastAdmin:
         raise HTTPException(409, "this is the last active admin") from None
     if body.disabled:
         await request.app.state.cookidoo.forget(f"user:{row['id']}")
         request.app.state.yazio_runs.cancel(row["id"])
         request.app.state.yazio_stage.clear(row["id"])
-    row = store.local_user(row["username"])
+    row = store.local_user(row["username"], exact=True)
     return {"username": row["username"], "display_name": effective_name(store, row["id"], row["display_name"], row["username"]),
             "is_admin": bool(row["local_admin"]), "disabled": bool(row["disabled"]),
             "household": bool(row["household"]) or bool(row["local_admin"])}
+
+
+class Revoked(BaseModel):
+    tokens: int = Field(description="access keys revoked")
+    sessions: int = Field(description="sessions ended (local and oidc mode; 0 in the other modes, the proxy keeps its own)")
+
+
+@admin_router.post("/{username}/revoke-access", response_model=Revoked)
+async def revoke_access(username: str, request: Request, user: dict = Depends(session_user), store: Store = Depends(get_store)) -> dict:
+    """Revoke all access keys of someone else and end their sessions, in every mode (for a key that leaked, or for someone who
+    was taken out of the proxy's or provider's user list: a key does not go through the proxy's sign-in). Revoked keys stay
+    revoked; the account itself stays usable (block it for that). For the own keys use the access key list."""
+    row = _target(store, username)
+    if row["id"] == user["id"]:
+        raise HTTPException(409, "use your own access key list and sign-out for yourself")
+    tokens = store.revoke_user_tokens(row["id"])
+    sessions = store.delete_user_sessions(row["id"])
+    await request.app.state.cookidoo.forget(f"user:{row['id']}")  # like a sign-out: nothing of theirs stays in memory
+    request.app.state.yazio_runs.cancel(row["id"])
+    request.app.state.yazio_stage.clear(row["id"])
+    log.info("admin %s revoked the access of %s (%d keys, %d sessions)", user["username"], row["username"], tokens, sessions)
+    return {"tokens": tokens, "sessions": sessions}
 
 
 @admin_router.post("/{username}/password", status_code=204, dependencies=[Depends(need_local)])
