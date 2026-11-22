@@ -488,3 +488,12 @@ def test_every_api_answer_is_not_cached(client, admin):
         for path in ("/api/v1/me", "/api/v1/nope", "/api/v1/auth/status"):
             assert "no-store" in c.get(path).headers["cache-control"], path
     assert "cache-control" not in client.get("/healthz").headers or "no-store" not in client.get("/healthz").headers["cache-control"]
+
+
+def test_a_refused_request_logs_the_field_but_not_the_value(client, caplog):
+    import logging
+    with caplog.at_level(logging.WARNING, logger="mahlwerk"):
+        r = client.post("/api/v1/health/sync", json={"days": [{"day": "2026-11-20", "active_kcal": "312,5 kcal"}]})
+    assert r.status_code == 422
+    line = next(m for m in caplog.messages if m.startswith("422 POST /api/v1/health/sync"))
+    assert "days.0.active_kcal float_parsing" in line and "312" not in line

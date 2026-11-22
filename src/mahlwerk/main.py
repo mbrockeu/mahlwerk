@@ -1,5 +1,6 @@
 """Mahlwerk: self-hosted nutrition diary. Builds the FastAPI app (see docs/api-v1.md)."""
 
+import logging
 import os
 import time
 from contextlib import asynccontextmanager
@@ -38,6 +39,7 @@ from .routes import demo_view as demo_view_routes
 from .routes import oidc as oidc_routes
 from .routes import webhooks as webhook_routes
 
+_log = logging.getLogger("mahlwerk")
 DEFAULT_WEB_DIR = Path(__file__).resolve().parents[2] / "web" / "dist"
 
 
@@ -165,6 +167,9 @@ def create_app(
     async def invalid_request(request, exc: RequestValidationError):
         """Like FastAPI's own 422, but without the offending input: a field that holds a password must never be echoed."""
         errors = [{k: v for k, v in e.items() if k not in ("input", "ctx")} for e in exc.errors()]
+        # which field and which rule, never the value: a shortcut that sends something odd can then be found in the log
+        _log.warning("422 %s %s: %s", request.method, request.url.path,
+                  "; ".join(f"{'.'.join(str(p) for p in e.get('loc', ()))} {e.get('type')}" for e in errors[:5]))
         return JSONResponse({"detail": jsonable_encoder(errors)}, status_code=422)
 
     @app.get("/healthz")
