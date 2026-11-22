@@ -69,6 +69,8 @@ export const ui = $state({
   vision: null as VisionState | null,
   /** Newly reached badges being celebrated right now. */
   moment: null as null | BadgeCode[],
+  /** The help sheet (menu, rail, evaluation page). */
+  help: false,
 });
 
 export function mealByTime(date = new Date()): Meal {

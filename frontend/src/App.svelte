@@ -3,6 +3,7 @@
   import AddSheet from './components/AddSheet.svelte';
   import BadgeMoment from './components/BadgeMoment.svelte';
   import AmountSheet from './components/AmountSheet.svelte';
+  import HelpSheet from './components/HelpSheet.svelte';
   import MoreMenu from './components/MoreMenu.svelte';
   import Nav from './components/Nav.svelte';
   import PullRefresh from './components/PullRefresh.svelte';
@@ -44,7 +45,7 @@
     return () => window.clearInterval(timer);
   });
   // leaving the day view (browser back) or a dialog opening ends the tour without counting it as seen
-  $effect(() => { if (tourOpen && (router.route !== 'today' || ui.add || ui.amount || ui.recipe || ui.editor || ui.workout || ui.moment)) tourOpen = false; });
+  $effect(() => { if (tourOpen && (router.route !== 'today' || ui.add || ui.amount || ui.recipe || ui.editor || ui.workout || ui.moment || ui.help)) tourOpen = false; });
   const endTour = () => { tourOpen = false; void markTourSeen(); };
 
   // the phone's more menu (round avatar, top right) is on every main page; profile, badges and admin have their own close button there
@@ -97,6 +98,8 @@
 {#if ui.recipe}{#key ui.recipe}<RecipeEditor req={ui.recipe} />{/key}{/if}
 {#if ui.editor}{#key ui.editor}<ProductEditor req={ui.editor} />{/key}{/if}
 {#if ui.workout}{#key ui.workout}<WorkoutSheet req={ui.workout} />{/key}{/if}
+
+{#if ui.help}<HelpSheet />{/if}
 
 {#if tourOpen}<Tour ondone={endTour} />{/if}
 

@@ -678,7 +678,9 @@ const en = {
   demoViewNow: 'You are now looking at the demo account.', demoViewOwn: 'You are back in your own account.',
   pullDown: 'Pull to refresh', pullRelease: 'Release to refresh', pullBusy: 'Refreshing …', refreshed: 'Updated',
   // help for the evaluation page (lib/help.ts)
-  hlpOpen: 'Help', hlpOpenAria: 'Help: what the evaluation shows', hlpTitle: 'What the evaluation shows',
+  hlpOpen: 'Help', hlpOpenAria: 'Help: what the evaluation shows', hlpTitle: 'Help',
+  hlpTourT: 'Day view: the tour', hlpTourText: 'A short walk through the day view: the ring, the macro scales, logging a meal, the scanner and where to find the rest.', hlpTourStart: 'Start the tour',
+  hlpToInsights: 'To the evaluation', hlpIntroElsewhere: 'The evaluation sums up your diary for a period. Here is what each card shows; on the evaluation “Show” jumps straight to it.',
   hlpIntro: 'The evaluation sums up your diary for a period. Here is what each card shows; “Show” jumps straight to it.',
   hlpShow: 'Show', hlpShowAria: 'Show {name}', hlpNeeds: 'It needs:',
   hlpHidden: 'Not on the page right now: it appears as soon as something is logged in the chosen period.',
@@ -1372,7 +1374,9 @@ const de: Record<Key, string> = {
   demoViewNow: 'Du siehst jetzt das Demo-Konto.', demoViewOwn: 'Du bist wieder in deinem Konto.',
   pullDown: 'Zum Aktualisieren ziehen', pullRelease: 'Loslassen zum Aktualisieren', pullBusy: 'Aktualisiere …', refreshed: 'Aktualisiert',
   // Hilfe zur Auswertung (lib/help.ts)
-  hlpOpen: 'Hilfe', hlpOpenAria: 'Hilfe: Was zeigt die Auswertung?', hlpTitle: 'Was zeigt die Auswertung?',
+  hlpOpen: 'Hilfe', hlpOpenAria: 'Hilfe: Was zeigt die Auswertung?', hlpTitle: 'Hilfe',
+  hlpTourT: 'Tagesansicht: die Einführung', hlpTourText: 'Ein kurzer Rundgang durch die Tagesansicht: der Ring, die Makro-Skalen, eine Mahlzeit eintragen, der Scanner und wo der Rest zu finden ist.', hlpTourStart: 'Einführung starten',
+  hlpToInsights: 'Zur Auswertung', hlpIntroElsewhere: 'Die Auswertung fasst dein Tagebuch für einen Zeitraum zusammen. Hier steht, was jede Karte zeigt; auf der Auswertung springt „Zeigen“ direkt dorthin.',
   hlpIntro: 'Die Auswertung fasst dein Tagebuch für einen Zeitraum zusammen. Hier steht, was jede Karte zeigt; „Zeigen“ springt direkt dorthin.',
   hlpShow: 'Zeigen', hlpShowAria: '{name} zeigen', hlpNeeds: 'Sie braucht:',
   hlpHidden: 'Gerade nicht auf der Seite: Sie erscheint, sobald im gewählten Zeitraum etwas erfasst ist.',

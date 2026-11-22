@@ -71,6 +71,7 @@
           <Icon name="shield" />
         </a>
       {/if}
+      <button type="button" class="swap" aria-label={t('hlpOpen')} title={t('hlpOpen')} aria-haspopup="dialog" onclick={() => (ui.help = true)}><Icon name="help" /></button>
       <a href={hrefOf('profile')} class="me" data-tour="nav-profile" class:active={profileActive} aria-label={t('navProfile')} title={t('navProfile')}
         aria-current={profileActive ? 'page' : undefined}>
         {#if initial}<span class="display">{initial}</span>{:else}<Icon name="user" />{/if}

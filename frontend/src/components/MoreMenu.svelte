@@ -62,7 +62,7 @@
   }
   // leaving the page or a dialog opening ends the menu
   $effect(() => { void router.route; open = false; });
-  $effect(() => { if (ui.add || ui.amount || ui.recipe || ui.editor || ui.workout || ui.moment) open = false; });
+  $effect(() => { if (ui.add || ui.amount || ui.recipe || ui.editor || ui.workout || ui.moment || ui.help) open = false; });
   const leave = async () => { open = false; await signOut(); };
   // admins can switch to the built-in demo account (and back) from here
   const canSwitch = $derived(ui.me?.demo_account?.can_switch === true);
@@ -86,6 +86,7 @@
             <Icon name={e.icon} size={22} /><span>{e.label}</span>
           </a>
         {/each}
+        <button type="button" role="menuitem" onclick={() => { open = false; ui.help = true; }}><Icon name="help" size={22} /><span>{t('hlpOpen')}</span></button>
         {#if canSwitch || viewing}
           <span class="sep" role="separator"></span>
           <button type="button" role="menuitem" onclick={() => swap(canSwitch)}><Icon name="repeat" size={22} />

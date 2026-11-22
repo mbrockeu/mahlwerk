@@ -7,7 +7,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- Evaluation: a "Help" button opens one overview of every card – what it shows, what it needs (e.g. the estimated
+- Help: "Help" in the menu (phone), in the rail (wide) and on the evaluation page opens one sheet. It starts the tour of
+  the day view and has an overview of every evaluation card – what it shows, what it needs (e.g. the estimated
   expenditure: 21 days, 6 weights …) and the hidden controls (zoom by tapping a bar, opening a day from the calendar);
   "Show" jumps to the card. Cards not on the page in an empty period say so instead.
 - Photo of a meal: foods eaten in the last 14 days come first when they fit a part of the photo, also under a longer name
