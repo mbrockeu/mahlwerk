@@ -16,12 +16,11 @@
   import WeightChart from '../components/WeightChart.svelte';
   import { api, ApiError } from '../lib/api';
   import { fromDay } from '../lib/date';
-  import { scrollTarget } from '../lib/help';
+  import { INSIGHT_TABS, parseTab, type InsightTab } from '../lib/help';
   import { fmt, fmt1, lang, t } from '../lib/i18n';
   import { DETAIL_DAYS, parseQuery, period, PRESETS, shifted, toParams, zoomTarget, type Q, type RangeKey } from '../lib/insightsRange';
   import { microTab, type MicroTab } from '../lib/nutrients.svelte';
   import { DEFAULT_PICK, parsePick, pickParam } from '../lib/nutrientCompare';
-  import { reducedMotion } from '../lib/motion.svelte';
   import { navigate, router, setQuery } from '../lib/router.svelte';
   import { loadMe, ui } from '../lib/store.svelte';
   import type { Granularity, Insights, InsightHint, Meal, NutrientCurve, Section, TopMetric } from '../lib/types';
@@ -36,7 +35,22 @@
   const invalid = $derived(q.range === 'custom' && !want);
   let stack = $state<Q[]>([]);
   // the nutrient choice is not part of the period: every change of the period keeps it
-  const go = (next: Q) => setQuery({ ...toParams(next), ...(router.query.get('nut') ? { nut: router.query.get('nut') as string } : {}) });
+  // the nutrient choice and the tab are not part of the period: every change of the period keeps them
+  const keep = () => {
+    const out: Record<string, string> = {};
+    for (const k of ['nut', 'tab']) { const v = router.query.get(k); if (v) out[k] = v; }
+    return out;
+  };
+  const go = (next: Q) => setQuery({ ...toParams(next), ...keep() });
+  // ---- groups of cards, one at a time (?tab=…); the overview without the parameter
+  const tab = $derived(parseTab(router.query.get('tab')));
+  const TAB_LABEL = { overview: 'tabOverview', food: 'tabFood', body: 'tabBody', nutrients: 'tabNutrients', foods: 'tabFoods' } as const;
+  function setTab(next: InsightTab) {
+    const params: Record<string, string> = { ...toParams(q), ...keep() };
+    if (next === 'overview') delete params.tab; else params.tab = next;
+    setQuery(params);
+    window.scrollTo({ top: 0 });
+  }
   const shown = $derived(data ? { from: data.range.from, to: data.range.to } : want);
 
   const RANGES: { key: RangeKey; label: () => string }[] = [
@@ -165,7 +179,8 @@
   // ---- nutrients over time: the choice lives in the URL (?nut=magnesium,calcium), without it the default
   const nutSel = $derived(parsePick(router.query.get('nut')));
   function setNut(list: string[]) {
-    const params = toParams(q);
+    const params: Record<string, string> = { ...toParams(q), ...keep() };
+    delete params.nut;
     if (list.join() !== DEFAULT_PICK) params.nut = pickParam(list);
     setQuery(params);
   }
@@ -210,12 +225,6 @@
     return t(key as 'hint_few_days', p);
   }
 
-  // ---- jump bar
-  const JUMPS = [
-    { id: 'sec-ov', label: () => t('jumpOverview') }, { id: 'sec-tr', label: () => t('jumpTrends') },
-    { id: 'sec-mix', label: () => t('jumpMix') }, { id: 'sec-foods', label: () => t('jumpFoods') },
-  ];
-  const jump = (id: string) => scrollTarget(document.getElementById(id))?.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' });
   const titleOfGran = $derived(gran === 'day' ? t('chartKcal') : gran === 'week' ? t('chartKcalWeekly') : t('chartKcalMonthly'));
 </script>
 
@@ -251,12 +260,12 @@
       <span class="track" class:on={q.compare} aria-hidden="true"><span class="knob"></span></span>
       <span>{t('compareLabel')}</span>
     </button>
-    {#if data && !invalid}
-      <nav class="jump" aria-label={t('jumpLabel')}>
-        {#each JUMPS as j (j.id)}<button class="chip small" onclick={() => jump(j.id)}>{j.label()}</button>{/each}
-      </nav>
-    {/if}
     <button class="chip small help" onclick={() => (ui.help = true)} aria-label={t('hlpOpenAria')} aria-haspopup="dialog"><span class="q" aria-hidden="true">?</span>{t('hlpOpen')}</button>
+  </div>
+  <div class="tabs" role="tablist" aria-label={t('tabsLabel')}>
+    {#each INSIGHT_TABS as tb (tb)}
+      <button role="tab" class="tab" class:on={tab === tb} aria-selected={tab === tb} onclick={() => setTab(tb)}>{t(TAB_LABEL[tb])}</button>
+    {/each}
   </div>
   {#if q.range === 'custom'}
     <div class="dates">
@@ -274,9 +283,9 @@
     <div class="skel hero-skel" aria-hidden="true"></div>
     <div class="row2" aria-hidden="true"><div class="skel wide-card"></div><div class="skel"></div></div>
   {:else}
-    <div class="body" class:stale={loading}>
-      <section id="sec-ov" class="sec" aria-labelledby="t-ov">
-        <h2 id="t-ov" class="sec-h display">{t('secOverview')}</h2>
+    <div class="body" class:stale={loading} data-logged={logged > 0 ? '1' : '0'}>
+      {#if tab === 'overview'}
+        <section id="sec-ov" class="sec" aria-label={t('tabOverview')}>
         <div class="hero on-dark">
           <div class="stat">
             <span class="micro lab">{t('insAvgKcal')}</span>
@@ -322,7 +331,6 @@
         </div>
         {#if q.compare && prev && prev.logged_days === 0}<p class="note">{t('cmpNoPrev')}</p>
         {:else if q.compare && prev}<p class="note">{t('cmpNote', { n: prev.range.days })} {dmy(prev.range.from)} – {dmy(prev.range.to)}</p>{/if}
-
         <div class="row2 start">
           <ReviewPanel />
           {#if logged > 0}
@@ -339,8 +347,25 @@
             </section>
           {/if}
         </div>
-      </section>
-
+          {#if logged > 0}
+          <section class="card" aria-labelledby="h-cal">
+            <div class="info-head">
+              <h3 id="h-cal" class="micro quiet">{t('calTitle')}</h3>
+              {#if goal && data.calendar && data.calendar.length}
+                <button class="info-btn" aria-expanded={calInfo} aria-controls="cal-info" aria-label={t('calRangeInfo')} title={t('calRangeInfo')}
+                  onclick={() => (calInfo = !calInfo)}><Icon name="info" size={18} /></button>
+              {/if}
+            </div>
+            {#if goal && calInfo && data.calendar && data.calendar.length}
+              <p id="cal-info" class="info-box">{t('calRangeNote', { kcal: fmt(goal.kcal), low: fmt(Math.round(goal.kcal * 0.9)), high: fmt(Math.round(goal.kcal * 1.1)) })}{#if goalAdded} {t('calRangeActive')}{/if}</p>
+            {/if}
+            {#if data.calendar && data.calendar.length}
+              <CalendarHeat cal={data.calendar} days={data.days} onopen={openDay} />
+            {:else}<p class="note">{t('calTooLong')}</p><button class="chip small cal-year" onclick={() => choose('365')}>{t('calShowYear')}</button>{/if}
+          </section>
+          {/if}
+        </section>
+      {/if}
       {#if logged === 0}
         <section class="empty">
           <h2 class="display">{t('insEmptyTitle')}</h2>
@@ -348,33 +373,13 @@
           <button class="btn primary" onclick={() => { ui.day = ui.today; navigate('today'); }}>{t('insToToday')}</button>
         </section>
       {:else if avg}
-        <section id="sec-tr" class="sec" aria-labelledby="t-tr">
-          <h2 id="t-tr" class="sec-h display">{t('secTrends')}</h2>
-
+        {#if tab === 'food'}
+          <section id="sec-food" class="sec" aria-label={t('tabFood')}>
           <section class="card" aria-labelledby="h-kcal">
             <h3 id="h-kcal" class="micro quiet">{titleOfGran}</h3>
             <KcalChart {series} previous={q.compare ? prev?.series ?? null : null} goal={effGoal} {gran} onzoom={zoom} />
             {#if !goal}{@render nogoal()}{:else}<p class="note keyline"><span class="swatch band"></span>{t('goalBand')}{#if goalAdded} {t('insGoalWithActive', { n: fmt(effGoal?.kcal ?? 0) })}{/if}</p>{/if}
           </section>
-
-          {#if hasActivity}
-            <section class="card" aria-labelledby="h-act">
-              <h3 id="h-act" class="micro quiet">{t('insActTitle')} <span class="sub">· {t('insActStepsNote')}</span></h3>
-              <ActivityChart {series} previous={q.compare ? prev?.series ?? null : null} goal={data.steps_goal ?? goal?.steps ?? 8000} {gran} />
-              <ul class="extras mono">
-                <li><span class="micro quiet">{t('insActAvgSteps')}</span> {fmt(Math.round(avg.steps))} {#if q.compare && D}<Delta d={D.steps} unit="" />{/if}</li>
-                <li><span class="micro quiet">{t('insActAvgActive')}</span> {fmt(Math.round(avg.active_kcal))} kcal {#if q.compare && D}<Delta d={D.active_kcal} unit="kcal" />{/if}</li>
-                <li><span class="micro quiet">{t('insActWorkoutMin')}</span> {t('insActTotalMin', { n: fmt(Math.round(totalWorkoutMin)) })}
-                  <span class="quiet">· {t('insActWorkoutPerDay', { n: fmt(avg.workout_minutes, 0) })}</span> {#if q.compare && D}<Delta d={D.workout_minutes} unit="min" />{/if}</li>
-              </ul>
-            </section>
-          {:else}
-            <section class="card" aria-labelledby="h-act">
-              <h3 id="h-act" class="micro quiet">{t('insActTitle')}</h3>
-              <p class="note">{t('insActNone')}</p>
-            </section>
-          {/if}
-
           <section class="card" aria-labelledby="h-macro">
             <h3 id="h-macro" class="micro quiet">{t('macroTrend')} <span class="sub">· {t('macroTrendNote')}</span></h3>
             <MacroChart {series} {gran} />
@@ -397,7 +402,31 @@
             </ul>
             {#if !goal}{@render nogoal()}{/if}
           </section>
+          <div class="row2">
+            <section class="card" aria-labelledby="h-wd">
+              <h3 id="h-wd" class="micro quiet">{t('weekdaysTitle')}</h3>
+              <WeekdayChart data={data.by_weekday} goal={effGoal} />
+            </section>
 
+            <section class="card" aria-labelledby="h-meals">
+              <h3 id="h-meals" class="micro quiet">{t('mealsTitle')}</h3>
+              <div class="stack" role="img" aria-label={t('mealsAria', { list: mealList })}>
+                {#each data.by_meal.filter((m) => m.share > 0) as m}
+                  <span style="flex: {m.share} 1 0; background:{MEAL_STYLE[m.meal].bg}; color:{MEAL_STYLE[m.meal].fg}" class="seg mono">{m.share >= 0.1 ? `${Math.round(m.share * 100)}` : ''}</span>
+                {/each}
+              </div>
+              <ul class="legend">
+                {#each data.by_meal as m}
+                  <li><span class="sw" style="background:{MEAL_STYLE[m.meal].bg}"></span><span class="nm">{t(m.meal)}</span>
+                    <span class="mono vl">{fmt(Math.round(m.kcal))} kcal <span class="quiet">· {fmt(Math.round(m.share * 100))} %</span></span></li>
+                {/each}
+              </ul>
+              <p class="note">{t('mealPerDay')}</p>
+            </section>
+          </div>
+          </section>
+        {:else if tab === 'body'}
+          <section id="sec-body" class="sec" aria-label={t('tabBody')}>
           <div class="row2">
             <section class="card" aria-labelledby="h-weight">
               <h3 id="h-weight" class="micro quiet">{t('wtTitle')}</h3>
@@ -434,54 +463,30 @@
               <ExpenditureCard exp={data.expenditure ?? null} missing={data.expenditure_missing ?? []} goal={effGoal} />
             </section>
           </div>
-
+          {#if hasActivity}
+            <section class="card" aria-labelledby="h-act">
+              <h3 id="h-act" class="micro quiet">{t('insActTitle')} <span class="sub">· {t('insActStepsNote')}</span></h3>
+              <ActivityChart {series} previous={q.compare ? prev?.series ?? null : null} goal={data.steps_goal ?? goal?.steps ?? 8000} {gran} />
+              <ul class="extras mono">
+                <li><span class="micro quiet">{t('insActAvgSteps')}</span> {fmt(Math.round(avg.steps))} {#if q.compare && D}<Delta d={D.steps} unit="" />{/if}</li>
+                <li><span class="micro quiet">{t('insActAvgActive')}</span> {fmt(Math.round(avg.active_kcal))} kcal {#if q.compare && D}<Delta d={D.active_kcal} unit="kcal" />{/if}</li>
+                <li><span class="micro quiet">{t('insActWorkoutMin')}</span> {t('insActTotalMin', { n: fmt(Math.round(totalWorkoutMin)) })}
+                  <span class="quiet">· {t('insActWorkoutPerDay', { n: fmt(avg.workout_minutes, 0) })}</span> {#if q.compare && D}<Delta d={D.workout_minutes} unit="min" />{/if}</li>
+              </ul>
+            </section>
+          {:else}
+            <section class="card" aria-labelledby="h-act">
+              <h3 id="h-act" class="micro quiet">{t('insActTitle')}</h3>
+              <p class="note">{t('insActNone')}</p>
+            </section>
+          {/if}
+          </section>
+        {:else if tab === 'nutrients'}
+          <section id="sec-nut" class="sec" aria-label={t('tabNutrients')}>
           <section class="card" aria-labelledby="h-nut">
             <h3 id="h-nut" class="micro quiet">{t('nutTitle')}</h3>
             <NutrientsCard {data} sel={nutSel} onsel={setNut} />
           </section>
-
-          <section class="card" aria-labelledby="h-cal">
-            <div class="info-head">
-              <h3 id="h-cal" class="micro quiet">{t('calTitle')}</h3>
-              {#if goal && data.calendar && data.calendar.length}
-                <button class="info-btn" aria-expanded={calInfo} aria-controls="cal-info" aria-label={t('calRangeInfo')} title={t('calRangeInfo')}
-                  onclick={() => (calInfo = !calInfo)}><Icon name="info" size={18} /></button>
-              {/if}
-            </div>
-            {#if goal && calInfo && data.calendar && data.calendar.length}
-              <p id="cal-info" class="info-box">{t('calRangeNote', { kcal: fmt(goal.kcal), low: fmt(Math.round(goal.kcal * 0.9)), high: fmt(Math.round(goal.kcal * 1.1)) })}{#if goalAdded} {t('calRangeActive')}{/if}</p>
-            {/if}
-            {#if data.calendar && data.calendar.length}
-              <CalendarHeat cal={data.calendar} days={data.days} onopen={openDay} />
-            {:else}<p class="note">{t('calTooLong')}</p><button class="chip small cal-year" onclick={() => choose('365')}>{t('calShowYear')}</button>{/if}
-          </section>
-        </section>
-
-        <section id="sec-mix" class="sec" aria-labelledby="t-mix">
-          <h2 id="t-mix" class="sec-h display">{t('secMix')}</h2>
-          <div class="row2">
-            <section class="card" aria-labelledby="h-wd">
-              <h3 id="h-wd" class="micro quiet">{t('weekdaysTitle')}</h3>
-              <WeekdayChart data={data.by_weekday} goal={effGoal} />
-            </section>
-
-            <section class="card" aria-labelledby="h-meals">
-              <h3 id="h-meals" class="micro quiet">{t('mealsTitle')}</h3>
-              <div class="stack" role="img" aria-label={t('mealsAria', { list: mealList })}>
-                {#each data.by_meal.filter((m) => m.share > 0) as m}
-                  <span style="flex: {m.share} 1 0; background:{MEAL_STYLE[m.meal].bg}; color:{MEAL_STYLE[m.meal].fg}" class="seg mono">{m.share >= 0.1 ? `${Math.round(m.share * 100)}` : ''}</span>
-                {/each}
-              </div>
-              <ul class="legend">
-                {#each data.by_meal as m}
-                  <li><span class="sw" style="background:{MEAL_STYLE[m.meal].bg}"></span><span class="nm">{t(m.meal)}</span>
-                    <span class="mono vl">{fmt(Math.round(m.kcal))} kcal <span class="quiet">· {fmt(Math.round(m.share * 100))} %</span></span></li>
-                {/each}
-              </ul>
-              <p class="note">{t('mealPerDay')}</p>
-            </section>
-          </div>
-
           <section class="card" aria-labelledby="h-micros">
             <h3 id="h-micros" class="micro quiet">{t('microsTitle')}</h3>
             {#if micros.length}
@@ -500,7 +505,9 @@
               {:else}<p class="note">{t('microNoneTab')}</p>{/if}
             {:else}<p class="note">{t('microNone')}</p>{/if}
           </section>
-
+          </section>
+        {:else if tab === 'foods'}
+          <section id="sec-foods" class="sec" aria-label={t('tabFoods')}>
           <section class="card" aria-labelledby="h-top">
             <h3 id="h-top" class="micro quiet">{t('topTitle')}</h3>
             <div class="seg-ctl" role="group" aria-label={t('topTitle')}>
@@ -522,15 +529,12 @@
               </ul>
             {:else}<p class="note">{t('topNone')}</p>{/if}
           </section>
-        </section>
-
-        <section id="sec-foods" class="sec" aria-labelledby="t-foods">
-          <h2 id="t-foods" class="sec-h display">{t('secFoods')}</h2>
           <section class="card" aria-labelledby="h-foods">
             <h3 id="h-foods" class="micro quiet">{t('foodsTitle')}</h3>
             <FoodsCard from={data.range.from} to={data.range.to} />
           </section>
-        </section>
+          </section>
+        {/if}
       {/if}
     </div>
   {/if}
@@ -563,8 +567,11 @@
   .info-btn:hover, .info-btn[aria-expanded='true'] { background: var(--track); color: var(--text); }
   .info-box { background: var(--stone); border-radius: 16px 16px 16px 6px; padding: 10px 14px; font-size: 13px; line-height: 1.45; }
   .rowb { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 18px; }
-  .jump { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0; }
-  .jump .chip { flex-shrink: 0; }
+  .tabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; border-bottom: 2px solid var(--hairline); margin: 2px -4px 0; padding: 0 4px; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex-shrink: 0; min-height: 46px; padding: 0 14px; font-size: 15px; font-weight: 600; color: var(--quiet); border-bottom: 3px solid transparent; margin-bottom: -2px; }
+  .tab.on { color: var(--text); border-bottom-color: var(--text); }
+  .tab:hover { color: var(--text); }
   .chip.help { gap: 7px; padding: 0 14px 0 8px; }
   .q { width: 22px; height: 22px; border-radius: 11px; background: var(--sel-bg); color: var(--sel-fg); display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; }
   .card, .body :global(.panel) { scroll-margin-top: 70px; }
@@ -572,7 +579,6 @@
   .body { display: flex; flex-direction: column; gap: 26px; transition: opacity 160ms; }
   .body.stale { opacity: 0.55; }
   .sec { display: flex; flex-direction: column; gap: 12px; scroll-margin-top: 70px; }
-  .sec-h { font-size: 26px; line-height: 1.05; margin-top: 4px; }
   .row2 { display: flex; flex-direction: column; gap: 12px; }
   .skel { height: 220px; border-radius: 28px 28px 28px 8px; background: var(--hairline); opacity: 0.5; }
   .hero-skel { height: 170px; border-radius: 44px 44px 44px 14px; }
@@ -664,7 +670,6 @@
     .tile { height: 104px; }
     .top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px 40px; }
     .mlist { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .sec-h { font-size: 30px; }
   }
   @media (min-width: 1200px) { .mlist { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 </style>

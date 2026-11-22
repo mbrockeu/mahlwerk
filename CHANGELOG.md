@@ -7,6 +7,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Evaluation in five groups: tabs Overview (key figures, weekly review, notes, calendar), Eating (calories, macros,
+  weekdays, meals), Body (weight and balance, estimated expenditure, activity), Nutrients and Foods, one at a time; the
+  tab is in the address (`#/history?tab=body`) and the period holds for all of them. Replaces the jump buttons; the help
+  is grouped the same way and "Show" opens the right tab.
 - Nutrient over time: several nutrients are now drawn in their own units, the first unit on a left axis and a second one on
   a right axis (g and kcal, for example; a third unit gets a second chart). Each nutrient's reference (goal or EU reference
   amount) is a dotted line in its colour, and the rows name the axis and the reference. "Together in %" keeps the shared
