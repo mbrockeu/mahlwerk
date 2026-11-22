@@ -202,7 +202,7 @@ Editing or deleting the food later does not change past days; deleting sets `foo
 | GET | `/api/v1/recipes` | – | Recipe[] | all recipes of the household, most recently changed first |
 | POST | `/api/v1/recipes` | `{name, portions, total_weight?, items:[{food_id, amount}]}` | Recipe (201) | see Recipes |
 | GET | `/api/v1/recipes/{id}` | – | Recipe | |
-| POST | `/api/v1/recipes/ingredients/match` | `{text}` | `{lines:[IngredientLine], ignored}` | reads a pasted ingredient list and looks up foods; writes nothing, see Calculating from an ingredient list |
+| POST | `/api/v1/recipes/ingredients/match` | `{text, recent?}` | `{lines:[IngredientLine], ignored}` | reads a pasted ingredient list and looks up foods; writes nothing, see Calculating from an ingredient list |
 | PUT | `/api/v1/recipes/{id}` | as POST | Recipe | recalculates the food; diary entries logged earlier stay unchanged |
 | DELETE | `/api/v1/recipes/{id}` | – | 204 | removes recipe and food; diary copies and templates stay |
 | GET | `/api/v1/history?days=` | – | `[{day, kcal, protein, carbs, fat, logged, water_ml, water_drinks_ml}]` | last N days (default 14, max 366) ending today, oldest first; `logged` means diary entries, `water_ml` is the water counter, `water_drinks_ml` the water from drinks in the diary (0 with the setting `water_drinks` off) |
@@ -335,6 +335,10 @@ with `POST /catalog/adopt` first, like in the ordinary ingredient search.
 
 - Body: `{text}`. At most 200 lines, 300 characters per line, 20 000 characters in all (more: `422`). Empty lines are skipped. A
   line that holds no ingredient (a heading such as `Für den Teig:`, only punctuation) is left out and counted in `ignored`.
+- `recent` (default `false`; the photo of a meal sends `true`): foods the person ate in the last 14 days come first when their name holds
+  every word of the line as a whole word or the end of a compound, even if it says more (`Vollkornbrot Dinkel, Bäckerei Bauer` for
+  `Vollkornbrot`, not `Butterkeks` for `Butter`); such a food counts as a confident match, the more often eaten the further up. Every
+  candidate then carries `eaten_count` (entries in those days) and `eaten_last` (the latest day); without `recent` they are `0` and `null`.
 - Answer `lines`, one per ingredient line, in order: `line` (number in the text, from 1), `text` (as sent), `quantity` (a range such as
   `2-3` counts as its mean; fractions `1/2`, `1 1/2`, `½` and decimal comma or point are read; `null` without an amount), `unit` (as
   written), `name` (without amount, unit and cutting words such as *gehackt* or *chopped*), `note` (what was taken out: brackets,

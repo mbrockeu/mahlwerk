@@ -1042,6 +1042,16 @@ class Store:
             ).fetchall()
         return [r["day"] for r in rows]
 
+    def eaten_since(self, user_id: int, first: str) -> dict[int, dict]:
+        """Per food this user logged from `first` on: how many entries and the latest day (`{"count", "last"}`)."""
+        with self._connect() as con:
+            rows = con.execute(
+                "SELECT food_id, COUNT(*) AS count, MAX(day) AS last FROM diary_entry "
+                "WHERE user_id = ? AND day >= ? AND food_id IS NOT NULL GROUP BY food_id",
+                (user_id, first),
+            ).fetchall()
+        return {r["food_id"]: {"count": r["count"], "last": r["last"]} for r in rows}
+
     def recent_foods(self, user_id: int, limit: int) -> list[dict]:
         """The latest entry of each food this user logged that still exists, newest first."""
         with self._connect() as con:

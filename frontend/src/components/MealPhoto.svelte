@@ -23,7 +23,7 @@
 
   async function received(result: VisionMeal | unknown) {
     const found = result as VisionMeal;
-    const out = await api.matchIngredients(found.items.map(matchLine).join('\n'));
+    const out = await api.matchIngredients(found.items.map(matchLine).join('\n'), true);
     rows = buildMealRows(found.items, out.lines);
     note = found.note;
     error = '';

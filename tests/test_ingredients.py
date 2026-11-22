@@ -296,6 +296,52 @@ def test_own_foods_rank_exact_name_first_and_recipes_never_appear(client):
     assert "Mehlspeise" not in names
 
 
+def eat(client, food, day):
+    r = client.post(f"/api/v1/diary/{day}/entries", json={"food_id": food["id"], "meal": "lunch", "amount": 100})
+    assert r.status_code == 201, r.text
+
+
+def test_recent_puts_the_food_eaten_lately_first_and_says_when(client):
+    from datetime import date, timedelta
+    today = date.today()
+    plain = own(client, "Vollkornbrot")
+    mine = own(client, "Vollkornbrot Dinkel, Bäckerei Bauer")
+    old = own(client, "Vollkornbrot Roggen")
+    eat(client, mine, (today - timedelta(days=2)).isoformat())
+    eat(client, mine, (today - timedelta(days=5)).isoformat())
+    eat(client, old, (today - timedelta(days=30)).isoformat())  # too long ago
+    (line,) = match(client, "Vollkornbrot")["lines"]
+    assert line["suggestion"]["food_id"] == plain["id"]  # without `recent` nothing changes
+    assert all(c["eaten_count"] == 0 and c["eaten_last"] is None for c in line["candidates"])
+    r = client.post(POST, json={"text": "Vollkornbrot", "recent": True})
+    (line,) = r.json()["lines"]
+    assert line["suggestion"]["food_id"] == mine["id"]
+    first = line["candidates"][0]
+    assert first["eaten_count"] == 2 and first["eaten_last"] == (today - timedelta(days=2)).isoformat()
+    by_id = {c["food_id"]: c for c in line["candidates"]}
+    assert by_id[old["id"]]["eaten_count"] == 0 and by_id[plain["id"]]["eaten_count"] == 0
+
+
+def test_recent_does_not_turn_a_loose_match_into_a_suggestion(client):
+    from datetime import date
+    biscuit = own(client, "Butterkeks")
+    eat(client, biscuit, date.today().isoformat())
+    (line,) = client.post(POST, json={"text": "Butter", "recent": True}).json()["lines"]
+    assert line["suggestion"] is None
+    assert [c for c in line["candidates"] if c["food_id"] == biscuit["id"]][0]["eaten_count"] == 1
+
+
+def test_recent_only_counts_the_own_diary(duo):
+    from datetime import date
+    ann, ben = duo
+    bread = own(ann, "Vollkornbrot")
+    special = own(ann, "Vollkornbrot Spezial")
+    eat(ben, special, date.today().isoformat())  # foods are shared, the diary is not
+    (line,) = ann.post(POST, json={"text": "Vollkornbrot", "recent": True}).json()["lines"]
+    assert line["suggestion"]["food_id"] == bread["id"]
+    assert all(c["eaten_count"] == 0 for c in line["candidates"])
+
+
 def test_catalogue_candidates_follow_own_foods_basic_before_packaged(client, basics):
     mine = own(client, "Olivenöl nativ", 880, unit="ml")
     out = match(client, "2 EL Olivenöl\n1 Zwiebel\n3 Eier\n2 cups flour\n1 Zwiebeln, gehackt")

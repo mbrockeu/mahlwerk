@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { fmt, t } from '../lib/i18n';
+  import { daysBetween, fromDay, shortDate, today } from '../lib/date';
+  import { fmt, lang, t } from '../lib/i18n';
   import { changePick, readAmount, readiness, rowPer100, rowUnit, summarize, takeEstimate, type Row } from '../lib/ingredients';
   import type { Food, IngredientCandidate } from '../lib/types';
   import IngredientPicker from './IngredientPicker.svelte';
@@ -27,8 +28,16 @@
   const typed = (i: number, value: string) => { rows[i] = { ...rows[i], amount: value, estimated: false }; };
   const skip = (i: number) => { rows[i] = { ...rows[i], skipped: !rows[i].skipped }; if (open === i) open = null; };
   const estimate = (i: number) => { rows[i] = takeEstimate(rows[i]); open = null; };
-  const info = (c: Pick<IngredientCandidate, 'brand' | 'source'>, kcal: number | null | undefined) =>
-    [c.brand, c.source === 'bls' ? 'BLS' : null, kcal == null ? null : `${fmt(kcal)} kcal`].filter(Boolean).join(' · ');
+  const info = (c: Pick<IngredientCandidate, 'brand' | 'source' | 'eaten_last'>, kcal: number | null | undefined) =>
+    [eaten(c.eaten_last), c.brand, c.source === 'bls' ? 'BLS' : null, kcal == null ? null : `${fmt(kcal)} kcal`].filter(Boolean).join(' · ');
+  // photo of a meal: the food was eaten lately ("gestern gegessen", "zuletzt Di")
+  const eaten = (day: string | null | undefined) => {
+    if (!day) return null;
+    const ago = daysBetween(day, today());
+    if (ago <= 0) return t('eatenToday');
+    if (ago === 1) return t('eatenYesterday');
+    return t('eatenOn', { day: ago < 7 ? new Intl.DateTimeFormat(lang, { weekday: 'short' }).format(fromDay(day)).replace('.', '') : shortDate(day).split(' ')[1] });
+  };
 </script>
 
 <ul class="rows">

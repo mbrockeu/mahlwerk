@@ -1,5 +1,7 @@
 """Recipes: a shared food of the household that is calculated from its ingredients."""
 
+from datetime import date, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .. import ingredients, nutrients
@@ -77,12 +79,13 @@ def match_ingredients(
     body: IngredientsIn, user: dict = Depends(current_user), store: Store = Depends(get_store), catalog: Catalog = Depends(get_catalog)
 ) -> IngredientMatches:
     """Reads a pasted ingredient list (one per line, German or English): amount, unit, name, grams and the foods that may be
-    meant. Writes nothing; a recipe is made with `POST /recipes` from what the person confirms. Deterministic, no network."""
+    meant. With `recent` the foods eaten in the last days come first and say so. Writes nothing; a recipe is made with `POST /recipes` from what the person confirms. Deterministic, no network."""
     parsed, ignored = ingredients.parse_text(body.text)
     own = [f for f in store.list_foods("", None, 100_000, ("recipe", "cookidoo", "web"), demo_account=bool(user.get("is_demo")))]
+    eaten = store.eaten_since(user["id"], (date.today() - timedelta(days=ingredients.RECENT_DAYS - 1)).isoformat()) if body.recent else None
     lines = []
     for number, line in parsed:
-        found = ingredients.candidates(line.name, own, catalog, store.known_catalog, context=line.text, canned=line.canned)
+        found = ingredients.candidates(line.name, own, catalog, store.known_catalog, context=line.text, canned=line.canned, eaten=eaten)
         out = [IngredientCandidate(**{k: v for k, v in vars(c).items() if k != "good"}) for c in found]
         lines.append(IngredientLine(
             line=number, text=line.text, quantity=line.quantity, unit=line.unit, name=line.name, note=line.note, optional=line.optional,

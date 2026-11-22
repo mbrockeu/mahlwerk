@@ -809,6 +809,8 @@ def _expand(context: set[str]) -> tuple[set[str], bool]:
 _RAW = {"roh", "raw"}
 _USER_SOURCES = ("own", "yazio")
 USER_BONUS = 4.0
+RECENT_BONUS = 5.0  # a stored food eaten in the last days (photo of a meal): most likely the same one again
+RECENT_DAYS = 14
 GOOD_LIMIT = 1.0  # an average word match worse than this (the word only starts a longer word) is no confident suggestion
 
 
@@ -837,8 +839,9 @@ def _word_class(word: str, tokens: list[str]) -> float | None:
 
 
 def _score(words: list[str], names: list[str], context: set[str], code: str | None, source: str, said: frozenset[str] = frozenset(),
-           sure: bool = True) -> tuple[float, bool, bool] | None:
-    """(score, confident, says the preparation of the line) of a food for the search words; smaller is better. None when a word does not occur in any of the names.
+           sure: bool = True) -> tuple[float, bool, bool, bool] | None:
+    """(score, confident, says the preparation of the line, close) of a food for the search words; smaller is better. None when a word does not occur in any of the names.
+    `close`: every search word is a whole word or the end of a compound of the name, which may say more (a food eaten lately may be meant).
     `sure` False: the search words leave out part of the line, so no food can be a confident match (and own foods get no head start)."""
     best = None
     for name in names:
@@ -861,11 +864,12 @@ def _score(words: list[str], names: list[str], context: set[str], code: str | No
         first = -1.0 if any(tokens[0] == w or (tokens[0].startswith(w) and len(tokens[0]) - len(w) <= 3) for w in words) else 0.0  # the food comes first in its name
         score = 2 * cls + 3 * penalty - 4 * credit - 3 * exact + raw + base + extra + first
         if best is None or score < best[0]:
-            confident = sure and cls <= GOOD_LIMIT * len(words) and not dish and (source == "bls" or _names_only(name, words, context))
-            best = (score, confident, credit > 0)
+            close = sure and cls <= GOOD_LIMIT * len(words) and not dish
+            confident = close and (source == "bls" or _names_only(name, words, context))
+            best = (score, confident, credit > 0, close)
     if best is None:
         return None
-    return (best[0] - (USER_BONUS if source in _USER_SOURCES and best[1] else 0.0), best[1], best[2])
+    return (best[0] - (USER_BONUS if source in _USER_SOURCES and best[1] else 0.0), best[1], best[2], best[3])
 
 
 _COLOURS = ("grun", "rot", "weiß", "schwarz", "gelb", "braun", "blau", "green", "red", "white", "black", "yellow", "brown", "blue")
@@ -934,6 +938,8 @@ class Candidate:
     food_id: int | None = None
     code: str | None = None
     good: bool = True  # a confident match; the first candidate is only suggested when it is
+    eaten_count: int = 0  # entries of this food in the last RECENT_DAYS days (only asked for with `eaten`)
+    eaten_last: str | None = None  # the latest of those days
 
 
 def _from_food(food: dict, good: bool) -> Candidate:
@@ -960,7 +966,8 @@ def _packaged(catalog: Any, tokens: list[str], limit: int, skip: Any, context: s
 BASIC_POOL = 60  # how many basic foods of a search are ranked again here
 
 
-def candidates(name: str, own_foods: list[dict], catalog: Any, skip: Any = None, context: str = "", canned: bool = False) -> list[Candidate]:
+def candidates(name: str, own_foods: list[dict], catalog: Any, skip: Any = None, context: str = "", canned: bool = False,
+               eaten: dict[int, dict] | None = None) -> list[Candidate]:
     """Up to MAX_CANDIDATES foods that may be meant by `name`, best first.
 
     The search words are tried from the usual meaning of the ingredient (the table above) to ever looser forms of the name; the first
@@ -969,7 +976,10 @@ def candidates(name: str, own_foods: list[dict], catalog: Any, skip: Any = None,
     Butterzwieback), the end of a compound as a whole (Speisesalz for Salz), the raw or plain food before a prepared one unless the line
     says how it is prepared, the shorter name; foods the person made themselves get a head start. Packaged products (Open Food Facts)
     come only after those, and alone only when nothing else was found. `context` is the whole line (what it says about the preparation);
-    `canned` says the line is about a can. `own_foods` are store rows (without recipes); `catalog` may be empty or missing its files."""
+    `canned` says the line is about a can. `own_foods` are store rows (without recipes); `catalog` may be empty or missing its files.
+    `eaten` (food id -> {"count", "last"}, the person's diary of the last days): a stored food eaten lately whose name holds every word
+    of the line as a whole word or the end of a compound (it may say more: "Vollkornbrot Dinkel, Bäckerei Bauer" for "Vollkornbrot")
+    comes first and counts as a confident match (the more often eaten, the further up); every candidate eaten lately says so."""
     context_words = set(_tokens(context))
     if canned:
         context_words |= {"konserve", "canned"}
@@ -994,7 +1004,14 @@ def candidates(name: str, own_foods: list[dict], catalog: Any, skip: Any = None,
         for index, food in enumerate(own_foods):
             data = food["data"]
             if (hit := _score(tokens, [data.get("name") or ""], context_words, food.get("code"), food["source"], said, sure[steps.index(tokens)])) is not None:
-                found.append((hit[0], index, _from_food(food, hit[1] and (hit[2] or not says_prepared))))
+                candidate = _from_food(food, hit[1] and (hit[2] or not says_prepared))
+                score = hit[0]
+                if eaten and (seen := eaten.get(food["id"])):
+                    candidate.eaten_count, candidate.eaten_last = seen["count"], seen["last"]
+                    if hit[3] and (hit[2] or not says_prepared):  # fits the line, maybe with more words: most likely this one again
+                        candidate.good = True
+                        score -= RECENT_BONUS + 0.3 * min(seen["count"], 5)
+                found.append((score, index, candidate))
         return found
 
     # stored foods are looked for with every form of the name, the first form that finds one wins (a food made by the person is not

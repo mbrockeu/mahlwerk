@@ -926,6 +926,7 @@ class Recipe(BaseModel):
 
 
 class IngredientsIn(BaseModel):
+    recent: bool = Field(False, description=f"prefer the foods the person ate in the last {ingredients.RECENT_DAYS} days (photo of a meal: most likely the same ones again)")
     text: str = Field(description=f"one ingredient per line, German or English; at most {ingredients.MAX_LINES} lines, {ingredients.MAX_LINE} characters each, {ingredients.MAX_TEXT} in all")
 
     @field_validator("text")
@@ -949,6 +950,8 @@ class IngredientCandidate(BaseModel):
     brand: str | None
     unit: Unit
     per_100: Per100
+    eaten_count: int = Field(0, description="entries of this food in the last days (only with `recent`)")
+    eaten_last: str | None = Field(None, description="the latest day of those entries (YYYY-MM-DD; only with `recent`)")
 
 
 class IngredientLine(BaseModel):

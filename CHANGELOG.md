@@ -7,6 +7,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Photo of a meal: foods eaten in the last 14 days come first when they fit a part of the photo, also under a longer name
+  (`Vollkornbrot Dinkel, Bäckerei Bauer` for `Vollkornbrot`), and the row says when ("eaten yesterday", "last Fri").
+  `POST /api/v1/recipes/ingredients/match` takes `recent`; the candidates carry `eaten_count` and `eaten_last`.
 - Photo recognition: a fallback model (`MAHLWERK_VISION_FALLBACK_URL`, `_MODEL`, `_KEY`, `_TEMPERATURE`) is asked when the first model cannot be reached, refuses the request or is busy (not after a timeout or an unusable answer); the admin card names it. `MAHLWERK_VISION_TEMPERATURE=off` leaves out `temperature: 0`, which some hosted models refuse.
 - `GET /api/v1/history` carries the water of each day: `water_ml` (the water counter) and `water_drinks_ml` (water from drinks in the diary), so a client such as the iOS app can write daily totals to Apple Health. No schema change.
 - Direct links for shortcuts and the iOS app: `/?go=scan`, `/?go=add`, `/?go=recent`, `/?go=templates`, each with an optional `&meal=breakfast|lunch|snack|dinner` (without it the meal follows the time of day). Once signed in the add sheet opens on that tab for today and the parameters leave the address; a query parameter rather than the hash, so it survives the sign-in redirect. `/?go=photo` opens the sheet straight on "Photo of the meal" (the camera still needs a tap); where photo recognition is off or not set up it just opens today.

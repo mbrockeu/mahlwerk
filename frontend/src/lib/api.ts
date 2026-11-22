@@ -178,7 +178,7 @@ export const api = {
   applyTemplate: (id: number, to: { day: string; meal: Meal }) => request<{ entries: Entry[] }>('POST', `templates/${id}/apply`, to),
 
   /** Reads a pasted ingredient list (nothing is stored): amounts, grams and the foods that may be meant. */
-  matchIngredients: (text: string) => request<IngredientMatches>('POST', 'recipes/ingredients/match', { text }),
+  matchIngredients: (text: string, recent = false) => request<IngredientMatches>('POST', 'recipes/ingredients/match', { text, recent }),
   recipes: () => request<Recipe[]>('GET', 'recipes'),
   createRecipe: (recipe: RecipeIn) => request<Recipe>('POST', 'recipes', recipe),
   updateRecipe: (id: number, recipe: RecipeIn) => request<Recipe>('PUT', `recipes/${id}`, recipe),

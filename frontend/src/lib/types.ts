@@ -574,6 +574,9 @@ export interface IngredientCandidate {
   brand: string | null;
   unit: 'g' | 'ml';
   per_100: Per100;
+  /** Photo of a meal (`recent`): entries of this food in the last days and the latest of those days. */
+  eaten_count?: number;
+  eaten_last?: string | null;
 }
 
 /** One line of a pasted ingredient list, read by the server (`POST /recipes/ingredients/match`). */

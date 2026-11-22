@@ -523,6 +523,7 @@ const en = {
   wrCalc: 'Calculate from ingredients',
   // photo recognition (capture screens)
   fromPhoto: 'Photograph a recipe', visRecipeTitle: 'Photograph a recipe', visMealButton: 'Photo of the meal', visBack: 'Back to search',
+  eatenToday: 'eaten today', eatenYesterday: 'eaten yesterday', eatenOn: 'last {day}',
   visNoticeTitle: 'Before the first photo', visNoticeOk: 'Understood',
   visNoticeMeal: 'The photo is sent to the image model your server administrator set up, which names the food and guesses the amounts. Mahlwerk does not store the photo or the answer.',
   visNoticeRecipe: 'The photo is sent to the image model your server administrator set up, which reads the ingredient lines. Mahlwerk does not store the photo or the answer.',
@@ -1195,6 +1196,7 @@ const de: Record<Key, string> = {
   wrCalc: 'Aus Zutaten berechnen',
   // Fotoerkennung (Erfassung)
   fromPhoto: 'Rezept abfotografieren', visRecipeTitle: 'Rezept abfotografieren', visMealButton: 'Foto der Mahlzeit', visBack: 'Zurück zur Suche',
+  eatenToday: 'heute gegessen', eatenYesterday: 'gestern gegessen', eatenOn: 'zuletzt {day}',
   visNoticeTitle: 'Vor dem ersten Foto', visNoticeOk: 'Verstanden',
   visNoticeMeal: 'Das Foto geht an das Bildmodell, das die Betreiberin oder der Betreiber des Servers eingerichtet hat; es benennt die Speisen und schätzt die Mengen. Mahlwerk speichert weder das Foto noch die Antwort.',
   visNoticeRecipe: 'Das Foto geht an das Bildmodell, das die Betreiberin oder der Betreiber des Servers eingerichtet hat; es liest die Zutatenzeilen. Mahlwerk speichert weder das Foto noch die Antwort.',
