@@ -259,7 +259,7 @@ database and no route for an admin to take other people's data: the caller is al
 - **JSON.** `mahlwerk-export.json` holds `format_version` (1), `exported_at`, `app_version`, `range` (`from`/`to`, null when open) and the
   sections `account` (user name, display name, creation time), `goal`, `goal_history` (every change, oldest first, `valid_from`,
   `changed_at` as ISO time or null), `settings`, `diary` (with the values per 100 g/ml and the
-  nutrients for the amount), `weight`, `activity`, `workouts`, `water`, `fasting`, `templates` (with items), `recipes` (the recipes the
+  nutrients for the amount), `weight`, `activity`, `sleep` (`day`, `minutes`, `source`), `workouts`, `water`, `fasting`, `templates` (with items), `recipes` (the recipes the
   user created, with ingredients), `badges` and `webhooks` (name, host, events, switch only).
 - **Never included.** Password hash, sign-in sessions, access keys, webhook secrets and addresses beyond the host, stored connector
   secrets, the identity at a sign-in provider, other users' data. Demo rows (test data of the own account) are left out; the demo account
@@ -544,6 +544,14 @@ Item { name, brand, amount_total, value, share, times }
   stating the nutrient (0..1, above 0); `percent_nrv` is `average` as a percentage of the NRV, `null` without one.
   Because unknown is not counted as zero the averages are rather too low; clients must show `coverage` with them.
   There are deliberately no hints on these values, the data is too thin.
+- `sleep`: null while no night of the range has a value. Otherwise `{nights, avg_minutes, compared_days, middle_days, min_days, short, long}`:
+  the mean sleep of the nights with a value and, over the logged days (days with diary entries) that have a sleep value, today excluded
+  (it is not over), two groups: `short` = after a night under 6 h (360 min), `long` = after a night of 7 h (420 min) or more. The days
+  after 6 to 7 hours are the `middle_days` and not compared. Each group is `{days, kcal, protein, kcal_vs_goal}`: the number of days and,
+  from `min_days` (5) days on, the mean kcal, the mean protein and the mean of (kcal minus that day's own calorie goal, with active
+  energy when it is added, so that a changed goal does not distort it; null without a goal); below `min_days` the three means are null.
+  A pattern in the data, not a proof of a cause. The night counts for the day it ends on, so the day's eating is compared with the
+  sleep before it.
 - `hints`: rule based, at most 4, most important first. With fewer than 7 days with entries the only hint is
   `few_days`. Codes and params (all numbers rounded for display):
 
@@ -822,6 +830,12 @@ Removed from the prototype: `/api/v1/scan-tests` and the barcode-keyed `DELETE`.
 
 Errors use FastAPI's default shape `{ "detail": ... }`.
 
+## Sleep
+
+Schema version 20 (`sleep_day`: user, day, minutes, source `manual`/`health`/`demo`, demo flag). Written by `POST /health/sync`, shown in
+`GET /insights` (`sleep`) and the export; the demo data of the own account and of the demo account gets sleep too (5.5 to 8.5 h, a little
+more eating after short nights). The migration from 19 only adds the table.
+
 ## Goal history
 
 Schema version 19 (`goal_history`). A changed goal counts from the day of the change on; earlier days keep the goal they had,
@@ -857,7 +871,7 @@ adds tables and columns, nothing existing changes.
   adherence of the insights (counts, bars, calendar, series, hints), the gap of the expenditure estimate (the estimate itself
   measures the total and does not change), the weekly review (day states, strength "days in range") and the badge
   `balanced_week`. A day without a value adds 0; without a goal there is no effective goal.
-- **`POST /health/sync`**, body `{days:[{day, steps?, active_kcal?, distance_m?, weight_kg?, body_fat_pct?, lean_kg?, water_ml?, workouts?:[{external_id,
+- **`POST /health/sync`**, body `{days:[{day, steps?, active_kcal?, distance_m?, weight_kg?, body_fat_pct?, lean_kg?, water_ml?, sleep_minutes?, workouts?:[{external_id,
   kind|name, started_at?, minutes, kcal?, distance_m?}]}], overwrite_manual?:bool}`, at most 400 days (more → 422); any invalid
   value stops the whole call with 422 and stores nothing. Everything is written in one transaction with source `health` and is
   idempotent (the same call twice changes nothing). Rules: daily values overwrite earlier `health`, Yazio and demo values but not
@@ -865,7 +879,11 @@ adds tables and columns, nothing existing changes.
   there is none, or the existing one came from a sync or is demo data (never over a value typed in, also with `overwrite_manual`);
   workouts are recognised by `external_id`, one the user changed by hand stays as it is (unless `overwrite_manual`). The kind
   comes from `kind` or the name (Health names such as "Functional Strength Training" are understood), else `other`. Answer:
-  `{days, activity, workouts, weights, water, body_fat, lean}`, each `{new, updated, unchanged, skipped}` (`skipped` = protected by a manual value).
+  `{days, activity, workouts, weights, water, body_fat, lean, sleep}`, each `{new, updated, unchanged, skipped}` (`skipped` = protected by a manual value).
+  `sleep_minutes` (0–1440, or null) are the minutes asleep in the night that ENDS on the morning of `day` (the night from Sunday to Monday counts
+  for Monday). They go to their own table `sleep_day` (schema version 20), not to the activity row: sleep takes no part in the activity logic
+  and fires no `activity.recorded` event. Sending a day again overwrites its value; below 60 minutes the value counts as `skipped` and nothing is
+  stored (a watch that was not worn is not a sleepless night); null or missing does nothing.
   Body fat (`body_fat_pct`: 2–75 %, a fraction between 0 and 1 is read as such and multiplied by 100, rounded to 0.1 %) and lean mass
   (`lean_kg`: 20–300 kg) are stored on the weight row of the day, each with its own origin: a value typed in by hand is never
   replaced, an empty or earlier Health value is. The weight row needs a `kg` value, so on a day without any weight (stored

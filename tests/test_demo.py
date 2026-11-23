@@ -105,7 +105,7 @@ def test_second_call_creates_nothing_new_and_a_longer_range_fills_only_the_gap(a
     first = ann.post(DEMO, json={"days": 14}).json()
     before = history(ann, 14)
     again = ann.post(DEMO, json={"days": 14}).json()
-    assert again == {"entries": 0, "weights": 0, "water": 0, "activity": 0, "workouts": 0, "foods": 0, "goal_set": False}
+    assert again == {"entries": 0, "weights": 0, "water": 0, "activity": 0, "workouts": 0, "sleep": 0, "foods": 0, "goal_set": False}
     assert history(ann, 14) == before
     assert ann.get("/api/v1/me").json()["demo"]["entries"] == first["entries"]
 

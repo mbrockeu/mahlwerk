@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Sleep: `POST /health/sync` takes `sleep_minutes` per day (the night that ends on that morning; under 60 minutes is ignored as
+  "watch not worn") and answers a `sleep` count. The evaluation gets a card "Sleep and eating" (tab Body) and `GET /insights` a
+  `sleep` block: the average sleep and, for logged days after nights under 6 h against nights of 7 h or more, the mean kcal and the
+  distance to each day's own goal (at least 5 days per side; a connection in the data, not a cause). Also in the export and the demo
+  data. Schema version 20 (`sleep_day`), the migration only adds the table.
 - `GET /summary/today` also returns `meals` (kcal per meal today) and `meal_entries` (entries per meal), so a client can
   tell which meals are already logged, for example to skip a meal reminder.
 - Tap a macro tile on the day view to see where that day's protein, carbs or fat came from: per meal with share and the

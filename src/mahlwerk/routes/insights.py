@@ -77,7 +77,7 @@ def get_insights(
 
     extra = period(f, t)
     result = insights.compute(first, last, store.entries_between(uid, f, t), store.weights_between(uid, f, t), goal,
-                              extra.pop("water"), granularity=granularity, **extra)
+                              extra.pop("water"), granularity=granularity, sleep=store.sleep_between(uid, f, t), today=today(), **extra)
     span = entry_span(store, uid)
     result["first_day"], result["last_day"] = (span[0].isoformat(), span[1].isoformat()) if span else (None, None)
     if compare == "previous":

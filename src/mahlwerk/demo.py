@@ -177,6 +177,11 @@ def _activity_day(rng: random.Random, today: bool, weekday: int, weight: float, 
     return {"steps": steps, "active_kcal": float(energy), "distance_m": float(round(steps * 0.74 / 10) * 10)}, workouts
 
 
+def _sleep_minutes(rng: random.Random) -> int:
+    """Minutes asleep before a demo day: 5.5 to 8.5 hours, mostly around seven."""
+    return round(max(330, min(510, rng.gauss(420, 55))) / 5) * 5
+
+
 def _rng(user_id: int, day: str, kind: str) -> random.Random:
     return random.Random(f"mahlwerk-demo:{user_id}:{kind}:{day}")
 
@@ -190,6 +195,8 @@ def generate(store: Store, user_id: int, today: date, days: int, marker: str = "
     watered = store.water_days(user_id, first.isoformat(), today.isoformat())
     active_days, workout_days = store.activity_days(user_id, first.isoformat(), today.isoformat())
 
+    slept_days = store.sleep_between(user_id, first.isoformat(), today.isoformat())
+
     goal = store.get_goal(user_id)
     goal_set = goal is None
     if goal_set:
@@ -200,16 +207,22 @@ def generate(store: Store, user_id: int, today: date, days: int, marker: str = "
     water: list[dict] = []
     activity: list[dict] = []
     workouts: list[dict] = []
+    sleep: list[dict] = []
     start_kg = 74 + (user_id * 7) % 12
     for offset in range(days):
         current = first + timedelta(days=offset)
         iso = current.isoformat()
         is_today = current == today
+        slept = _sleep_minutes(_rng(user_id, iso, "sleep"))
+        if iso not in slept_days:
+            sleep.append({"day": iso, "minutes": slept})
         if iso not in real_days and iso not in demo_days:
             rng = _rng(user_id, iso, "diary")
             if is_today or rng.random() >= 1 / 12:  # about every twelfth day stays empty
                 low, high = (-0.08, 0.15) if current.weekday() >= 5 else (-0.15, 0.10)
                 target = goal["kcal"] * (1 + rng.uniform(low, high))
+                if slept < 360:  # after a short night people tend to eat more
+                    target *= 1.12
                 entries += [{"day": iso, **e} for e in _day(rng, target, is_today)]
         if iso not in weighed:
             rng = _rng(user_id, iso, "weight")
@@ -234,9 +247,9 @@ def generate(store: Store, user_id: int, today: date, days: int, marker: str = "
                 midnight = int(datetime(current.year, current.month, current.day).timestamp())
                 workouts += [{"day": iso, **w, "started_at": midnight + w["started_at"]} for w in day_workouts]
 
-    if not (entries or weights or water or activity or workouts):
-        return {"entries": 0, "weights": 0, "water": 0, "activity": 0, "workouts": 0, "foods": 0, "goal_set": False}
+    if not (entries or weights or water or activity or workouts or sleep):
+        return {"entries": 0, "weights": 0, "water": 0, "activity": 0, "workouts": 0, "sleep": 0, "foods": 0, "goal_set": False}
     if goal_set:
         store.set_goal(user_id, DEFAULT_GOAL, valid_from=today.isoformat())
-    return {**store.add_demo(user_id, FOODS, entries, weights, water, activity, workouts, marker=marker), "goal_set": goal_set}
+    return {**store.add_demo(user_id, FOODS, entries, weights, water, activity, workouts, sleep, marker=marker), "goal_set": goal_set}
 

@@ -327,6 +327,7 @@ class DemoCreated(BaseModel):
     water: int = 0
     activity: int = 0
     workouts: int = 0
+    sleep: int = 0
     foods: int
     goal_set: bool = Field(description="the user had no goal, so a default one was set")
 
@@ -546,6 +547,9 @@ class HealthDay(BaseModel):
         None, description="body fat in percent (2-75); a fraction between 0 and 1 is read as such (Health reports 0.213 for 21.3 %)")
     lean_kg: float | None = Field(None, ge=20, le=300, description="lean body mass in kg")
     water_ml: int | None = Field(None, ge=0, le=10000)
+    sleep_minutes: int | None = Field(
+        None, ge=0, le=1440, description="minutes asleep in the night that ENDS on the morning of `day` (Sunday to Monday counts "
+        "for Monday); under 60 is read as \"watch not worn\" and skipped")
     workouts: list[HealthWorkout] = Field(default_factory=list, max_length=50)
 
     @field_validator("body_fat_pct")
@@ -574,6 +578,7 @@ class HealthSyncResult(BaseModel):
     water: SyncCounts
     body_fat: SyncCounts = Field(default_factory=SyncCounts, description="stored on a weight row only; without a weight a value counts as skipped")
     lean: SyncCounts = Field(default_factory=SyncCounts, description="like body_fat")
+    sleep: SyncCounts = Field(default_factory=SyncCounts, description="nights under 60 minutes count as skipped")
 
 
 class Day(BaseModel):
@@ -729,6 +734,23 @@ class InsightAdherence(BaseModel):
     under_days: int
 
 
+class InsightSleepGroup(BaseModel):
+    days: int = Field(description="logged days with a sleep value in this group")
+    kcal: float | None = Field(None, description="mean kcal of these days; null below the minimum days")
+    protein: float | None = Field(None, description="mean protein (g) of these days; null below the minimum days")
+    kcal_vs_goal: float | None = Field(None, description="mean of (kcal - that day's own kcal goal); null below the minimum days or without a goal")
+
+
+class InsightSleep(BaseModel):
+    nights: int = Field(description="nights with a value in the range")
+    avg_minutes: int = Field(description="mean sleep of those nights in minutes")
+    compared_days: int = Field(description="logged days with a sleep value, today excluded")
+    middle_days: int = Field(description="of those, the days after 6-7 h of sleep (not compared)")
+    min_days: int = Field(description="days a group needs for its means")
+    short: InsightSleepGroup = Field(description="days after a night under 6 h")
+    long: InsightSleepGroup = Field(description="days after a night of 7 h or more")
+
+
 class InsightHint(BaseModel):
     code: str
     params: dict
@@ -868,6 +890,7 @@ class Insights(BaseModel):
     adherence: InsightAdherence | None
     micros: list[InsightMicro]
     hints: list[InsightHint]
+    sleep: InsightSleep | None = Field(None, description="sleep against eating, null without a sleep value in the range (see docs/api-v1.md)")
 
 
 TemplateName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]

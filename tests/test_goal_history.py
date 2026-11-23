@@ -84,7 +84,7 @@ def test_version_18_database_keeps_its_goal_as_the_goal_since_the_start(tmp_path
     con.commit()
     con.close()
     store = Store(path)
-    assert sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0] == 19
+    assert sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0] == 20
     goal = {"kcal": 2150, "protein": 120, "carbs": 230, "fat": 70, "water_ml": 2000, "steps": 9000}
     assert store.get_goal(1) == goal
     assert store.goal_history(1) == [{"valid_from": goals.SINCE_START, "changed_at": None, **goal}]

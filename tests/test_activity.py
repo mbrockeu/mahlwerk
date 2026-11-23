@@ -79,7 +79,7 @@ def test_version_8_database_gets_activity_without_losing_data(tmp_path):
     store = Store(path)
 
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 19
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 20
     tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert {"activity_day", "workout"} <= tables
     assert con.execute("SELECT name, amount FROM diary_entry").fetchall() == [("Rice", 150)]
@@ -110,7 +110,7 @@ def test_version_17_database_gets_the_body_columns(tmp_path):
     con.close()
     store = Store(path)
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 19
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 20
     assert con.execute("SELECT kg, health, body_fat_pct, lean_kg, body_fat_health, lean_health FROM weight").fetchall() == [
         (80.5, 1, None, None, 0, 0)]
     con.close()
@@ -281,7 +281,7 @@ def test_sync_creates_and_is_idempotent(client):
     assert first == {
         "days": 3,
         "activity": {**ZERO, "new": 3}, "workouts": {**ZERO, "new": 2}, "weights": {**ZERO, "new": 1},
-        "water": {**ZERO, "new": 1}, "body_fat": ZERO, "lean": ZERO}
+        "water": {**ZERO, "new": 1}, "body_fat": ZERO, "lean": ZERO, "sleep": ZERO}
     a = day_of(client, d(0))
     assert a["activity"]["steps"] == 9000 and a["activity"]["active_kcal"] == 450.5 and a["activity"]["source"] == "health"
     assert a["activity"]["distance_m"] == 6400 and a["water"]["ml"] == 1500
@@ -296,7 +296,7 @@ def test_sync_creates_and_is_idempotent(client):
     assert second == {
         "days": 3,
         "activity": {**ZERO, "unchanged": 3}, "workouts": {**ZERO, "unchanged": 2}, "weights": {**ZERO, "unchanged": 1},
-        "water": {**ZERO, "unchanged": 1}, "body_fat": ZERO, "lean": ZERO}
+        "water": {**ZERO, "unchanged": 1}, "body_fat": ZERO, "lean": ZERO, "sleep": ZERO}
     with sqlite3.connect(client.app.state.store.path) as con:
         assert con.execute("SELECT count(*) FROM workout").fetchone()[0] == 2
         assert con.execute("SELECT count(*) FROM activity_day").fetchone()[0] == 3

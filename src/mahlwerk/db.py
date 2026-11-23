@@ -16,7 +16,8 @@ def _json(value) -> str:
     """json.dumps that refuses NaN and infinity: such a value in a food would turn every day sum that uses it into null."""
     return json.dumps(value, allow_nan=False)
 
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
+MIN_SLEEP_MINUTES = 60  # a shorter "night" in the Health data means the watch was not worn, not that nobody slept
 
 BASE_TABLES = """
 CREATE TABLE user (
@@ -399,7 +400,20 @@ CREATE TABLE goal_history (
     PRIMARY KEY (user_id, valid_from)
 );
 """
-TABLES = BASE_TABLES + V4_TABLES + V5_TABLES + V6_TABLES + V7_TABLES + V8_TABLES + V9_TABLES + V10_TABLES + V11_TABLES + V12_TABLES + V13_TABLES + V14_TABLES + V15_TABLES + V16_TABLES + V17_TABLES + V18_TABLES + V19_TABLES
+# Version 20: minutes asleep per day (the night that ENDS on `day`), from the Apple Health sync. A table of its own, not a column
+# of activity_day: sleep takes no part in the activity logic and fires no `activity.recorded` webhook.
+V20_TABLES = """
+CREATE TABLE sleep_day (
+    user_id  INTEGER NOT NULL REFERENCES user(id),
+    day      TEXT NOT NULL,
+    minutes  INTEGER NOT NULL,
+    source   TEXT NOT NULL CHECK (source IN ('manual', 'health', 'demo')),
+    demo     INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, day)
+);
+"""
+
+TABLES = BASE_TABLES + V4_TABLES + V5_TABLES + V6_TABLES + V7_TABLES + V8_TABLES + V9_TABLES + V10_TABLES + V11_TABLES + V12_TABLES + V13_TABLES + V14_TABLES + V15_TABLES + V16_TABLES + V17_TABLES + V18_TABLES + V19_TABLES + V20_TABLES
 DEFAULT_WATER_GOAL = 2000
 MAX_WATER_ML = 10000
 MAX_SQL_PARAMS = 900  # bound parameters per statement: far below the limit of older SQLite builds (999)
@@ -463,6 +477,9 @@ MIGRATE_18_TO_19 = V19_TABLES + """
 INSERT INTO goal_history (user_id, valid_from, kcal, protein, carbs, fat, water_ml, steps, changed_at)
     SELECT user_id, '0001-01-01', kcal, protein, carbs, fat, water_ml, steps, NULL FROM goal;
 """
+
+# Version 19 had no sleep; the table is new, nothing existing changes.
+MIGRATE_19_TO_20 = V20_TABLES
 
 # Demo foods are ordinary `food` rows whose JSON `data` carries "demo": true (test-data mode of the own account) or
 # "demo_account": true (the built-in demo account; these are left out of the product list of everybody else).
@@ -563,7 +580,7 @@ class Store:
                 script += (MIGRATE_12_TO_13 if version < 13 else "") + (MIGRATE_13_TO_14 if version < 14 else "")
                 script += (MIGRATE_14_TO_15 if version < 15 else "") + (MIGRATE_15_TO_16 if version < 16 else "")
                 script += (MIGRATE_16_TO_17 if version < 17 else "") + (MIGRATE_17_TO_18 if version < 18 else "")
-                script += MIGRATE_18_TO_19
+                script += (MIGRATE_18_TO_19 if version < 19 else "") + MIGRATE_19_TO_20
             script += f"PRAGMA user_version = {SCHEMA_VERSION}; COMMIT;"
             try:
                 con.executescript(script)
@@ -1543,6 +1560,12 @@ class Store:
             ).fetchall()
         return {r["day"]: dict(r) for r in rows}
 
+    def sleep_between(self, user_id: int, first: str, last: str) -> dict[str, int]:
+        """Minutes asleep by day (the night that ended on that morning) in the range."""
+        with self._connect() as con:
+            rows = con.execute("SELECT day, minutes FROM sleep_day WHERE user_id = ? AND day BETWEEN ? AND ?", (user_id, first, last)).fetchall()
+        return {r["day"]: r["minutes"] for r in rows}
+
     def put_activity(self, user_id: int, day: str, changes: dict) -> dict | None:
         """Set the given values of a day (None clears one), by hand: the row becomes `manual` and loses its import.
         A row that ends up without any value is deleted. Returns the row, or None when nothing is left."""
@@ -1624,7 +1647,7 @@ class Store:
         count as skipped. Each value has its own provenance flag: a value typed in by hand is never replaced.
         Returns the counters per kind (new, updated, unchanged, skipped) and what changed, for the webhooks.
         """
-        kinds = ("activity", "workouts", "weights", "water", "body_fat", "lean")
+        kinds = ("activity", "workouts", "weights", "water", "body_fat", "lean", "sleep")
         counts = {k: {"new": 0, "updated": 0, "unchanged": 0, "skipped": 0} for k in kinds}
         changed = {"activity": [], "workouts": []}
         now = int(time.time())
@@ -1695,6 +1718,22 @@ class Store:
                     else:
                         con.execute(f"UPDATE weight SET {column} = ? WHERE user_id = ? AND day = ?", (value, user_id, day))
                         counts[kind]["updated"] += 1
+                minutes = item.get("sleep_minutes")
+                if minutes is not None:
+                    row = con.execute("SELECT minutes, source FROM sleep_day WHERE user_id = ? AND day = ?", (user_id, day)).fetchone()
+                    if minutes < MIN_SLEEP_MINUTES:  # a watch not worn is not a sleepless night
+                        counts["sleep"]["skipped"] += 1
+                    elif row is None:
+                        con.execute("INSERT INTO sleep_day (user_id, day, minutes, source) VALUES (?, ?, ?, 'health')", (user_id, day, minutes))
+                        counts["sleep"]["new"] += 1
+                    elif row["source"] == "health" and row["minutes"] == minutes:
+                        counts["sleep"]["unchanged"] += 1
+                    elif row["source"] == "manual" and not overwrite_manual:
+                        counts["sleep"]["skipped"] += 1
+                    else:
+                        con.execute("UPDATE sleep_day SET minutes = ?, source = 'health', demo = 0 WHERE user_id = ? AND day = ?",
+                                    (minutes, user_id, day))
+                        counts["sleep"]["updated"] += 1
                 for w in item.get("workouts") or []:
                     row = con.execute(
                         "SELECT * FROM workout WHERE user_id = ? AND external_id = ?", (user_id, w["external_id"])).fetchone()
@@ -1764,7 +1803,7 @@ class Store:
     def add_demo(
         self, user_id: int, foods: dict[str, dict], entries: list[dict], weights: list[dict],
         water: list[dict] | None = None, activity: list[dict] | None = None, workouts: list[dict] | None = None,
-        marker: str = "demo",
+        sleep: list[dict] | None = None, marker: str = "demo",
     ) -> dict:
         """Insert demo entries and weights in one transaction.
 
@@ -1813,13 +1852,16 @@ class Store:
                 con.execute(
                     "INSERT OR IGNORE INTO activity_day (user_id, day, steps, active_kcal, distance_m, source, demo) "
                     "VALUES (?, ?, ?, ?, ?, 'demo', 1)", (user_id, a["day"], a["steps"], a["active_kcal"], a["distance_m"]))
+            for s in sleep or []:
+                con.execute("INSERT OR IGNORE INTO sleep_day (user_id, day, minutes, source, demo) VALUES (?, ?, ?, 'demo', 1)",
+                            (user_id, s["day"], s["minutes"]))
             for w in workouts or []:
                 con.execute(
                     "INSERT INTO workout (user_id, day, started_at, kind, name, minutes, kcal, distance_m, steps, source, "
                     "demo, created_at) VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, 'demo', 1, ?)",
                     (user_id, w["day"], w["started_at"], w["kind"], w["minutes"], w["kcal"], w["distance_m"], w["steps"], now))
         return {"entries": len(entries), "weights": len(weights), "foods": created, "water": len(water or []),
-                "activity": len(activity or []), "workouts": len(workouts or [])}
+                "activity": len(activity or []), "workouts": len(workouts or []), "sleep": len(sleep or [])}
 
     def remove_demo(self, user_id: int) -> dict:
         """Delete this user's demo rows, then demo foods no diary entry of anyone refers to any more."""
@@ -1829,6 +1871,7 @@ class Store:
             water = con.execute("DELETE FROM water WHERE user_id = ? AND demo = 1", (user_id,)).rowcount
             activity = con.execute("DELETE FROM activity_day WHERE user_id = ? AND demo = 1", (user_id,)).rowcount
             workouts = con.execute("DELETE FROM workout WHERE user_id = ? AND demo = 1", (user_id,)).rowcount
+            con.execute("DELETE FROM sleep_day WHERE user_id = ? AND demo = 1", (user_id,))
             doomed = [
                 r["id"]
                 for r in con.execute(
@@ -1847,7 +1890,8 @@ class Store:
 
     # every table with a `user_id` column; a test compares this list with the schema so that a new table cannot be forgotten
     USER_TABLES = ("diary_entry", "goal", "weight", "template", "user_setting", "badge_earned", "water", "fast", "import_batch",
-                   "access_token", "webhook", "activity_day", "workout", "auth_session", "oidc_identity", "secret", "goal_history")
+                   "access_token", "webhook", "activity_day", "workout", "auth_session", "oidc_identity", "secret", "goal_history",
+                   "sleep_day")
 
     def demo_account_id(self) -> int | None:
         """The id of the demo account (the setting points at the user row with the reserved name), or None. Also while it is
@@ -2488,6 +2532,9 @@ class Store:
     def export_workouts(self, user_id: int, first: str, last: str, demo: bool) -> list[dict]:
         return self._export_days("workout", "day, started_at, kind, name, minutes, kcal, distance_m, steps, note, source",
                                  user_id, first, last, demo, "day, COALESCE(started_at, 0), id")
+
+    def export_sleep(self, user_id: int, first: str, last: str, demo: bool) -> list[dict]:
+        return self._export_days("sleep_day", "day, minutes, source", user_id, first, last, demo, "day")
 
     def export_fasts(self, user_id: int, first: str, last: str) -> list[dict]:
         """Fasts that started on a day of the range (local time, like the days of everything else); the open one included."""

@@ -190,7 +190,7 @@ def test_version_2_database_gets_extra_on_entries_without_losing_data(tmp_path):
     store = Store(path)
 
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 19
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 20
     assert con.execute("SELECT name, amount, demo, extra FROM diary_entry").fetchall() == [("Rice", 150, 1, "{}")]
     con.close()
     assert store.entries_between(1, "2026-01-01", "2026-01-31")[0]["extra"] == {}

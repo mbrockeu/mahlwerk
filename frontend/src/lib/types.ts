@@ -466,6 +466,25 @@ type DeltaKey = 'kcal' | 'protein' | 'carbs' | 'fat' | 'sugars' | 'fiber' | 'sal
 
 interface InsightRange { from: string; to: string; days: number; logged_days: number }
 
+export interface InsightSleepGroup {
+  days: number;
+  /** null below `min_days`, so is the rest */
+  kcal: number | null;
+  protein: number | null;
+  /** mean of (kcal - that day's own kcal goal) */
+  kcal_vs_goal: number | null;
+}
+/** Sleep against eating: groups of logged days after a night under 6 h (short) and from 7 h (long); 6-7 h is left out. */
+export interface InsightSleep {
+  nights: number;
+  avg_minutes: number;
+  compared_days: number;
+  middle_days: number;
+  min_days: number;
+  short: InsightSleepGroup;
+  long: InsightSleepGroup;
+}
+
 export interface Insights {
   range: InsightRange;
   first_day?: string | null;
@@ -497,6 +516,8 @@ export interface Insights {
   adherence: Adherence | null;
   micros: InsightMicro[];
   hints: InsightHint[];
+  /** null without a sleep value in the range */
+  sleep?: InsightSleep | null;
 }
 
 export interface NutrientCurve {

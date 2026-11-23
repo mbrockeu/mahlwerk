@@ -21,6 +21,9 @@ EPS = 1e-9
 MIN_LOGGED_DAYS = 7
 MAX_HINTS = 4
 FAST_LOSS_PCT = 1.0  # a loss of more than this percent of the body weight per week gets a hint
+SLEEP_SHORT_BELOW = 360  # minutes: a night under 6 h is "short", from 7 h (420) "normal"; 6-7 h is the middle and left out of the comparison
+SLEEP_LONG_FROM = 420
+SLEEP_MIN_DAYS = 5  # fewer logged days than this in a group: the group is reported with its count but without means
 TREND_HALF_WINDOW = 3  # centred 7-day window
 
 
@@ -36,7 +39,8 @@ adherence_class = analysis.adherence_class  # 'in', 'over' or 'under' for one lo
 def compute(
     first: date, last: date, rows: list[dict], weights: list[dict], goal: "dict | goals.Timeline | None", water: dict[str, int] | None = None,
     *, granularity: str = "auto", light: bool = False, activity: dict[str, dict] | None = None,
-    workouts: list[dict] | None = None, bonus: dict[str, int] | None = None,
+    workouts: list[dict] | None = None, bonus: dict[str, int] | None = None, sleep: dict[str, int] | None = None,
+    today: date | None = None,
 ) -> dict:
     """Build the whole response for the days `first`..`last` (both included).
 
@@ -47,6 +51,9 @@ def compute(
     energy adds to a day's calorie goal (`activity.goal_bonuses`, empty while that setting is off). Every judgement
     against the goal (adherence, calendar, series counts, the expenditure's gap) uses `day_goal_kcal`; the estimate of
     the expenditure itself is unchanged, it measures the total.
+
+    `sleep` maps a day to the minutes slept in the night that ended on its morning; with it the result gets a `sleep` block
+    (see `sleep_summary`; `today`, an unfinished day, stays out of the comparison).
 
     `goal` is the user's goal timeline (or a plain goal that always held): each day is judged against the goal of that day,
     the period's figures (`period_goal`, `goal_kcal`, the protein hints) are means over the logged days. `goal` in the result
@@ -189,6 +196,43 @@ def compute(
         "top_foods": top_foods,
         "micros": micros,
         "hints": hints(ctx),
+        "sleep": sleep_summary({d: m for d, m in (sleep or {}).items() if d in key_set}, logged_days, totals, tl, bonus, today),
+    }
+
+
+def sleep_summary(
+    sleep: dict[str, int], logged_days: list[str], totals: dict[str, dict], tl: "goals.Timeline | None", bonus: dict[str, int],
+    today: date | None,
+) -> dict | None:
+    """Sleep against eating: null without any night in the period. Otherwise the number of nights, the mean sleep and, for the
+    logged days with a sleep value (today excluded, it is not over), two groups: short nights (under 6 h) and normal nights (7 h
+    and more). The 6-7 h days form the middle (`middle_days`) and are not compared. Each group has its day count and, from
+    SLEEP_MIN_DAYS days on, the mean kcal and protein and the mean difference of the kcal to that day's own goal (so that a
+    changed goal does not distort it); below that the means are null. A pattern in the data, not a proof of a cause."""
+    if not sleep:
+        return None
+    key = today.isoformat() if today else None
+    days = [d for d in logged_days if d in sleep and d != key]
+
+    def group(chosen: list[str]) -> dict:
+        full = len(chosen) >= SLEEP_MIN_DAYS
+        return {
+            "days": len(chosen),
+            "kcal": _r(_mean([totals[d]["kcal"] for d in chosen])) if full else None,
+            "protein": _r(_mean([totals[d]["protein"] for d in chosen])) if full else None,
+            "kcal_vs_goal": _r(_mean([totals[d]["kcal"] - goals.kcal_on(tl, bonus, d) for d in chosen])) if full and tl else None,
+        }
+
+    short = [d for d in days if sleep[d] < SLEEP_SHORT_BELOW]
+    long = [d for d in days if sleep[d] >= SLEEP_LONG_FROM]
+    return {
+        "nights": len(sleep),
+        "avg_minutes": round(_mean(list(sleep.values()))),
+        "compared_days": len(days),
+        "middle_days": len(days) - len(short) - len(long),
+        "min_days": SLEEP_MIN_DAYS,
+        "short": group(short),
+        "long": group(long),
     }
 
 

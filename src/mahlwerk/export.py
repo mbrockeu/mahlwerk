@@ -105,6 +105,10 @@ def activity(store: Store, user: dict, first: str, last: str, demo: bool) -> lis
     return store.export_activity(user["id"], first, last, demo)
 
 
+def sleep(store: Store, user: dict, first: str, last: str, demo: bool) -> list[dict]:
+    return store.export_sleep(user["id"], first, last, demo)
+
+
 def workouts(store: Store, user: dict, first: str, last: str, demo: bool) -> list[dict]:
     return [{**w, "started_at": iso_local(w["started_at"])} for w in store.export_workouts(user["id"], first, last, demo)]
 
@@ -219,6 +223,7 @@ def build_zip(store: Store, user: dict, first: str | None, last: str | None, lan
         "diary": diary(store, user, a, b, demo),
         "weight": weight(store, user, a, b, demo),
         "activity": activity(store, user, a, b, demo),
+        "sleep": sleep(store, user, a, b, demo),
         "workouts": workouts(store, user, a, b, demo),
         "water": water(store, user, a, b, demo),
         "fasting": fasting(store, user, a, b),

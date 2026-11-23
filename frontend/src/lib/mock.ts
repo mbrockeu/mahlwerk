@@ -233,6 +233,9 @@ for (let back = 0; back <= 9; back += 1) {
     workoutRows.push({ id: nextWorkoutId++, day: d, started_at: Math.floor(new Date(`${d}T18:00:00`).getTime() / 1000), kind: back === 4 ? 'cycling' : 'running', name: '', minutes: back === 4 ? 70 : 32, kcal: back === 4 ? null : 318, distance_m: back === 4 ? 21000 : 5400, steps: null, note: null, source: 'manual' });
   }
 }
+/** Minutes asleep in the night before day d (mock: every day up to today has a value; short, middle and long nights alternate). */
+const SLEEP_MOCK = [330, 450, 390, 465, 345, 420, 480];
+const sleepOf = (d: string) => (d <= today() ? SLEEP_MOCK[diffDays(d, today()) % SLEEP_MOCK.length] : null);
 const weightFor = (d: string) => { const w = [...weights.keys()].filter((k) => k <= d).sort().pop(); return w ? (weights.get(w) as number) : 75; };
 const workoutOut = (w: (typeof workoutRows)[number]): Workout => {
   const estimated = w.kcal == null;
@@ -519,10 +522,22 @@ function baseInsights(from: string, to: string): Insights {
     const average = agg[n.key].amount / loggedDays.length;
     return { key: n.key, group: n.group, unit: n.unit, nrv: n.nrv, average: Math.round(average * 1000) / 1000, coverage: agg[n.key].coverage, percent_nrv: n.nrv ? r1((average / n.nrv) * 100) : null };
   }).sort((a, b) => b.coverage - a.coverage);
+  // sleep against eating (as the server: logged days with a value, today left out, short < 6 h, long >= 7 h, at least 5 days per group)
+  const nights = dayKeys.map((d) => sleepOf(d)).filter((m): m is number => m != null);
+  const compared = loggedDays.filter((d) => d !== today() && sleepOf(d) != null);
+  const sleepGroup = (ds: string[]) => {
+    const full = ds.length >= 5;
+    return { days: ds.length, kcal: full ? r1(mean(ds.map((d) => totals.get(d)!.kcal))) : null, protein: full ? r1(mean(ds.map((d) => totals.get(d)!.protein))) : null,
+      kcal_vs_goal: full && goal ? r1(mean(ds.map((d) => totals.get(d)!.kcal - dayGoalKcal(d)!))) : null };
+  };
+  const shortNights = compared.filter((d) => sleepOf(d)! < 360);
+  const longNights = compared.filter((d) => sleepOf(d)! >= 420);
+  const sleep = nights.length ? { nights: nights.length, avg_minutes: Math.round(mean(nights)), compared_days: compared.length, middle_days: compared.length - shortNights.length - longNights.length,
+    min_days: 5, short: sleepGroup(shortNights), long: sleepGroup(longNights) } : null;
   return {
     range: { from, to, days: dayKeys.length, logged_days: loggedDays.length }, goal: clone(goal), period_goal: periodGoal,
     goal_kcal: periodGoal ? r1(loggedDays.length ? mean(loggedDays.map((d) => dayGoalKcal(d)!)) : periodGoal.kcal) : null, steps_goal: periodGoal?.steps ?? 8000, days, averages, by_weekday, by_meal,
-    top_foods: { kcal: top('kcal'), sugars: top('sugars'), salt: top('salt'), protein: top('protein') }, weight, adherence, micros, hints: hints.slice(0, 4),
+    top_foods: { kcal: top('kcal'), sugars: top('sugars'), salt: top('salt'), protein: top('protein') }, weight, adherence, micros, hints: hints.slice(0, 4), sleep,
   };
 }
 

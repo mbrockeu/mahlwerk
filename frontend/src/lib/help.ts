@@ -32,6 +32,7 @@ export const INSIGHTS_HELP: HelpEntry[] = [
   { id: 'expenditure', tab: 'body', target: 'h-exp', title: 'expTitle',
     needs: ['expMissing_short_period', 'expMissing_few_logged_days', 'expMissing_few_weights', 'expMissing_weights_not_spread'] },
   { id: 'activity', tab: 'body', target: 'h-act', title: 'insActTitle' },
+  { id: 'sleep', tab: 'body', target: 'h-sleep', title: 'sleepTitle', needs: ['sleepNeeds'] },
   { id: 'nutrients', tab: 'nutrients', target: 'h-nut', title: 'nutTitle' },
   { id: 'micros', tab: 'nutrients', target: 'h-micros', title: 'microsTitle' },
   { id: 'top', tab: 'foods', target: 'h-top', title: 'topTitle' },

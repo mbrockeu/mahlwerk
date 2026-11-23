@@ -163,7 +163,7 @@ def test_version_16_database_gets_the_drink_column(tmp_path):
     con.close()
     store = Store(path)
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 19
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 20
     assert "drink" in {r[1] for r in con.execute("PRAGMA table_info(food)")}
     con.close()
     assert store.get_food(7)["drink"] is None and store.get_food(7)["data"]["name"] == "Kaffee"

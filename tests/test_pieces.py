@@ -96,7 +96,7 @@ def test_version_14_database_gets_the_piece_columns_without_losing_data(tmp_path
     con.close()
     store = Store(path)
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 19
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 20
     assert {"piece_label", "piece_grams"} <= {r[1] for r in con.execute("PRAGMA table_info(food)")}
     con.close()
     food = store.get_food(7)
