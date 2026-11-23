@@ -9,6 +9,8 @@
   import TickBar from '../components/TickBar.svelte';
   import WaterRow from '../components/WaterRow.svelte';
   import WeightTile from '../components/WeightTile.svelte';
+  import MacroSheet from '../components/MacroSheet.svelte';
+  import type { MacroKey } from '../lib/macroBreakdown';
   import { api, ApiError } from '../lib/api';
   import { fromDay, isoWeek, shiftDay, shortDate, weekdayLong } from '../lib/date';
   import { defaultHome, move, normalize, sameHome, toggleHidden, toggleWide, type HomeCard, type HomeId } from '../lib/homeLayout';
@@ -64,10 +66,11 @@
   // the quiet card "what still fits today" (profile setting; only on today: it counts against what is left of today)
   const ideasOn = $derived(ui.me?.settings?.suggestions !== false && ui.day === ui.today);
 
+  let macroOpen = $state<MacroKey | null>(null);
   const tiles = $derived([
-    { key: 'protein', label: t('protein'), value: data?.totals.protein ?? 0, goal: goal?.protein ?? null, bg: '#ff8a1f', track: '#b85e0c', radius: '28px 28px 8px 28px' },
-    { key: 'carbs', label: t('carbs'), value: data?.totals.carbs ?? 0, goal: goal?.carbs ?? null, bg: '#c9f04a', track: '#8fb022', radius: '28px' },
-    { key: 'fat', label: t('fat'), value: data?.totals.fat ?? 0, goal: goal?.fat ?? null, bg: '#ffb8d6', track: '#d97aa6', radius: '28px 28px 28px 8px' },
+    { key: 'protein' as MacroKey, label: t('protein'), value: data?.totals.protein ?? 0, goal: goal?.protein ?? null, bg: '#ff8a1f', track: '#b85e0c', radius: '28px 28px 8px 28px' },
+    { key: 'carbs' as MacroKey, label: t('carbs'), value: data?.totals.carbs ?? 0, goal: goal?.carbs ?? null, bg: '#c9f04a', track: '#8fb022', radius: '28px' },
+    { key: 'fat' as MacroKey, label: t('fat'), value: data?.totals.fat ?? 0, goal: goal?.fat ?? null, bg: '#ffb8d6', track: '#d97aa6', radius: '28px 28px 28px 8px' },
   ]);
 
   const mealName = (m: Meal) => t(m);
@@ -334,12 +337,12 @@
             {:else if id === 'macros'}
           <section class="tiles" data-tour="macros">
             {#each tiles as tile}
-              <div class="tile" style="background:{tile.bg}; border-radius:{tile.radius}">
+              <button type="button" class="tile" style="background:{tile.bg}; border-radius:{tile.radius}" onclick={() => (macroOpen = tile.key)}
+                aria-label={t('mbOpenAria', { macro: tile.label, value: tile.goal ? t('macroAria', { value: fmt(tile.value), goal: fmt(tile.goal) }) : t('macroAriaNoGoal', { value: fmt(tile.value) }) })}>
                 <span class="tl">{tile.label}</span>
                 <span class="tv display">{fmt(tile.value)}{#if tile.goal}<span class="mono unit"> /{fmt(tile.goal)} g</span>{:else}<span class="mono unit"> g</span>{/if}</span>
-                <TickBar value={tile.value} goal={tile.goal} track={tile.track}
-                  label={tile.goal ? t('macroAria', { value: fmt(tile.value), goal: fmt(tile.goal) }) : t('macroAriaNoGoal', { value: fmt(tile.value) })} />
-              </div>
+                <TickBar value={tile.value} goal={tile.goal} track={tile.track} label="" />
+              </button>
             {/each}
           </section>
             {:else if id === 'fasting'}
@@ -432,6 +435,7 @@
     </div>
   {/if}
 </div>
+{#if macroOpen && data}<MacroSheet day={data} start={macroOpen} onclose={() => (macroOpen = null)} />{/if}
 
 <style>
   .titleline { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
@@ -464,6 +468,7 @@
   .nogoal p { font-size: 14px; color: var(--quiet); margin-top: 2px; }
 
   .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  button.tile { border: 0; font: inherit; text-align: left; cursor: pointer; width: 100%; }
   .tile { height: 96px; color: var(--on-tile); padding: 12px 12px 12px 14px; display: flex; flex-direction: column; justify-content: space-between; min-width: 0; }
   .tl { font-size: 12px; font-weight: 600; white-space: nowrap; letter-spacing: -0.01em; }
   .tv { font-size: 26px; line-height: 1; white-space: nowrap; }

@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Tap a macro tile on the day view to see where that day's protein, carbs or fat came from: per meal with share and the
+  foods that gave the most, with tabs to switch between the three.
 
 - Goal history: a changed goal counts from today on, earlier days keep the goal they had. Calendar, adherence, calorie chart
   (the goal line steps where the goal changed), weekly review, badges and the day view of a past day judge each day against
