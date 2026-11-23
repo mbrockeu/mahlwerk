@@ -589,9 +589,11 @@
   .info-btn:hover, .info-btn[aria-expanded='true'] { background: var(--track); color: var(--text); }
   .info-box { background: var(--stone); border-radius: 16px 16px 16px 6px; padding: 10px 14px; font-size: 13px; line-height: 1.45; }
   .rowb { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 18px; }
-  .tabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; border-bottom: 2px solid var(--hairline); margin: 2px -4px 0; padding: 0 4px; }
+  /* only sideways: overflow-y hidden and the hairline as an inset shadow, so the underline of the active tab no longer pokes out
+     below and makes the bar scroll up and down on a phone */
+  .tabs { display: flex; gap: 4px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none; box-shadow: inset 0 -2px 0 var(--hairline); margin: 2px -4px 0; padding: 0 4px; }
   .tabs::-webkit-scrollbar { display: none; }
-  .tab { flex-shrink: 0; min-height: 46px; padding: 0 14px; font-size: 15px; font-weight: 600; color: var(--quiet); border-bottom: 3px solid transparent; margin-bottom: -2px; }
+  .tab { flex-shrink: 0; min-height: 46px; padding: 0 14px; font-size: 15px; font-weight: 600; color: var(--quiet); border-bottom: 3px solid transparent; }
   .tab.on { color: var(--text); border-bottom-color: var(--text); }
   .tab:hover { color: var(--text); }
   .chip.help { gap: 7px; padding: 0 14px 0 8px; }
