@@ -61,7 +61,7 @@ _classify("public", "POST /auth/setup", "POST /auth/login", "POST /auth/logout",
           "POST /me/demo-view/enter", "POST /me/demo-view/leave")
 _classify(
     "read",
-    "GET /auth/status", "GET /me", "GET /me/imports", "GET /weights", "GET /catalog", "GET /foods", "GET /foods/recent", "GET /foods/{food_id}",
+    "GET /auth/status", "GET /me", "GET /me/goal/history", "GET /me/imports", "GET /weights", "GET /catalog", "GET /foods", "GET /foods/recent", "GET /foods/{food_id}",
     "GET /diary/{day}", "GET /history", "GET /insights", "GET /insights/nutrient", "GET /insights/foods", "GET /insights/foods/detail",
     "GET /review", "GET /nutrients", "GET /templates", "GET /recipes/suggestions", "GET /recipes", "GET /recipes/{recipe_id}",
     "GET /recipe-groups", "GET /badges", "GET /fasting", "GET /summary/today", "GET /activity", "GET /images/{digest}/{size}",

@@ -79,7 +79,7 @@ def test_version_8_database_gets_activity_without_losing_data(tmp_path):
     store = Store(path)
 
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 18
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 19
     tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert {"activity_day", "workout"} <= tables
     assert con.execute("SELECT name, amount FROM diary_entry").fetchall() == [("Rice", 150)]
@@ -110,7 +110,7 @@ def test_version_17_database_gets_the_body_columns(tmp_path):
     con.close()
     store = Store(path)
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 18
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 19
     assert con.execute("SELECT kg, health, body_fat_pct, lean_kg, body_fat_health, lean_health FROM weight").fetchall() == [
         (80.5, 1, None, None, 0, 0)]
     con.close()

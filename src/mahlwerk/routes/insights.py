@@ -67,7 +67,7 @@ def get_insights(
     uid = user["id"]
     first, last = resolve_period(store, uid, from_, to, range)
     f, t = first.isoformat(), last.isoformat()
-    goal = store.get_goal(uid)
+    goal = store.goal_timeline(uid)  # every day against its own goal
     settings = store.get_settings(uid)
 
     def period(a: str, b: str) -> dict:
@@ -110,9 +110,11 @@ def get_nutrient(
     first, last = resolve_period(store, uid, from_, to, None)
     rows = store.entries_between(uid, first.isoformat(), last.isoformat())
     resolved = analysis.resolve_granularity(granularity, (last - first).days + 1)
-    goal = store.get_goal(uid)
+    tl = store.goal_timeline(uid)
     curve = analysis.nutrient_series(rows, key, first, last, resolved)
-    logged = len({r["day"] for r in rows})
+    logged_days = sorted({r["day"] for r in rows})
+    logged = len(logged_days)
+    goal = tl.period(logged_days, last.isoformat()) if tl else None  # the mean goal of the logged days
     known = [s for s in curve["series"] if s["average"] is not None and s["coverage"] > 0]
     return {
         "key": key, "group": info["group"], "unit": info["unit"], "nrv": info["nrv"],
@@ -186,4 +188,4 @@ def get_review(
             if monday <= datetime.fromtimestamp(b["earned_at"]).date() <= sunday:
                 codes.append(b["code"])
     bonus = activity.goal_bonuses(store, uid, (monday - timedelta(days=7)).isoformat(), sunday.isoformat())
-    return review.compute(monday, rows, store.get_goal(uid), codes, bonus)
+    return review.compute(monday, rows, store.goal_timeline(uid), codes, bonus)

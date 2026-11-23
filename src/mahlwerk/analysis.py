@@ -7,8 +7,7 @@ Everything here is a pure function of data already loaded (one query per request
 import calendar as _calendar
 from datetime import date, timedelta
 
-from . import nutrients
-from .activity import day_goal_kcal
+from . import goals, nutrients
 from .nutrition import scale
 
 GRANULARITIES = ("day", "week", "month")
@@ -96,12 +95,14 @@ def month_keys(first: date, last: date) -> list[str]:
 
 
 def build_series(
-    first: date, last: date, granularity: str, totals: dict, logged: set, water: dict, weight_by_day: dict, goal: dict | None,
+    first: date, last: date, granularity: str, totals: dict, logged: set, water: dict, weight_by_day: dict, goal,
     bonus: dict | None = None, activity: dict | None = None, workout_minutes: dict | None = None,
 ) -> list[dict]:
     """One item per section: means per logged day (nutrients), per day with a value (water, weight, steps, active
     energy), the workout minutes, the mean goal and the adherence counts. `bonus` is the per-day addition to the
-    calorie goal (see activity.goal_bonuses), `activity` the activity rows by day."""
+    calorie goal (see activity.goal_bonuses), `activity` the activity rows by day. `goal` is a goal timeline or a plain goal
+    (goals.timeline): every day counts against its own goal, so the mean goal of a section steps where the goal changed."""
+    tl = goals.timeline(goal)
     activity, workout_minutes = activity or {}, workout_minutes or {}
     result = []
     for start, end, label in buckets(first, last, granularity):
@@ -120,27 +121,28 @@ def build_series(
         item["steps"] = round(_mean(steps)) if steps else None
         item["active_kcal"] = round(_mean(energy)) if energy else None
         item["workout_minutes"] = _r(sum(workout_minutes.get(d, 0) for d in days))
-        item["goal_kcal"] = _r(_mean(day_goal_kcal(goal["kcal"], bonus, d) for d in got)) if goal and got else (
-            goal["kcal"] if goal else None)
+        item["goal_kcal"] = _r(_mean(goals.kcal_on(tl, bonus, d) for d in got)) if tl and got else (
+            tl.on(days[-1])["kcal"] if tl else None)
         counts = {"in": 0, "over": 0, "under": 0}
-        if goal:
+        if tl:
             for d in got:
-                counts[adherence_class(totals[d]["kcal"], day_goal_kcal(goal["kcal"], bonus, d))] += 1
+                counts[adherence_class(totals[d]["kcal"], goals.kcal_on(tl, bonus, d))] += 1
         item.update(in_range_days=counts["in"], over_days=counts["over"], under_days=counts["under"])
         result.append(item)
     return result
 
 
-def build_calendar(day_keys: list[str], totals: dict, logged: set, goal: dict | None, bonus: dict | None = None) -> list[dict]:
-    """State per day for a heat map: none (nothing logged), no_goal, under, in_range or over."""
+def build_calendar(day_keys: list[str], totals: dict, logged: set, goal, bonus: dict | None = None) -> list[dict]:
+    """State per day for a heat map: none (nothing logged), no_goal, under, in_range or over (against that day's goal)."""
+    tl = goals.timeline(goal)
     out = []
     for d in day_keys:
         if d not in logged:
             state = "none"
-        elif not goal:
+        elif not tl:
             state = "no_goal"
         else:
-            state = {"in": "in_range", "over": "over", "under": "under"}[adherence_class(totals[d]["kcal"], day_goal_kcal(goal["kcal"], bonus, d))]
+            state = {"in": "in_range", "over": "over", "under": "under"}[adherence_class(totals[d]["kcal"], goals.kcal_on(tl, bonus, d))]
         out.append({"day": d, "state": state})
     return out
 

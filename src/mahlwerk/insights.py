@@ -6,8 +6,8 @@ See docs/api-v1.md (GET /api/v1/insights) for the response shape.
 
 from datetime import date, timedelta
 
-from . import analysis, nutrients
-from .activity import DEFAULT_STEPS_GOAL, day_goal_kcal
+from . import analysis, goals, nutrients
+from .activity import DEFAULT_STEPS_GOAL
 from .models import MEALS
 from .nutrition import scale
 
@@ -34,7 +34,7 @@ adherence_class = analysis.adherence_class  # 'in', 'over' or 'under' for one lo
 
 
 def compute(
-    first: date, last: date, rows: list[dict], weights: list[dict], goal: dict | None, water: dict[str, int] | None = None,
+    first: date, last: date, rows: list[dict], weights: list[dict], goal: "dict | goals.Timeline | None", water: dict[str, int] | None = None,
     *, granularity: str = "auto", light: bool = False, activity: dict[str, dict] | None = None,
     workouts: list[dict] | None = None, bonus: dict[str, int] | None = None,
 ) -> dict:
@@ -47,7 +47,12 @@ def compute(
     energy adds to a day's calorie goal (`activity.goal_bonuses`, empty while that setting is off). Every judgement
     against the goal (adherence, calendar, series counts, the expenditure's gap) uses `day_goal_kcal`; the estimate of
     the expenditure itself is unchanged, it measures the total.
+
+    `goal` is the user's goal timeline (or a plain goal that always held): each day is judged against the goal of that day,
+    the period's figures (`period_goal`, `goal_kcal`, the protein hints) are means over the logged days. `goal` in the result
+    is the current goal.
     """
+    tl = goals.timeline(goal)
     n_days = (last - first).days + 1
     day_keys = [(first + timedelta(days=i)).isoformat() for i in range(n_days)]
     key_set = set(day_keys)
@@ -127,16 +132,17 @@ def compute(
         ]
 
     adherence = None
-    if goal:
+    if tl:
         counts = {"in": 0, "over": 0, "under": 0}
         for d in logged_days:
-            counts[adherence_class(totals[d]["kcal"], day_goal_kcal(goal["kcal"], bonus, d))] += 1
+            counts[adherence_class(totals[d]["kcal"], goals.kcal_on(tl, bonus, d))] += 1
         adherence = {"in_range_days": counts["in"], "over_days": counts["over"], "under_days": counts["under"]}
 
     weight = weight_summary(weights)
-    # the goal that counts, as a mean over the days with entries (the plain goal unless active energy is added)
+    # the goal that counts, as a mean over the days with entries (each day's goal, plus its active energy when that is added)
+    period_goal = tl.period(logged_days, day_keys[-1]) if tl else None
     goal_kcal = (
-        _r(_mean([day_goal_kcal(goal["kcal"], bonus, d) for d in logged_days]) if logged_days else goal["kcal"]) if goal else None
+        _r(_mean([goals.kcal_on(tl, bonus, d) for d in logged_days]) if logged_days else period_goal["kcal"]) if tl else None
     )
     resolved = analysis.resolve_granularity(granularity, n_days)
     weight_points = [((date.fromisoformat(w["day"]) - first).days, w["kg"]) for w in weights]
@@ -145,9 +151,10 @@ def compute(
     expenditure, missing = analysis.estimate_expenditure(n_days, n_logged, averages["kcal"], weight_points, goal_kcal, body)
     result = {
         "range": {"from": first.isoformat(), "to": last.isoformat(), "days": n_days, "logged_days": n_logged},
-        "goal": goal,
+        "goal": tl.current if tl else None,
+        "period_goal": period_goal,
         "goal_kcal": goal_kcal,
-        "steps_goal": (goal or {}).get("steps", DEFAULT_STEPS_GOAL),
+        "steps_goal": (period_goal or {}).get("steps", DEFAULT_STEPS_GOAL),
         "averages": averages,
         "weight": weight,
         "composition": comp,
@@ -157,12 +164,12 @@ def compute(
         "expenditure": expenditure,
         "expenditure_missing": missing,
         "granularity": resolved,
-        "series": analysis.build_series(first, last, resolved, totals, logged, water, weight_by_day, goal, bonus, activity, workout_minutes),
+        "series": analysis.build_series(first, last, resolved, totals, logged, water, weight_by_day, tl, bonus, activity, workout_minutes),
     }
     if light:
         return result
     ctx = Context(
-        logged_days=logged_days, totals=totals, averages=averages, goal=goal, by_meal=by_meal,
+        logged_days=logged_days, totals=totals, averages=averages, goal=period_goal, by_meal=by_meal, timeline=tl,
         adherence=adherence, foods=foods, grand=grand, composition=comp, rate=result["rate"],
     )
     detailed = n_days <= analysis.DETAIL_DAYS  # beyond this the per-day lists would only bloat the response
@@ -173,10 +180,10 @@ def compute(
              "water_ml": water.get(d), "steps": activity[d]["steps"] if d in activity else None,
              "active_kcal": activity[d]["active_kcal"] if d in activity else None,
              "workout_minutes": _r(workout_minutes.get(d, 0.0)),
-             "goal_kcal": day_goal_kcal(goal["kcal"], bonus, d) if goal else None}
+             "goal_kcal": goals.kcal_on(tl, bonus, d)}
             for d in day_keys
         ] if detailed else [],
-        "calendar": analysis.build_calendar(day_keys, totals, logged, goal, bonus) if detailed else [],
+        "calendar": analysis.build_calendar(day_keys, totals, logged, tl, bonus) if detailed else [],
         "by_weekday": by_weekday,
         "by_meal": by_meal,
         "top_foods": top_foods,
@@ -346,7 +353,7 @@ def hint_protein_goal_met(c: Context) -> dict | None:
     """Positive: the protein goal was reached on at least 70 % of the days with entries."""
     if not c.goal or c.goal["protein"] <= 0 or not c.logged_days:
         return None
-    hit = sum(1 for d in c.logged_days if c.totals[d]["protein"] >= c.goal["protein"] - EPS)
+    hit = sum(1 for d in c.logged_days if (g := c.timeline.on(d)["protein"]) > 0 and c.totals[d]["protein"] >= g - EPS)
     pct = hit / len(c.logged_days)
     if pct >= 0.7:
         return {"code": "protein_goal_met", "params": {"days": hit, "of": len(c.logged_days), "pct": round(pct * 100)}}

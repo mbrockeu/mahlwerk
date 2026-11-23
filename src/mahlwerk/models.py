@@ -146,6 +146,11 @@ class Goal(BaseModel):
         description="daily steps goal; goals saved earlier read 8000, a PUT without it keeps the saved value")
 
 
+class GoalChange(Goal):
+    valid_from: str = Field(description="the first day this goal counts for (YYYY-MM-DD); 0001-01-01 = since the start")
+    changed_at: int | None = Field(description="when it was saved (unix seconds); null for a goal from before the history existed")
+
+
 class DemoInfo(BaseModel):
     available: bool = Field(description="the server has demo data switched on (MAHLWERK_DEMO_DATA)")
     entries: int = Field(description="demo diary entries of this user")
@@ -827,13 +832,23 @@ class InsightPrevious(BaseModel):
     series: list[InsightSeriesPoint] = Field(default_factory=list)
 
 
+class PeriodGoal(BaseModel):
+    kcal: float
+    protein: float
+    carbs: float
+    fat: float
+    water_ml: int = 2000
+    steps: int = activity.DEFAULT_STEPS_GOAL
+
+
 class Insights(BaseModel):
     range: InsightRange
     first_day: str | None = Field(None, description="first day with an entry of this user, null without any")
     last_day: str | None = None
     granularity: Literal["day", "week", "month"] = "day"
-    goal: Goal | None
-    goal_kcal: float | None = Field(None, description="mean calorie goal of the logged days (differs from goal.kcal only with add_to_goal)")
+    goal: Goal | None = Field(description="the current goal")
+    period_goal: PeriodGoal | None = Field(None, description="the mean of the goals of the logged days (each day keeps the goal it had)")
+    goal_kcal: float | None = Field(None, description="mean calorie goal of the logged days, with the active energy when add_to_goal is on")
     steps_goal: int = activity.DEFAULT_STEPS_GOAL
     days: list[InsightDay]
     series: list[InsightSeriesPoint] = Field(default_factory=list)

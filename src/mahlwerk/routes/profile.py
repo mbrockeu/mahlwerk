@@ -10,7 +10,7 @@ from ..webhooks import emit
 from ..db import DEFAULT_WATER_GOAL, Store
 from ..catalog import Catalog
 from ..deps import get_catalog, get_store
-from ..models import DemoAccountInfo, DemoCreated, DemoIn, DemoRemoved, Goal, ImportBatch, ImportRemoved, Me, NamePatch, Settings, SettingsPatch, Weight, WeightIn
+from ..models import DemoAccountInfo, DemoCreated, DemoIn, DemoRemoved, Goal, GoalChange, ImportBatch, ImportRemoved, Me, NamePatch, Settings, SettingsPatch, Weight, WeightIn
 from .diary import parse_day, today
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(current_user)])
@@ -117,9 +117,16 @@ def set_goal(goal: Goal, request: Request, user: dict = Depends(current_user), s
         data["water_ml"] = saved.get("water_ml", DEFAULT_WATER_GOAL)
     if "steps" not in goal.model_fields_set:  # nor the steps goal
         data["steps"] = saved.get("steps", activity.DEFAULT_STEPS_GOAL)
-    store.set_goal(user["id"], data)
-    emit(request, user, "goal.changed", data)
+    valid_from = today().isoformat()  # a change counts from today on; earlier days keep the goal they had
+    store.set_goal(user["id"], data, valid_from=valid_from)
+    emit(request, user, "goal.changed", {**data, "valid_from": valid_from})
     return Goal(**data)
+
+
+@router.get("/me/goal/history", response_model=list[GoalChange])
+def goal_history(user: dict = Depends(current_user), store: Store = Depends(get_store)) -> list[dict]:
+    """Every goal change, newest first; `valid_from` 0001-01-01 means "since the start". Empty without a goal."""
+    return store.goal_history(user["id"])
 
 
 @router.patch("/me/settings", response_model=Settings)

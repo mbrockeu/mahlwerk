@@ -73,6 +73,11 @@ def goal(store: Store, user: dict) -> dict | None:
     return store.get_goal(user["id"])
 
 
+def goal_history(store: Store, user: dict) -> list[dict]:
+    """The goal changes, oldest first; `valid_from` 0001-01-01 = since the start."""
+    return [{**g, "changed_at": iso_local(g["changed_at"])} for g in reversed(store.goal_history(user["id"]))]
+
+
 def settings(store: Store, user: dict) -> dict:
     return store.get_settings(user["id"])
 
@@ -209,6 +214,7 @@ def build_zip(store: Store, user: dict, first: str | None, last: str | None, lan
         "range": {"from": first, "to": last},
         "account": account(store, user),
         "goal": goal(store, user),
+        "goal_history": goal_history(store, user),
         "settings": settings(store, user),
         "diary": diary(store, user, a, b, demo),
         "weight": weight(store, user, a, b, demo),

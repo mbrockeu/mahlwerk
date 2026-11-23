@@ -17,8 +17,9 @@
     DEFAULT_GLASSES, GLASS_LIMITS, KCAL_LIMITS, MACRO_LIMITS, PRESETS, STEPS_LIMITS, WATER_LIMITS, alignCarbs, clamp, macroGap, macroShares, matchingPreset, presetMacros,
     type MacroKey, type PresetId,
   } from '../lib/goals';
-  import type { ImportBatch } from '../lib/types';
-  import { fmt, fmtDate, langPref, setLangPref, t, type LangPref } from '../lib/i18n';
+  import { GOAL_SINCE_START, type GoalChange, type ImportBatch } from '../lib/types';
+  import { fromDay } from '../lib/date';
+  import { fmt, fmtDate, lang, langPref, setLangPref, t, type LangPref } from '../lib/i18n';
   import { setThemePref, theme, type ThemePref } from '../lib/theme.svelte';
   import { guard, navigate } from '../lib/router.svelte';
   import { auth, changed, loadMe, resetTour, switchDemo, toast, ui, viewingDemo } from '../lib/store.svelte';
@@ -100,6 +101,9 @@
   let fastError = $state('');
   let fastOther = $state('');
   let imports = $state<ImportBatch[]>([]);
+  let goalHistory = $state<GoalChange[]>([]);
+  const histFrom = (h: GoalChange) => (h.valid_from === GOAL_SINCE_START ? t('gpHistSince')
+    : t('gpHistFrom', { date: new Intl.DateTimeFormat(lang, { day: 'numeric', month: 'numeric', year: 'numeric' }).format(fromDay(h.valid_from)) }));
   let importConfirm = $state<number | null>(null);
   let importBusy = $state(false);
   let importError = $state('');
@@ -123,6 +127,7 @@
       fastOther = FAST_PRESETS.includes(fasting.target_hours) ? '' : String(fasting.target_hours);
       loaded = true;
       try { imports = await api.imports(); } catch { imports = []; }
+      try { goalHistory = await api.goalHistory(); } catch { goalHistory = []; }
     })();
     return () => { guard.block = null; window.removeEventListener('beforeunload', beforeUnload); };
   });
@@ -358,6 +363,7 @@
             <button type="button" class="step plus" onclick={() => setKcal(draft.kcal + 50)} aria-label={t('gpPlusAria', { n: 50 })}>{t('gpPlus', { n: 50 })}</button>
           </div>
           <p class="hint">{t('gpScaleHint')}</p>
+          <p class="hint">{t('gpFromToday')}</p>
         </section>
 
         <!-- macros -->
@@ -464,6 +470,22 @@
             <button type="button" class="add" onclick={() => setSteps(draft.steps + STEPS_LIMITS.step)} aria-label={t('gpStepsMore')}>+ {STEPS_LIMITS.step}</button>
           </div>
         </section>
+
+        {#if goalHistory.length}
+          <!-- goal history: newest first, each goal from its day on -->
+          <section class="card hist" aria-labelledby="gp-hist">
+            <h2 id="gp-hist" class="micro quiet">{t('gpHistTitle')}</h2>
+            <ul>
+              {#each goalHistory as h, i (h.valid_from)}
+                <li aria-label={t('gpHistAria', { from: histFrom(h), kcal: fmt(h.kcal), p: fmt(h.protein), c: fmt(h.carbs), f: fmt(h.fat) })}>
+                  <span class="when">{histFrom(h)}{#if i === 0 && goalHistory.length > 1}<small class="now">{t('gpHistNow')}</small>{/if}</span>
+                  <span class="mono kc">{fmt(h.kcal)} kcal</span>
+                  <span class="mono mac" aria-hidden="true">{fmt(h.protein)} · {fmt(h.carbs)} · {fmt(h.fat)} g</span>
+                </li>
+              {/each}
+            </ul>
+          </section>
+        {/if}
 
         <button type="button" class="calc-open" onclick={() => (calcOpen = true)}>
           <span><strong>{t('gpCalcOpen')}</strong><small>Mifflin-St Jeor</small></span>
@@ -768,6 +790,13 @@
   /* settings cards */
   .card { background: var(--paper); border-radius: 28px 28px 28px 8px; padding: 18px 16px 18px 18px; display: flex; flex-direction: column; gap: 12px; }
   .card .note { padding-right: 2px; }
+  .hist ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+  .hist li { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 8px 0; border-top: 1px solid var(--hairline); }
+  .hist li:first-child { border-top: 0; padding-top: 0; }
+  .hist .when { font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
+  .hist .now { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 99px; background: var(--track); color: var(--text); }
+  .hist .kc { text-align: right; font-weight: 600; }
+  .hist .mac { grid-column: 1 / -1; font-size: 12.5px; color: var(--quiet); }
   .conn { display: flex; flex-direction: column; gap: 10px; }
   .ct { font-family: var(--f-display); font-weight: 800; font-size: 20px; letter-spacing: -0.02em; margin: 0; }
   .batch { display: flex; flex-direction: column; gap: 10px; }

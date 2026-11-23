@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/v1", dependencies=[Depends(current_user)])
 
 
 def _out(store: Store, uid: int, day: str, ml: int) -> WaterDay:
-    return WaterDay(ml=ml, goal_ml=(store.get_goal(uid) or {}).get("water_ml", 2000), drinks_ml=day_drinks_ml(store, uid, day))
+    return WaterDay(ml=ml, goal_ml=(store.goal_on(uid, day) or {}).get("water_ml", 2000), drinks_ml=day_drinks_ml(store, uid, day))
 
 
 def _changed(request: Request, user: dict, day: str, water: WaterDay) -> WaterDay:

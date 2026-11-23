@@ -79,7 +79,7 @@ def suggestions(
     queries however many recipes there are."""
     iso = parse_day(day).isoformat() if day else today().isoformat()
     uid = user["id"]
-    goal = store.get_goal(uid)
+    goal = store.goal_on(uid, iso)  # the goal of that day (a past day keeps its own)
     eaten = total([scale(r["per_100"], r["amount"]) for r in store.entries_on(uid, iso)])
     goal_kcal = None
     if goal:

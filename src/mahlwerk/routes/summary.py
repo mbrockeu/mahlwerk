@@ -23,7 +23,7 @@ def summary_today(user: dict = Depends(current_user), store: Store = Depends(get
     day = today().isoformat()
     rows = store.entries_on(uid, day)
     sums = total([scale(r["per_100"], r["amount"]) for r in rows])
-    goal = store.get_goal(uid)
+    goal = store.goal_on(uid, day)
     today_activity = day_activities(store, uid, day, day, goal)[day]
     kcal_goal = round(activity.day_goal_kcal(goal["kcal"], {day: today_activity.bonus_kcal}, day)) if goal else None
     eaten = r1(sums["kcal"])

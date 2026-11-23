@@ -118,6 +118,16 @@ export interface Goal {
   steps: number;
 }
 
+/** "Since the start": the goal that held before the history existed (or one an import brought). */
+export const GOAL_SINCE_START = '0001-01-01';
+
+/** One goal change (GET /me/goal/history, newest first): the goal from `valid_from` on until the next change. */
+export interface GoalChange extends Goal {
+  valid_from: string;
+  /** Unix seconds; null for a goal saved before the history existed. */
+  changed_at: number | null;
+}
+
 const WORKOUT_KINDS = [
   'walking', 'running', 'cycling', 'hiking', 'swimming', 'strength', 'yoga', 'pilates', 'crosstrainer', 'stairs', 'circuit',
   'squash', 'bowling', 'dancing', 'football', 'tennis', 'skiing', 'rowing', 'other',
@@ -461,8 +471,11 @@ export interface Insights {
   first_day?: string | null;
   last_day?: string | null;
   granularity?: Granularity;
+  /** The current goal. */
   goal: Goal | null;
-  /** Mean calorie goal of the logged days; differs from goal.kcal only when active energy is added. */
+  /** Mean of the logged days' goals (each day keeps the goal it had); null without a goal. */
+  period_goal?: Goal | null;
+  /** Mean calorie goal of the logged days; differs from period_goal.kcal only when active energy is added. */
   goal_kcal?: number | null;
   steps_goal?: number;
   days: InsightDay[];

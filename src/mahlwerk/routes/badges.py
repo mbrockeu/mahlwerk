@@ -21,7 +21,7 @@ def _playful(store: Store, user_id: int) -> bool:
 def _overview(request: Request, user: dict, store: Store) -> dict:
     """Bring the badges up to date; every badge reached by this call is announced to the user's webhooks."""
     before = {b["code"] for b in store.badges_earned(user["id"])}
-    result = badges.overview(store, user["id"], store.get_goal(user["id"]))
+    result = badges.overview(store, user["id"], store.goal_timeline(user["id"]))
     for item in result["earned"]:
         if item["code"] not in before:
             emit(request, user, "badge.earned", {"code": item["code"], "earned_at": item["earned_at"]})

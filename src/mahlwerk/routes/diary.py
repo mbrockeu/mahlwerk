@@ -135,7 +135,7 @@ def get_day(day: str, user: dict = Depends(current_user), store: Store = Depends
         streak += 1
         cursor -= timedelta(days=1)
 
-    goal = store.get_goal(uid)
+    goal = store.goal_on(uid, day)  # a past day keeps the goal it had
     sums = total([_scaled(r) for r in todays])
     extra_totals = nutrients.aggregate((_scaled(r)["kcal"] or 0, _scaled_extra(r)) for r in todays)
     todays_activity = day_activities(store, uid, day, day, goal)[day]

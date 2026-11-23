@@ -2,7 +2,7 @@
 
 from datetime import date, timedelta
 
-from . import activity
+from . import activity, goals
 from .db import Store
 from .models import DayActivity, Workout
 
@@ -18,11 +18,15 @@ def workout_out(row: dict, weight_kg: float | None) -> Workout:
     )
 
 
-def day_activities(store: Store, uid: int, first: str, last: str, goal: dict | None = None, settings: dict | None = None) -> dict[str, DayActivity]:
-    """The activity of every day in the range (also those without any data), by day."""
+def day_activities(store: Store, uid: int, first: str, last: str, goal=None, settings: dict | None = None) -> dict[str, DayActivity]:
+    """The activity of every day in the range (also those without any data), by day. `goal` (a goal timeline or plain goal,
+    default the user's timeline) gives each day its steps goal."""
     settings = store.get_settings(uid) if settings is None else settings
     add = activity.add_to_goal_on(settings)
-    steps_goal = (goal or store.get_goal(uid) or {}).get("steps", activity.DEFAULT_STEPS_GOAL)
+    tl = goals.timeline(goal) if goal is not None else store.goal_timeline(uid)
+
+    def steps_goal(day: str) -> int:
+        return (tl.on(day) if tl else {}).get("steps", activity.DEFAULT_STEPS_GOAL)
     rows = store.activity_between(uid, first, last)
     by_day: dict[str, list[dict]] = {}
     for w in store.workouts_between(uid, first, last):
@@ -40,7 +44,7 @@ def day_activities(store: Store, uid: int, first: str, last: str, goal: dict | N
         day = cursor.isoformat()
         row = rows.get(day)
         out[day] = DayActivity(
-            steps=row["steps"] if row else None, steps_goal=steps_goal,
+            steps=row["steps"] if row else None, steps_goal=steps_goal(day),
             active_kcal=row["active_kcal"] if row else None, distance_m=row["distance_m"] if row else None,
             source=row["source"] if row else None, bonus_kcal=activity.goal_bonus(row["active_kcal"], add) if row else 0,
             workouts=[workout_out(w, weight(day)) for w in by_day.get(day, [])],

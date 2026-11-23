@@ -7,6 +7,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Goal history: a changed goal counts from today on, earlier days keep the goal they had. Calendar, adherence, calorie chart
+  (the goal line steps where the goal changed), weekly review, badges and the day view of a past day judge each day against
+  its own goal; period figures (mean protein against the goal, the macro tiles, the nutrient curve) use the mean of the logged
+  days' goals. The goal page says so and lists the changes ("since the start" for the goal from before). New
+  `GET /api/v1/me/goal/history`, `period_goal` in `GET /api/v1/insights`, `valid_from` in the `goal.changed` webhook and
+  `goal_history` in the export. Schema version 19 (`goal_history`); the migration makes every existing goal the goal since the
+  start, so no past verdict changes. A goal from a Yazio import counts since the start and goes with the import.
 - Evaluation in five groups: tabs Overview (key figures, weekly review, notes, calendar), Eating (calories, macros,
   weekdays, meals), Body (weight and balance, estimated expenditure, activity), Nutrients and Foods, one at a time; the
   tab is in the address (`#/history?tab=body`) and the period holds for all of them. Replaces the jump buttons; the help

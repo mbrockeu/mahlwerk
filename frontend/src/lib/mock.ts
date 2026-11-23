@@ -11,7 +11,8 @@ import { buildCookidoo } from './mockCookidoo';
 import { buildWebPages, interpretWeb, normaliseWeb, NO_RECIPE } from './mockWeb';
 import { rank as rankSuggestions } from './mockSuggest';
 import { mockMatch } from './mockIngredients';
-import type { DemoAccountState, ActivitySource, DayActivity, Workout, WorkoutIn, WorkoutKind, AccessToken, BadgeCode, Badges, Connector, RefreshState, Webhook, WebhookDelivery, WebhookIn, CatalogItem, Day, Entry, Extra, Food, FoodIn, Goal, ImportBatch, InsightFood, InsightDay, InsightMicro, Insights, NutrientCurve, Section, FoodStat, Meal, NutrientInfo, Per100, Recipe, RecipeGroup, RecipeIn, Review, SuggestFocus, Template, TopMetric } from './types';
+import type { DemoAccountState, ActivitySource, DayActivity, Workout, WorkoutIn, WorkoutKind, AccessToken, BadgeCode, Badges, Connector, RefreshState, Webhook, WebhookDelivery, WebhookIn, CatalogItem, Day, Entry, Extra, Food, FoodIn, Goal, GoalChange, ImportBatch, InsightFood, InsightDay, InsightMicro, Insights, NutrientCurve, Section, FoodStat, Meal, NutrientInfo, Per100, Recipe, RecipeGroup, RecipeIn, Review, SuggestFocus, Template, TopMetric } from './types';
+import { GOAL_SINCE_START } from './types';
 
 // the made-up foods follow the language of the interface: L(German, English)
 const L = (de: string, en: string) => (lang === 'en' ? en : de);
@@ -129,6 +130,21 @@ const adoptedBasics = new Map<string, number>();
 let catalogUpdatedAt = Math.floor(Date.now() / 1000) - 3 * 86400;
 
 let goal: Goal | null = new URLSearchParams(location.search).get('mock') === 'nogoal' ? null : { kcal: 2100, protein: 120, carbs: 230, fat: 70, water_ml: 2000, steps: 8000 };
+// the goal over time, newest first (like GET /me/goal/history): a change counts from its day on, earlier days keep theirs
+let goalHistory: GoalChange[] = goal ? [{ ...goal, valid_from: GOAL_SINCE_START, changed_at: null }] : [];
+/** Set the current goal and record it from today on (a second change on the same day overwrites that day). */
+function saveGoal(g: Goal) {
+  goal = g;
+  const day = today();
+  goalHistory = [{ ...g, valid_from: day, changed_at: Math.floor(Date.now() / 1000) }, ...goalHistory.filter((h) => h.valid_from !== day)]
+    .sort((a, b) => (a.valid_from < b.valid_from ? 1 : -1));
+}
+/** The goal that counted on day d: the latest change on or before it, before the first change the oldest. */
+function goalOn(d: string): Goal | null {
+  if (!goal) return null;
+  const h = goalHistory.find((x) => x.valid_from <= d) ?? goalHistory[goalHistory.length - 1];
+  return h ? { kcal: h.kcal, protein: h.protein, carbs: h.carbs, fat: h.fat, water_ml: h.water_ml, steps: h.steps } : goal;
+}
 
 let nextEntryId = 1;
 const entries = new Map<string, Entry[]>();
@@ -224,10 +240,20 @@ const workoutOut = (w: (typeof workoutRows)[number]): Workout => {
 };
 const bonusOf = (d: string) => (activitySettings.add_to_goal ? Math.round(activity.get(d)?.active_kcal ?? 0) : 0);
 const goalFor = (d: string, kcal: number) => kcal + bonusOf(d);
+/** The mean goal of the given days (kcal and macros to one decimal, whole water and steps); without days the goal of `fallback`. */
+function periodGoalOf(days: string[], fallback: string): Goal | null {
+  if (!goal) return null;
+  if (!days.length) return goalOn(fallback);
+  const gs = days.map((d) => goalOn(d)!);
+  const m = (k: keyof Goal) => gs.reduce((a, g) => a + g[k], 0) / gs.length;
+  return { kcal: Math.round(m('kcal') * 10) / 10, protein: Math.round(m('protein') * 10) / 10, carbs: Math.round(m('carbs') * 10) / 10, fat: Math.round(m('fat') * 10) / 10, water_ml: Math.round(m('water_ml')), steps: Math.round(m('steps')) };
+}
+/** The kcal goal that counts on day d (that day's goal plus its active energy when added), null without a goal. */
+const dayGoalKcal = (d: string) => { const g = goalOn(d); return g ? goalFor(d, g.kcal) : null; };
 function dayActivity(d: string): DayActivity {
   const a = activity.get(d);
   return {
-    steps: a?.steps ?? null, steps_goal: goal?.steps ?? 8000, active_kcal: a?.active_kcal ?? null, distance_m: a?.distance_m ?? null,
+    steps: a?.steps ?? null, steps_goal: goalOn(d)?.steps ?? 8000, active_kcal: a?.active_kcal ?? null, distance_m: a?.distance_m ?? null,
     source: a?.source ?? null, bonus_kcal: bonusOf(d), workouts: workoutRows.filter((w) => w.day === d).sort((x, y) => (x.started_at ?? 0) - (y.started_at ?? 0)).map(workoutOut),
   };
 }
@@ -262,7 +288,7 @@ function createDemo(days: number) {
     if (!weights.has(d) && back % 7 < 5) { weights.set(d, Math.round((78 + back * 0.03) * 10) / 10); demoWeightDays.add(d); nWeights += 1; }
   }
   const goalSet = goal === null;
-  if (goalSet) goal = { kcal: 2100, protein: 120, carbs: 230, fat: 70, water_ml: 2000, steps: 8000 };
+  if (goalSet) saveGoal({ kcal: 2100, protein: 120, carbs: 230, fat: 70, water_ml: 2000, steps: 8000 });
   return { entries: nEntries, weights: nWeights, water: nWater, activity: nActivity, workouts: nWorkouts, foods: 0, goal_set: goalSet };
 }
 function deleteDemo() {
@@ -327,8 +353,8 @@ function dayView(day: string): Day {
     return { day: d, logged: es.length > 0, kcal: es.reduce((s, e) => s + num(e.kcal), 0) };
   });
   return {
-    day, goal: clone(goal), kcal_goal: goal ? goalFor(day, goal.kcal) : null, activity: dayActivity(day),
-    water: { ml: water.get(day) ?? 0, goal_ml: goal?.water_ml ?? 2000, drinks_ml: waterDrinksOn ? Math.round(list.reduce((s, e) => s + (e.unit === 'ml' ? e.amount * 0.9 : 0), 0)) : 0 },
+    day, goal: clone(goalOn(day)), kcal_goal: dayGoalKcal(day), activity: dayActivity(day),
+    water: { ml: water.get(day) ?? 0, goal_ml: goalOn(day)?.water_ml ?? 2000, drinks_ml: waterDrinksOn ? Math.round(list.reduce((s, e) => s + (e.unit === 'ml' ? e.amount * 0.9 : 0), 0)) : 0 },
     totals: { kcal: sum('kcal'), protein: sum('protein'), carbs: sum('carbs'), fat: sum('fat'), saturated_fat: 0, sugars: 0, fiber: 0, salt: 0 },
     extra_totals: microTotals(list), meals, streak, week, yesterday,
   };
@@ -438,7 +464,7 @@ function baseInsights(from: string, to: string): Insights {
     const t0 = totals.get(d);
     return { day: d, logged: !!t0, ...Object.fromEntries(NUT.map((n) => [n, r1(t0?.[n] ?? 0)])), weight: weights.get(d) ?? null, water_ml: water.get(d) ?? null,
       steps: activity.get(d)?.steps ?? null, active_kcal: activity.get(d)?.active_kcal ?? null,
-      workout_minutes: workoutRows.filter((w) => w.day === d).reduce((a, w) => a + w.minutes, 0), goal_kcal: goal ? goalFor(d, goal.kcal) : null } as Insights['days'][number];
+      workout_minutes: workoutRows.filter((w) => w.day === d).reduce((a, w) => a + w.minutes, 0), goal_kcal: dayGoalKcal(d) } as Insights['days'][number];
   });
   const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
   const averages = Object.fromEntries(NUT.map((n) => [n, r1(mean(loggedDays.map((d) => totals.get(d)![n])))])) as Insights['averages'];
@@ -467,18 +493,20 @@ function baseInsights(from: string, to: string): Insights {
     weight.body_fat_trend = weight.body_fat.map((f) => ({ day: f.day, pct: r1(mean(weight.body_fat.filter((o) => Math.abs((fromDay(o.day).getTime() - fromDay(f.day).getTime()) / 86400000) <= 3).map((o) => o.pct))) }));
   }
   let adherence: Insights['adherence'] = null;
+  // the mean goal of the logged days (each day keeps the goal it had); without logged days the goal of `to`
+  const periodGoal = periodGoalOf(loggedDays, to);
   if (goal) {
     adherence = { in_range_days: 0, over_days: 0, under_days: 0 };
     for (const d of loggedDays) {
       const k = totals.get(d)!.kcal;
-      const gk = goalFor(d, goal.kcal);
+      const gk = dayGoalKcal(d)!;
       if (k > gk * 1.1) adherence.over_days += 1; else if (k < gk * 0.9) adherence.under_days += 1; else adherence.in_range_days += 1;
     }
   }
   const hints: Insights['hints'] = [];
   if (loggedDays.length < 7) hints.push({ code: 'few_days', params: { logged_days: loggedDays.length, min: 7 } });
   else {
-    if (goal && averages.protein < goal.protein * 0.8) hints.push({ code: 'low_protein', params: { avg: Math.round(averages.protein), goal: goal.protein, pct: Math.round((averages.protein / goal.protein) * 100) } });
+    if (periodGoal && periodGoal.protein > 0 && averages.protein < periodGoal.protein * 0.8) hints.push({ code: 'low_protein', params: { avg: Math.round(averages.protein), goal: Math.round(periodGoal.protein), pct: Math.round((averages.protein / periodGoal.protein) * 100) } });
     if (averages.fiber < 25) hints.push({ code: 'low_fiber', params: { avg: Math.round(averages.fiber), top: [] } });
     if (averages.sugars > 50) hints.push({ code: 'high_sugar', params: { avg: Math.round(averages.sugars), top: top('sugars')[0]?.name ?? null } });
     if (averages.salt > 6) hints.push({ code: 'high_salt', params: { avg: r1(averages.salt) } });
@@ -492,8 +520,8 @@ function baseInsights(from: string, to: string): Insights {
     return { key: n.key, group: n.group, unit: n.unit, nrv: n.nrv, average: Math.round(average * 1000) / 1000, coverage: agg[n.key].coverage, percent_nrv: n.nrv ? r1((average / n.nrv) * 100) : null };
   }).sort((a, b) => b.coverage - a.coverage);
   return {
-    range: { from, to, days: dayKeys.length, logged_days: loggedDays.length }, goal: clone(goal),
-    goal_kcal: goal ? r1(loggedDays.length ? mean(loggedDays.map((d) => goalFor(d, goal!.kcal))) : goal.kcal) : null, steps_goal: goal?.steps ?? 8000, days, averages, by_weekday, by_meal,
+    range: { from, to, days: dayKeys.length, logged_days: loggedDays.length }, goal: clone(goal), period_goal: periodGoal,
+    goal_kcal: periodGoal ? r1(loggedDays.length ? mean(loggedDays.map((d) => dayGoalKcal(d)!)) : periodGoal.kcal) : null, steps_goal: periodGoal?.steps ?? 8000, days, averages, by_weekday, by_meal,
     top_foods: { kcal: top('kcal'), sugars: top('sugars'), salt: top('salt'), protein: top('protein') }, weight, adherence, micros, hints: hints.slice(0, 4),
   };
 }
@@ -529,7 +557,7 @@ function sectionsOf(from: string, to: string, g: 'day' | 'week' | 'month', base:
     const ac = ds.filter((d) => d.active_kcal != null).map((d) => d.active_kcal as number);
     out.push({
       steps: st.length ? Math.round(mean(st)) : null, active_kcal: ac.length ? Math.round(mean(ac)) : null,
-      workout_minutes: ds.reduce((a, d) => a + d.workout_minutes, 0), goal_kcal: goalK ? Math.round(mean(got.map((d) => d.goal_kcal ?? goalK))) || goalK : null,
+      workout_minutes: ds.reduce((a, d) => a + d.workout_minutes, 0), goal_kcal: goalK ? (got.length ? Math.round(mean(got.map((d) => d.goal_kcal ?? goalK))) : goalOn(ds[ds.length - 1].day)?.kcal ?? goalK) : null,
       start: sp.start, end: sp.end, label_key: sp.label, logged_days: got.length, days: diffDays(sp.start, sp.end) + 1,
       kcal: m('kcal'), protein: m('protein'), carbs: m('carbs'), fat: m('fat'), sugars: m('sugars'), fiber: m('fiber'), salt: m('salt'), saturated_fat: m('saturated_fat'),
       water_ml: wa.length ? Math.round(mean(wa)) : null, weight: ws.length ? Math.round(mean(ws) * 100) / 100 : null,
@@ -578,8 +606,8 @@ function insights(from: string, to: string, g: string | null = null, compare = f
   }
   if (base.range.logged_days >= 7) {
     const extra: Insights['hints'] = [];
-    if (composition && base.goal && composition.lean_change_kg <= -0.5 && base.averages.protein < base.goal.protein) {
-      extra.push({ code: 'lean_loss', params: { lean: r1(Math.abs(composition.lean_change_kg)), avg: Math.round(base.averages.protein), goal: Math.round(base.goal.protein) } });
+    if (composition && base.period_goal && composition.lean_change_kg <= -0.5 && base.averages.protein < base.period_goal!.protein) {
+      extra.push({ code: 'lean_loss', params: { lean: r1(Math.abs(composition.lean_change_kg)), avg: Math.round(base.averages.protein), goal: Math.round(base.period_goal!.protein) } });
     }
     if (rate && rate.pct_per_week < -1) extra.push({ code: 'fast_loss', params: { pct: r1(Math.abs(rate.pct_per_week)), kg: r1(Math.abs(rate.kg_per_week)) } });
     const lp = base.hints.findIndex((h) => h.code === 'low_protein');
@@ -593,7 +621,7 @@ function insights(from: string, to: string, g: string | null = null, compare = f
     const byComposition = composition != null;
     const kcal = base.averages.kcal - (byComposition ? fatSlope * 9400 + leanSlope * 1800 : slope * 7700);
     const half = Math.max(0.1 * Math.abs(kcal), 1);
-    expenditure = { method: byComposition ? 'composition' : 'rule', kcal: Math.round(kcal), low: Math.round(kcal - half), high: Math.round(kcal + half), intake: Math.round(base.averages.kcal), weight_change_kg: Math.round(slope * base.range.days * 100) / 100, kg_per_week: Math.round(slope * 7 * 100) / 100, days: base.range.days, weigh_ins: n, goal_gap: base.goal ? Math.round(base.goal.kcal - kcal) : null };
+    expenditure = { method: byComposition ? 'composition' : 'rule', kcal: Math.round(kcal), low: Math.round(kcal - half), high: Math.round(kcal + half), intake: Math.round(base.averages.kcal), weight_change_kg: Math.round(slope * base.range.days * 100) / 100, kg_per_week: Math.round(slope * 7 * 100) / 100, days: base.range.days, weigh_ins: n, goal_gap: base.goal_kcal != null ? Math.round(base.goal_kcal - kcal) : null };
   }
   const detailed = base.range.days <= 370;
   const goalK = base.goal?.kcal;
@@ -638,7 +666,7 @@ function mockNutrient(key: string, from: string, to: string, g: string): Nutrien
   });
   return {
     key, group: core.includes(key) ? 'core' : info?.group ?? 'other', unit: core.includes(key) ? (key === 'kcal' ? 'kcal' : 'g') : info?.unit ?? 'g', nrv: info?.nrv ?? null,
-    goal: goal && ['kcal', 'protein', 'carbs', 'fat'].includes(key) ? (goal as unknown as Record<string, number>)[key] : null,
+    goal: goal && ['kcal', 'protein', 'carbs', 'fat'].includes(key) ? (base.period_goal as unknown as Record<string, number>)[key] : null,
     range: base.range, granularity: gran, series, has_data: series.some((p) => p.average != null && p.coverage > 0),
   };
 }
@@ -691,8 +719,8 @@ function badgeProgress(): Record<BadgeCode, [number, number]> {
   return {
     first_entry: cap(days.length, 1), streak_3: cap(streak, 3), streak_7: cap(streak, 7), streak_30: cap(streak, 30), streak_100: cap(streak, 100),
     scans_10: cap(foodIds.size, 10), scans_50: cap(foodIds.size, 50), first_recipe: cap(recipes.length, 1),
-    protein_week: cap(g ? hit((d) => (totals.get(d)?.protein ?? 0) >= g.protein * 0.9) : 0, 5),
-    balanced_week: cap(g ? hit((d) => { const k = totals.get(d)?.kcal ?? 0; return k >= g.kcal * 0.9 && k <= g.kcal * 1.1; }) : 0, 5),
+    protein_week: cap(g ? hit((d) => { const p = goalOn(d)!.protein; return p > 0 && (totals.get(d)?.protein ?? 0) >= p * 0.9; }) : 0, 5),
+    balanced_week: cap(g ? hit((d) => { const k = totals.get(d)?.kcal ?? 0, gk = dayGoalKcal(d)!; return k >= gk * 0.9 && k <= gk * 1.1; }) : 0, 5),
     fiber_5: cap(hit((d) => (totals.get(d)?.fiber ?? 0) >= 25), 5), weigh_in_4: cap(longestRun(weeks), 4),
     full_day_10: cap(days.filter((d) => ['breakfast', 'lunch', 'dinner'].every((m) => (entries.get(d) ?? []).some((e) => e.meal === m))).length, 10),
   };
@@ -718,7 +746,7 @@ function reviewView(week: string): Review {
     const v = dayView(day);
     const logged = (entries.get(day) ?? []).length > 0;
     const k = v.totals.kcal ?? 0;
-    const gk = g ? goalFor(day, g.kcal) : 0;
+    const gk = dayGoalKcal(day) ?? 0;
     const state = logged && g ? (k > gk * 1.1 ? 'over' : k < gk * 0.9 ? 'under' : 'in') as 'in' | 'over' | 'under' : null;
     return { day, logged, kcal: Math.round(k), state };
   });
@@ -732,7 +760,8 @@ function reviewView(week: string): Review {
   if (n < 4) res.improve = { code: 'few_days', params: { days: n } };
   else if (g) {
     const p = days.filter((d) => d.logged).reduce((s, d) => s + (dayView(d.day).totals.protein ?? 0), 0) / n;
-    if (p < g.protein * 0.8) res.improve = { code: 'low_protein', params: { avg: Math.round(p), goal: Math.round(g.protein), pct: Math.round((p / g.protein) * 100) } };
+    const gp = periodGoalOf(days.filter((d) => d.logged).map((d) => d.day), monday)!.protein;
+    if (gp > 0 && p < gp * 0.8) res.improve = { code: 'low_protein', params: { avg: Math.round(p), goal: Math.round(gp), pct: Math.round((p / gp) * 100) } };
   }
   return res;
 }
@@ -1384,7 +1413,8 @@ export async function mockRequest(method: string, path: string, body?: unknown, 
     if (existing) return clone(existing);
     return clone(addFood(item.name, item.brand, item.per_100, { extra: item.extra, code: item.code, source: 'openfoodfacts', unit: item.unit, quantity: item.quantity, serving_size: item.serving_size, serving_quantity: item.serving_quantity }));
   }
-  if (p === 'me/goal' && method === 'PUT') { goal = { ...clone(body as Goal), water_ml: (body as Goal).water_ml ?? goal?.water_ml ?? 2000, steps: (body as Goal).steps ?? goal?.steps ?? 8000 }; return clone(goal); }
+  if (p === 'me/goal' && method === 'PUT') { saveGoal({ ...clone(body as Goal), water_ml: (body as Goal).water_ml ?? goal?.water_ml ?? 2000, steps: (body as Goal).steps ?? goal?.steps ?? 8000 }); return clone(goal); }
+  if (p === 'me/goal/history' && method === 'GET') return goal ? clone(goalHistory) : [];
   if ((r = m(/^activity\/(\d{4}-\d{2}-\d{2})$/)) && method === 'PUT') {
     const b = body as Partial<Pick<ActivityRow, 'steps' | 'active_kcal' | 'distance_m'>>;
     const row: ActivityRow = { ...(activity.get(r[1]) ?? { steps: null, active_kcal: null, distance_m: null }), ...b, source: 'manual' };
@@ -1411,7 +1441,7 @@ export async function mockRequest(method: string, path: string, body?: unknown, 
     const ml = Math.max(0, Math.min(10000, next));
     water.set(r[1], ml);
     demoWaterDays.delete(r[1]);
-    return { ml, goal_ml: goal?.water_ml ?? 2000 };
+    return { ml, goal_ml: goalOn(r[1])?.water_ml ?? 2000 };
   }
 
   if (p.startsWith('fasting')) {

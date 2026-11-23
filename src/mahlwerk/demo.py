@@ -237,6 +237,6 @@ def generate(store: Store, user_id: int, today: date, days: int, marker: str = "
     if not (entries or weights or water or activity or workouts):
         return {"entries": 0, "weights": 0, "water": 0, "activity": 0, "workouts": 0, "foods": 0, "goal_set": False}
     if goal_set:
-        store.set_goal(user_id, DEFAULT_GOAL)
+        store.set_goal(user_id, DEFAULT_GOAL, valid_from=today.isoformat())
     return {**store.add_demo(user_id, FOODS, entries, weights, water, activity, workouts, marker=marker), "goal_set": goal_set}
 

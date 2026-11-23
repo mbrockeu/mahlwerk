@@ -5,17 +5,18 @@ import secrets
 import sqlite3
 import time
 from contextlib import contextmanager
+from datetime import date
 from pathlib import Path
 
 
-from . import activity
+from . import activity, goals
 
 
 def _json(value) -> str:
     """json.dumps that refuses NaN and infinity: such a value in a food would turn every day sum that uses it into null."""
     return json.dumps(value, allow_nan=False)
 
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 BASE_TABLES = """
 CREATE TABLE user (
@@ -380,7 +381,25 @@ ALTER TABLE weight ADD COLUMN lean_kg REAL;
 ALTER TABLE weight ADD COLUMN body_fat_health INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE weight ADD COLUMN lean_health INTEGER NOT NULL DEFAULT 0;
 """
-TABLES = BASE_TABLES + V4_TABLES + V5_TABLES + V6_TABLES + V7_TABLES + V8_TABLES + V9_TABLES + V10_TABLES + V11_TABLES + V12_TABLES + V13_TABLES + V14_TABLES + V15_TABLES + V16_TABLES + V17_TABLES + V18_TABLES
+# Version 19: the goal over time (see goals.py). One row per user and day on which the goal was set; a later save on the same
+# day overwrites it. `valid_from` '0001-01-01' (goals.SINCE_START) means "always". `goal` stays the current goal; a user has
+# history rows exactly while a goal row exists, and the newest history row equals the goal row. `changed_at` is unix time,
+# NULL for the rows the migration made.
+V19_TABLES = """
+CREATE TABLE goal_history (
+    user_id     INTEGER NOT NULL REFERENCES user(id),
+    valid_from  TEXT NOT NULL,
+    kcal        INTEGER NOT NULL,
+    protein     REAL NOT NULL,
+    carbs       REAL NOT NULL,
+    fat         REAL NOT NULL,
+    water_ml    INTEGER,
+    steps       INTEGER,
+    changed_at  INTEGER,
+    PRIMARY KEY (user_id, valid_from)
+);
+"""
+TABLES = BASE_TABLES + V4_TABLES + V5_TABLES + V6_TABLES + V7_TABLES + V8_TABLES + V9_TABLES + V10_TABLES + V11_TABLES + V12_TABLES + V13_TABLES + V14_TABLES + V15_TABLES + V16_TABLES + V17_TABLES + V18_TABLES + V19_TABLES
 DEFAULT_WATER_GOAL = 2000
 MAX_WATER_ML = 10000
 MAX_SQL_PARAMS = 900  # bound parameters per statement: far below the limit of older SQLite builds (999)
@@ -438,6 +457,12 @@ MIGRATE_16_TO_17 = V17_TABLES
 
 # Version 17 had no body composition; four columns are new, nothing existing changes.
 MIGRATE_17_TO_18 = V18_TABLES
+
+# Version 18 had no goal history: every existing goal becomes the goal that always counted, so no past day changes its verdict.
+MIGRATE_18_TO_19 = V19_TABLES + """
+INSERT INTO goal_history (user_id, valid_from, kcal, protein, carbs, fat, water_ml, steps, changed_at)
+    SELECT user_id, '0001-01-01', kcal, protein, carbs, fat, water_ml, steps, NULL FROM goal;
+"""
 
 # Demo foods are ordinary `food` rows whose JSON `data` carries "demo": true (test-data mode of the own account) or
 # "demo_account": true (the built-in demo account; these are left out of the product list of everybody else).
@@ -537,7 +562,8 @@ class Store:
                 script += (MIGRATE_10_TO_11 if version < 11 else "") + (MIGRATE_11_TO_12 if version < 12 else "")
                 script += (MIGRATE_12_TO_13 if version < 13 else "") + (MIGRATE_13_TO_14 if version < 14 else "")
                 script += (MIGRATE_14_TO_15 if version < 15 else "") + (MIGRATE_15_TO_16 if version < 16 else "")
-                script += (MIGRATE_16_TO_17 if version < 17 else "") + MIGRATE_17_TO_18
+                script += (MIGRATE_16_TO_17 if version < 17 else "") + (MIGRATE_17_TO_18 if version < 18 else "")
+                script += MIGRATE_18_TO_19
             script += f"PRAGMA user_version = {SCHEMA_VERSION}; COMMIT;"
             try:
                 con.executescript(script)
@@ -568,16 +594,25 @@ class Store:
                     "household": bool(row["household"]) if household is None else household, "disabled": bool(row["disabled"])}
 
 
+    @staticmethod
+    def _goal(row) -> dict:
+        """A row of `goal` or `goal_history` as the API shows a goal (water and steps NULL read as their defaults)."""
+        return {"kcal": row["kcal"], "protein": row["protein"], "carbs": row["carbs"], "fat": row["fat"],
+                "water_ml": row["water_ml"] or DEFAULT_WATER_GOAL, "steps": row["steps"] or activity.DEFAULT_STEPS_GOAL}
+
     def get_goal(self, user_id: int) -> dict | None:
+        """The current goal (the one that counts from today on)."""
         with self._connect() as con:
             row = con.execute(
                 "SELECT kcal, protein, carbs, fat, water_ml, steps FROM goal WHERE user_id = ?", (user_id,)
             ).fetchone()
-        if row is None:
-            return None
-        return {**dict(row), "water_ml": row["water_ml"] or DEFAULT_WATER_GOAL, "steps": row["steps"] or activity.DEFAULT_STEPS_GOAL}
+        return None if row is None else self._goal(row)
 
-    def set_goal(self, user_id: int, goal: dict) -> None:
+    def set_goal(self, user_id: int, goal: dict, valid_from: str | None = None) -> None:
+        """Set the current goal and record it in the history from `valid_from` on (the caller's today; default the server's).
+        Earlier days keep the goal they had; a second save on the same day overwrites that day's row."""
+        values = {"user_id": user_id, "water_ml": DEFAULT_WATER_GOAL, "steps": activity.DEFAULT_STEPS_GOAL, **goal,
+                  "valid_from": valid_from or date.today().isoformat(), "changed_at": int(time.time())}
         with self._connect() as con:
             con.execute(
                 "INSERT INTO goal (user_id, kcal, protein, carbs, fat, water_ml, steps) "
@@ -585,8 +620,42 @@ class Store:
                 "ON CONFLICT(user_id) DO UPDATE SET kcal = excluded.kcal, protein = excluded.protein, "
                 "carbs = excluded.carbs, fat = excluded.fat, water_ml = excluded.water_ml, steps = excluded.steps, "
                 "import_id = NULL",
-                {"user_id": user_id, "water_ml": DEFAULT_WATER_GOAL, "steps": activity.DEFAULT_STEPS_GOAL, **goal},
+                values,
             )
+            self._record_goal(con, values)
+
+    @staticmethod
+    def _record_goal(con, values: dict) -> None:
+        con.execute(
+            "INSERT INTO goal_history (user_id, valid_from, kcal, protein, carbs, fat, water_ml, steps, changed_at) "
+            "VALUES (:user_id, :valid_from, :kcal, :protein, :carbs, :fat, :water_ml, :steps, :changed_at) "
+            "ON CONFLICT(user_id, valid_from) DO UPDATE SET kcal = excluded.kcal, protein = excluded.protein, "
+            "carbs = excluded.carbs, fat = excluded.fat, water_ml = excluded.water_ml, steps = excluded.steps, "
+            "changed_at = excluded.changed_at",
+            values,
+        )
+
+    def goal_history(self, user_id: int) -> list[dict]:
+        """The goal changes, newest first: {valid_from, changed_at, **goal}. Empty without a goal."""
+        with self._connect() as con:
+            if con.execute("SELECT 1 FROM goal WHERE user_id = ?", (user_id,)).fetchone() is None:
+                return []
+            rows = con.execute("SELECT * FROM goal_history WHERE user_id = ? ORDER BY valid_from DESC", (user_id,)).fetchall()
+        return [{"valid_from": r["valid_from"], "changed_at": r["changed_at"], **self._goal(r)} for r in rows]
+
+    def goal_timeline(self, user_id: int) -> goals.Timeline | None:
+        """The goal of every day (see goals.py), None without a goal. A goal without history rows (only a hand-made database)
+        counts as one that always held."""
+        current = self.get_goal(user_id)
+        if current is None:
+            return None
+        rows = [(r["valid_from"], {k: r[k] for k in goals.KEYS}) for r in self.goal_history(user_id)]
+        return goals.Timeline(rows or [(goals.SINCE_START, current)])
+
+    def goal_on(self, user_id: int, day: str) -> dict | None:
+        """The goal that counted on `day`, None without a goal."""
+        tl = self.goal_timeline(user_id)
+        return tl.on(day) if tl else None
 
     # accounts and sign-in sessions of MAHLWERK_AUTH=local
 
@@ -1778,7 +1847,7 @@ class Store:
 
     # every table with a `user_id` column; a test compares this list with the schema so that a new table cannot be forgotten
     USER_TABLES = ("diary_entry", "goal", "weight", "template", "user_setting", "badge_earned", "water", "fast", "import_batch",
-                   "access_token", "webhook", "activity_day", "workout", "auth_session", "oidc_identity", "secret")
+                   "access_token", "webhook", "activity_day", "workout", "auth_session", "oidc_identity", "secret", "goal_history")
 
     def demo_account_id(self) -> int | None:
         """The id of the demo account (the setting points at the user row with the reserved name), or None. Also while it is
@@ -1941,6 +2010,9 @@ class Store:
                     "VALUES (:user_id, :kcal, :protein, :carbs, :fat, :water_ml, :steps, :batch)",
                     {"steps": None, **plan["goal"], "user_id": user_id, "batch": batch_id},
                 ).rowcount
+                if goal:  # the user had no goal: the imported one counts for every day, the imported past included
+                    self._record_goal(con, {"steps": None, "water_ml": None, **plan["goal"], "user_id": user_id,
+                                            "valid_from": goals.SINCE_START, "changed_at": now})
             activity = 0
             for a in plan.get("activity", []):
                 activity += con.execute(
@@ -2032,6 +2104,8 @@ class Store:
             weights = con.execute("DELETE FROM weight WHERE import_id = ?", (batch_id,)).rowcount
             water = con.execute("DELETE FROM water WHERE import_id = ?", (batch_id,)).rowcount
             goal = con.execute("DELETE FROM goal WHERE import_id = ?", (batch_id,)).rowcount
+            if goal:  # untouched since the import, so its history is only the imported row
+                con.execute("DELETE FROM goal_history WHERE user_id = ?", (row["user_id"],))
             activity = con.execute("DELETE FROM activity_day WHERE import_id = ?", (batch_id,)).rowcount
             workouts = con.execute("DELETE FROM workout WHERE import_id = ?", (batch_id,)).rowcount
             doomed = [

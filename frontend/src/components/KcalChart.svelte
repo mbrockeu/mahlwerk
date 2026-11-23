@@ -6,8 +6,10 @@
 
   // Calories per section (day, week or month): bars are the mean per logged day. The goal band stays, a second series
   // (outline) shows the period before. Click / Enter opens a section: zooms in, or opens the day view for single days.
-  let { series, previous = null, goal, gran, onzoom }:
-    { series: Section[]; previous?: Section[] | null; goal: Goal | null; gran: Granularity; onzoom: (s: Section) => void } = $props();
+  // With `stepped` the goal line and band follow each section's own goal (`goal_kcal`): a changed goal shows as a step, earlier
+  // sections keep the goal they had. Without it (active energy added: every day differs) they stay flat at `goal.kcal`.
+  let { series, previous = null, goal, gran, onzoom, stepped = false }:
+    { series: Section[]; previous?: Section[] | null; goal: Goal | null; gran: Granularity; onzoom: (s: Section) => void; stepped?: boolean } = $props();
 
   let width = $state(320);
   const H = $derived(width > 700 ? 300 : 214);
@@ -17,9 +19,14 @@
   const n = $derived(series.length);
   const got = $derived(series.filter((s) => s.logged_days > 0));
   const prevAt = (i: number) => (previous && previous[i] && previous[i].logged_days > 0 ? previous[i] : null);
-  const maxVal = $derived(Math.max(...series.map((s) => s.kcal), ...(previous ?? []).map((s) => s.kcal), goal ? goal.kcal * 1.2 : 0, 100));
+  // the goal of each section for the line and band: its own (stepped) or the one of the whole range
+  const levels = $derived(goal ? series.map((s) => (stepped ? (s.goal_kcal ?? goal.kcal) : goal.kcal)) : []);
+  const maxVal = $derived(Math.max(...series.map((s) => s.kcal), ...(previous ?? []).map((s) => s.kcal), goal ? goal.kcal * 1.2 : 0, ...levels.map((l) => l * 1.2), 100));
   const y = (v: number) => PT + plotH - (v / maxVal) * plotH;
   const step = $derived(plotW / Math.max(n, 1));
+  const lastLevel = $derived(levels.length ? levels[levels.length - 1] : (goal?.kcal ?? 0));
+  // one path through the sections' levels: a horizontal piece per section, a vertical piece where the goal changes
+  const goalPath = $derived(levels.length ? levels.map((l, i) => (i ? `V${y(l)}H${PX + step * (i + 1)}` : `M${PX} ${y(l)}H${PX + step}`)).join('') : '');
   const bw = $derived(Math.max(1.5, Math.min(step * (step < 14 ? 0.62 : 0.7), 30)));
   const cx = (i: number) => PX + step * (i + 0.5);
   const multiYear = $derived(n > 0 && diffDays(series[0].start, series[n - 1].end) > 366);
@@ -93,7 +100,13 @@
   <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
   <svg {width} height={H} viewBox="0 0 {width} {H}" role="group" aria-label="{aria}. {t('chartKeys')} {t('zoomHint')}" tabindex="0" onkeydown={key} onblur={() => (sel = null)}>
     <path d="M{PX} {y(0)}H{width - PX}" stroke="var(--hairline)" stroke-width="2" />
-    {#if goal}
+    {#if goal && stepped && n}
+      {#each levels as l, i (i)}
+        <rect x={PX + step * i} y={y(l * 1.1)} width={step} height={y(l * 0.9) - y(l * 1.1)} fill="var(--bar)" opacity="0.16" />
+      {/each}
+      <path d={goalPath} fill="none" stroke="var(--text)" stroke-width="2" stroke-dasharray="7 4" />
+      <text x={width - PX - 2} y={y(lastLevel * 1.1) - 5} text-anchor="end" class="lab halo">{t('goalLine', { n: fmt(Math.round(lastLevel)) })} kcal</text>
+    {:else if goal}
       <rect x={PX} y={y(goal.kcal * 1.1)} width={plotW} height={y(goal.kcal * 0.9) - y(goal.kcal * 1.1)} fill="var(--bar)" opacity="0.16" />
       <path d="M{PX} {y(goal.kcal)}H{width - PX}" stroke="var(--text)" stroke-width="2" stroke-dasharray="7 4" />
       <text x={width - PX - 2} y={y(goal.kcal * 1.1) - 5} text-anchor="end" class="lab halo">{t('goalLine', { n: fmt(goal.kcal) })} kcal</text>

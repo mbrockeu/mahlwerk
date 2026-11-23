@@ -11,8 +11,7 @@ See docs/api-v1.md (GET /api/v1/badges).
 from datetime import date
 from typing import Callable
 
-from . import activity
-from .activity import day_goal_kcal
+from . import activity, goals
 from .insights import adherence_class
 from .models import MEALS
 from .nutrition import scale
@@ -27,7 +26,7 @@ class Data:
     """What the badges look at, prepared once from the stored rows."""
 
     def __init__(
-        self, entries: list[dict], weight_days: list[str], recipes: int, goal: dict | None, bonus: dict[str, int] | None = None
+        self, entries: list[dict], weight_days: list[str], recipes: int, goal, bonus: dict[str, int] | None = None
     ):
         self.days: dict[str, dict] = {}
         self.foods: set[tuple] = set()
@@ -40,7 +39,7 @@ class Data:
             self.foods.add(("id", e["food_id"]) if e["food_id"] is not None else ("name", e["name"], e["brand"]))
         self.weight_days = set(weight_days)
         self.recipes = recipes
-        self.goal = goal
+        self.goal = goals.timeline(goal)  # every day is judged against the goal of that day (a plain goal: one that always held)
         self.bonus = bonus or {}  # per day: kcal the active energy adds to the calorie goal (empty while that is off)
 
 
@@ -122,9 +121,9 @@ def first_recipe(d: Data) -> tuple[int, int]:
 
 def protein_week(d: Data) -> tuple[int, int]:
     """The protein goal (at least 90 % of it) on 5 of any 7 consecutive days. Needs a goal."""
-    if not d.goal or d.goal["protein"] <= 0:
+    if not d.goal:
         return 0, 5
-    hit = [k for k, v in d.days.items() if v["protein"] >= d.goal["protein"] * PROTEIN_SHARE]
+    hit = [k for k, v in d.days.items() if (g := d.goal.on(k)["protein"]) > 0 and v["protein"] >= g * PROTEIN_SHARE]
     return _capped(best_window(hit), 5)
 
 
@@ -133,7 +132,7 @@ def balanced_week(d: Data) -> tuple[int, int]:
     Why: a steady rhythm, not a perfect day."""
     if not d.goal:
         return 0, 5
-    hit = [k for k, v in d.days.items() if adherence_class(v["kcal"], day_goal_kcal(d.goal["kcal"], d.bonus, k)) == "in"]
+    hit = [k for k, v in d.days.items() if adherence_class(v["kcal"], goals.kcal_on(d.goal, d.bonus, k)) == "in"]
     return _capped(best_window(hit), 5)
 
 
@@ -183,8 +182,8 @@ def reached(d: Data) -> set[str]:
     return {code for code, (cur, target) in progress(d).items() if cur >= target}
 
 
-def overview(store, user_id: int, goal: dict | None) -> dict:
-    """Bring the remembered badges up to date and describe them: earned, still open (with progress) and new."""
+def overview(store, user_id: int, goal) -> dict:
+    """`goal`: the goal timeline (Store.goal_timeline) or a plain goal. Bring the remembered badges up to date and describe them: earned, still open (with progress) and new."""
     entries, weights, recipes = store.badge_inputs(user_id)
     bonus = activity.goal_bonuses(store, user_id, "0000-01-01", "9999-12-31")
     everything = Data(entries, [w["day"] for w in weights], recipes, goal, bonus)

@@ -96,6 +96,8 @@ proxy with a valid certificate. Append `?engine=wasm` to the URL to force the bu
 - **Activity.** Steps, active energy and workouts by hand, from the Yazio export or from Apple Health via a
   Shortcut (see [docs/integrations.md](docs/integrations.md)); optionally added to the calorie goal.
 - **History and weight.** The last 14 days against your goal, and a weight curve.
+- **Goal history.** A changed goal counts from today on; past days keep the goal they had, in the calendar, the charts, the
+  weekly review and the badges. The goal page lists the changes.
 - **Insights for years of data.** Up to ten years in days, weeks or months, comparison with the period before, zooming into a month or week, nutrient curves, a calendar heat map, a foods table with history per food and an estimate of the real energy expenditure (a rough estimate, not advice).
 - **Playful feedback, never scolding.** Badges for habits (keeping at it, logging, eating in balance), a calm
   weekly review with one strength and at most one idea, a short celebration for a new badge. Never rewards eating

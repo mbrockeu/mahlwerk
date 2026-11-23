@@ -134,9 +134,13 @@
   });
 
   const goal = $derived(data?.goal ?? null);
-  // the goal that counts: with active energy added it is the mean of the days' goals (the charts draw this line)
-  const effGoal = $derived(goal ? { ...goal, kcal: Math.round(data?.goal_kcal ?? goal.kcal) } : null);
-  const goalAdded = $derived(!!goal && !!effGoal && effGoal.kcal !== goal.kcal);
+  // the period's goal: the mean of the logged days' goals (each day keeps the goal it had when it was changed later)
+  const pgoal = $derived(goal ? (data?.period_goal ?? goal) : null);
+  // the goal that counts: with active energy added it is the mean of the days' goals plus their active energy (the charts draw this line)
+  const effGoal = $derived(pgoal ? { ...pgoal, kcal: Math.round(data?.goal_kcal ?? pgoal.kcal) } : null);
+  const goalAdded = $derived(!!pgoal && !!effGoal && effGoal.kcal !== Math.round(pgoal.kcal));
+  // the logged days had different goals (a change inside the range): the calendar note then names no single number
+  const goalMixed = $derived(!goalAdded && new Set((data?.days ?? []).filter((d) => d.logged).map((d) => d.goal_kcal)).size > 1);
   const logged = $derived(data?.range.logged_days ?? 0);
   const avg = $derived(data?.averages ?? null);
   const gran = $derived<Granularity>(data?.granularity ?? 'day');
@@ -169,9 +173,9 @@
   });
 
   const tiles = $derived(avg ? [
-    { key: 'protein' as const, label: t('protein'), value: avg.protein, goal: goal?.protein ?? null, bg: '#ff8a1f', track: '#b85e0c', radius: '28px 28px 8px 28px' },
-    { key: 'carbs' as const, label: t('carbs'), value: avg.carbs, goal: goal?.carbs ?? null, bg: '#c9f04a', track: '#8fb022', radius: '28px' },
-    { key: 'fat' as const, label: t('fat'), value: avg.fat, goal: goal?.fat ?? null, bg: '#ffb8d6', track: '#d97aa6', radius: '28px 28px 28px 8px' },
+    { key: 'protein' as const, label: t('protein'), value: avg.protein, goal: pgoal?.protein ?? null, bg: '#ff8a1f', track: '#b85e0c', radius: '28px 28px 8px 28px' },
+    { key: 'carbs' as const, label: t('carbs'), value: avg.carbs, goal: pgoal?.carbs ?? null, bg: '#c9f04a', track: '#8fb022', radius: '28px' },
+    { key: 'fat' as const, label: t('fat'), value: avg.fat, goal: pgoal?.fat ?? null, bg: '#ffb8d6', track: '#d97aa6', radius: '28px 28px 28px 8px' },
   ] : []);
 
   // any steps, active energy or workouts in the period: the activity numbers and the card show up
@@ -369,7 +373,7 @@
               {/if}
             </div>
             {#if goal && calInfo && data.calendar && data.calendar.length}
-              <p id="cal-info" class="info-box">{t('calRangeNote', { kcal: fmt(goal.kcal), low: fmt(Math.round(goal.kcal * 0.9)), high: fmt(Math.round(goal.kcal * 1.1)) })}{#if goalAdded} {t('calRangeActive')}{/if}</p>
+              <p id="cal-info" class="info-box">{#if goalMixed}{t('calRangeMixed')}{:else}{@const k = Math.round(pgoal?.kcal ?? goal.kcal)}{t('calRangeNote', { kcal: fmt(k), low: fmt(Math.round(k * 0.9)), high: fmt(Math.round(k * 1.1)) })}{#if goalAdded} {t('calRangeActive')}{/if} {t('calRangeHistory')}{/if}</p>
             {/if}
             {#if data.calendar && data.calendar.length}
               <CalendarHeat cal={data.calendar} days={data.days} onopen={openDay} />
@@ -389,7 +393,7 @@
           <section id="sec-food" class="sec">
           <section class="card" aria-labelledby="h-kcal">
             <h2 id="h-kcal" class="micro quiet">{titleOfGran}</h2>
-            <KcalChart {series} previous={q.compare ? prev?.series ?? null : null} goal={effGoal} {gran} onzoom={zoom} />
+            <KcalChart {series} previous={q.compare ? prev?.series ?? null : null} goal={effGoal} {gran} onzoom={zoom} stepped={!goalAdded} />
             {#if !goal}{@render nogoal()}{:else}<p class="note keyline"><span class="swatch band"></span>{t('goalBand')}{#if goalAdded} {t('insGoalWithActive', { n: fmt(effGoal?.kcal ?? 0) })}{/if}</p>{/if}
           </section>
           <section class="card" aria-labelledby="h-macro">

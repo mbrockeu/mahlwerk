@@ -137,6 +137,8 @@ FoodIn   { name (required), brand, quantity, serving_size, serving_quantity, uni
 Goal     { kcal:int, protein:number, carbs:number, fat:number, water_ml:int, steps:int }   water_ml optional, 500-6000, default 2000
            (goals saved before it existed read 2000; a PUT without it keeps the saved value); steps optional, 1000-50000,
            default 8000, kept the same way
+GoalChange { valid_from:"YYYY-MM-DD", changed_at:int|null, ...Goal }   the goal from `valid_from` on (until the next change);
+           `0001-01-01` = since the start; `changed_at` unix seconds, null for a goal saved before the history existed
 Water    { ml:int, goal_ml:int, drinks_ml:int }  the glasses logged (total of the day) and the goal, in ml; `drinks_ml` is the water in the day's drinks, computed on read, not part of `ml`
 Fast     { id, started_at:int, ended_at:int|null, target_hours:number, elapsed_seconds:int, duration_seconds:int|null,
            target_reached:bool }                  Unix seconds (UTC); elapsed runs to now while the fast is open
@@ -178,7 +180,8 @@ Editing or deleting the food later does not change past days; deleting sets `foo
 | GET | `/api/v1/me/imports` | – | ImportBatch[] | this user's import batches, newest first, see Importing from Yazio |
 | DELETE | `/api/v1/me/imports/{id}` | – | `{entries, weights, water, activity, workouts, foods:int, goal:bool}` | takes back one of the user's own batches (404 for an unknown or foreign one); the numbers are what was removed |
 | GET | `/api/v1/me/export?from=&to=&lang=` | – | ZIP (`application/zip`) | the caller's own data, see Personal data export; `from`/`to` (`YYYY-MM-DD`, inclusive) limit the day-based data, an invalid date or `from` after `to` → 422; works with a read key |
-| PUT | `/api/v1/me/goal` | Goal | Goal | kcal 500–10000, macros 0–1000, water_ml 500–6000 |
+| PUT | `/api/v1/me/goal` | Goal | Goal | kcal 500–10000, macros 0–1000, water_ml 500–6000; counts from today on, earlier days keep their goal (see Goal history) |
+| GET | `/api/v1/me/goal/history` | – | `[GoalChange]` | every goal change, newest first; empty without a goal (see Goal history) |
 | PATCH | `/api/v1/me/settings` | `{playful?:bool, fasting?:{enabled?:bool, target_hours?:number}, activity?:{add_to_goal?:bool}, tour_seen?:bool, suggestions?:bool, home?:HomeCard[]\|null, water_glasses?:int[]\|null, water_drinks?:bool}` | `{playful, fasting, activity, tour_seen, suggestions, home, water_glasses, water_drinks}` | per-user settings, `playful` defaults to true, `fasting` to `{enabled:false, target_hours:16}` (hours 8–72), `activity` to `{add_to_goal:false}`, `tour_seen` to false (set once the first-run tour of the day view was shown or skipped; the profile can reset it), `suggestions` to true (the day view shows the card "what still fits today"; `GET /recipes/suggestions` answers either way), `home` to null (the default layout of the day view; otherwise a list of `{id, hidden, wide}` with `id` one of `ring, macros, fasting, water, activity, weight, meals, micros, suggestions`, no duplicates, at most 9; **422** otherwise; the list replaces the whole layout, `null` resets it; cards missing from the list are appended by the client), `water_glasses` to null (the default glasses 250 and 500 ml of the quick buttons on the water card; otherwise 1–3 whole numbers of 50–1000 ml, no duplicates, **422** otherwise; stored ascending, `null` resets it), `water_drinks` to true (drinks of the diary count towards the water card, see "Drinks count as water"); fields left out stay as they are, also inside `fasting` and `activity` |
 | GET | `/api/v1/badges` | – | Badges | see Playful feedback; empty lists while `playful` is false |
 | POST | `/api/v1/badges/seen` | `{codes:[string]}` | Badges | marks those badges as seen; unknown codes are ignored |
@@ -254,7 +257,8 @@ database and no route for an admin to take other people's data: the caller is al
   carbohydrates, fat, saturated fat, sugars, fibre, salt, plus a column for every other nutrient some entry knows). Times are ISO 8601 in
   the server's local time zone. A text that starts with `=`, `+`, `-` or `@` gets a leading `'` so that a spreadsheet does not run it.
 - **JSON.** `mahlwerk-export.json` holds `format_version` (1), `exported_at`, `app_version`, `range` (`from`/`to`, null when open) and the
-  sections `account` (user name, display name, creation time), `goal`, `settings`, `diary` (with the values per 100 g/ml and the
+  sections `account` (user name, display name, creation time), `goal`, `goal_history` (every change, oldest first, `valid_from`,
+  `changed_at` as ISO time or null), `settings`, `diary` (with the values per 100 g/ml and the
   nutrients for the amount), `weight`, `activity`, `workouts`, `water`, `fasting`, `templates` (with items), `recipes` (the recipes the
   user created, with ingredients), `badges` and `webhooks` (name, host, events, switch only).
 - **Never included.** Password hash, sign-in sessions, access keys, webhook secrets and addresses beyond the host, stored connector
@@ -445,14 +449,16 @@ Insights {
   range:      { from, to, days, logged_days }          logged_days = days with at least one entry
   first_day, last_day: day | null                      first and last day with an entry of the user (whatever the range), null without any
   granularity: "day"|"week"|"month"                    the one used for `series` (`auto` resolved)
-  goal:       Goal | null
+  goal:       Goal | null                              the current goal
+  period_goal: { kcal, protein, carbs, fat, water_ml, steps } | null   mean of the goals of the logged days (each day keeps
+                                                       the goal it had, see Goal history); without logged days the goal of `to`
   days:       [{ day, logged:bool, kcal, protein, carbs, fat, sugars, fiber, salt, saturated_fat, weight:number|null,
                  water_ml:int|null, steps:int|null, active_kcal:number|null, workout_minutes:number,
                  goal_kcal:number|null }]              null = no value that day; goal_kcal = the day's calorie goal
                                                        every day of the range, oldest first; null counts as 0;
                                                        EMPTY beyond 370 days
-  goal_kcal:  number | null                           mean calorie goal of the logged days (= goal.kcal unless activity.add_to_goal is on)
-  steps_goal: int
+  goal_kcal:  number | null                           mean calorie goal of the logged days (= period_goal.kcal unless activity.add_to_goal is on)
+  steps_goal: int                                      period_goal.steps
   averages:   { kcal, protein, carbs, fat, sugars, fiber, salt, saturated_fat, water_ml, steps, active_kcal, workout_minutes }
                                                        mean over days WITH entries, never over empty days;
                                                        water_ml, steps, active_kcal: mean over days with a value (0 without any);
@@ -567,7 +573,7 @@ NutrientCurve { key, group:"core"|fat|carb|mineral|vitamin|other, unit, nrv:numb
 
 Sections as in `series`. `average` is the mean per day with entries in the section (null without any), unknown values
 are not zeros, so `coverage` (0..1, share of the section's kcal from entries that state the nutrient) must be shown
-with it; `goal` is the user's goal for kcal, protein, carbs and fat, `nrv` the EU reference intake.
+with it; `goal` is the user's goal for kcal, protein, carbs and fat (the mean of the logged days' goals, see Goal history), `nrv` the EU reference intake.
 
 ### Foods
 
@@ -816,6 +822,24 @@ Removed from the prototype: `/api/v1/scan-tests` and the barcode-keyed `DELETE`.
 
 Errors use FastAPI's default shape `{ "detail": ... }`.
 
+## Goal history
+
+Schema version 19 (`goal_history`). A changed goal counts from the day of the change on; earlier days keep the goal they had,
+so the calendar, the adherence, the series, the weekly review, the badges and the day view of a past day do not change their
+verdict when the goal is changed. Rules (source `src/mahlwerk/goals.py`):
+
+- `PUT /me/goal` sets the current goal (`goal`, what `GET /me` shows) and records it from today on (the server's day, the same
+  as everywhere else); a second save on the same day overwrites that day. `goal.changed` carries `valid_from`.
+- A day counts against the goal with the latest `valid_from` on or before it; a day before the first change gets the oldest goal.
+  The migration from 18 turns every existing goal into the goal since the start (`valid_from` `0001-01-01`), so nothing changes
+  for the past. A goal from a Yazio import (only set when there is none) also counts since the start; removing the import while
+  the goal is unchanged removes it with its history.
+- Per day: `Day.goal`, `kcal_goal`, water `goal_ml` and `steps_goal` of that day, `summary/today`, `recipes/suggestions?date=`,
+  insights `days[].goal_kcal`, `calendar`, `adherence`, `series[].goal_kcal` and counts, review day states, the badges
+  `balanced_week` and `protein_week`, protein days of the hints and the review.
+- Over a period: insights `period_goal` (mean of the logged days' goals), `goal_kcal`, `steps_goal`, the protein hints, the
+  nutrient curve's `goal` and the review's `low_protein`. `goal` in insights and review stays the current goal.
+
 ## Activity
 
 Schema version 9 (`activity_day`, `workout`; the goal gets `steps`, weight and water a `health` flag). Migration from 8 only
@@ -896,7 +920,7 @@ Own hooks (normal sign-in only; 404 when switched off): `GET|POST /me/webhooks`,
 returns `secret` once. Only `http` and `https` targets without credentials; redirects are not followed. The host must resolve to public addresses only (checked at creation and at every delivery, sent to the checked address); `422 target not allowed` otherwise, unless an admin lists the host. A refused delivery is logged as `target not allowed`, network errors as `delivery failed`.
 
 Events: `entry.created`, `entry.updated`, `entry.deleted`, `weight.recorded`, `water.changed`, `fasting.started`,
-`fasting.ended`, `goal.changed`, `badge.earned`. Body: `{event, occurred_at, user: {username}, data}`. Headers:
+`fasting.ended`, `goal.changed` (data: the Goal plus `valid_from`, the first day it counts for), `badge.earned`. Body: `{event, occurred_at, user: {username}, data}`. Headers:
 `X-Mahlwerk-Event`, `X-Mahlwerk-Delivery`, `X-Mahlwerk-Signature: sha256=<hex HMAC-SHA256 of the raw body>`.
 Delivery runs in a background thread (5 s timeout, up to 3 tries, 5xx and 429 are retried); it never slows or fails a
 request. `badge.earned` fires when the badges are evaluated (`GET /badges`, which the app calls after changes).

@@ -35,7 +35,7 @@ def test_version_12_database_gets_the_group_tables_without_losing_data(tmp_path)
     con.close()
     store = Store(path)
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 18
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 19
     names = {r[0] for r in con.execute("SELECT name FROM sqlite_master")}
     assert {"recipe_group", "recipe_group_item", "recipe_group_dismissed", "recipe_group_item_food_gone", "recipe_group_item_group_gone"} <= names
     con.close()
