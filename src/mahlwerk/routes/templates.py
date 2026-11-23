@@ -7,7 +7,7 @@ from ..db import Store
 from ..deps import get_store
 from ..models import Entries, Template, TemplateApply, TemplateIn, TemplatePatch
 from ..nutrition import r1, scale
-from .diary import emit_entries, entries_out, parse_day, snapshot
+from .diary import _food_copy, emit_entries, entries_out, parse_day, snapshot
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(current_user)])
 
@@ -37,12 +37,19 @@ def list_templates(user: dict = Depends(current_user), store: Store = Depends(ge
 
 @router.post("/templates", response_model=Template, status_code=201)
 def create_template(body: TemplateIn, user: dict = Depends(current_user), store: Store = Depends(get_store)) -> Template:
-    """Save a logged meal of this user as a template."""
-    parse_day(body.from_.day)
-    rows = store.entries_on(user["id"], body.from_.day, body.from_.meal)
-    if not rows:
-        raise HTTPException(404, "that meal has no entries")
-    template_id = store.create_template(user["id"], body.name, [snapshot(r) for r in rows])
+    """Save a template: a logged meal of this user (`from`), or foods with amounts (`items`, e.g. a favourite combo)."""
+    if body.items is not None:
+        items = []
+        for it in body.items:
+            food, copy = _food_copy(store, user, it.food_id)
+            items.append({"food_id": food["id"], "amount": it.amount, **copy})
+    else:
+        parse_day(body.from_.day)
+        rows = store.entries_on(user["id"], body.from_.day, body.from_.meal)
+        if not rows:
+            raise HTTPException(404, "that meal has no entries")
+        items = [snapshot(r) for r in rows]
+    template_id = store.create_template(user["id"], body.name, items)
     return template_out(store.get_template(user["id"], template_id))
 
 

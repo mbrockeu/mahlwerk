@@ -128,6 +128,19 @@ class RecentFood(BaseModel):
     last_meal: Meal
 
 
+class ComboItem(BaseModel):
+    food: Food
+    amount: float = Field(description="g or ml: what it was the last time the whole combo was eaten")
+    kcal: float | None = Field(description="energy of this amount; null when the food has none")
+
+
+class Combo(BaseModel):
+    items: list[ComboItem] = Field(description="2 to 8 foods, in the order they were logged")
+    kcal: float = Field(description="energy of all items at those amounts")
+    days: int = Field(description="on how many different days of the last 42 the whole combo was in this meal")
+    last_day: str = Field(description="the latest of those days (YYYY-MM-DD)")
+
+
 class LabelScan(BaseModel):
     per_100: Per100
     basis: Literal["100g", "100ml"] | None
@@ -901,11 +914,24 @@ class TemplateSource(BaseModel):
     meal: Meal
 
 
+class TemplateFood(BaseModel):
+    food_id: int
+    amount: float = Field(gt=0, le=5000)
+
+
 class TemplateIn(BaseModel):
+    """Either `from` (a logged meal) or `items` (foods with amounts, e.g. a favourite combo); not both."""
     # `from` is a Python keyword, so the field is aliased
     model_config = {"populate_by_name": True}
     name: TemplateName
-    from_: TemplateSource = Field(alias="from")
+    from_: TemplateSource | None = Field(None, alias="from")
+    items: list[TemplateFood] | None = Field(None, min_length=1, max_length=30)
+
+    @model_validator(mode="after")
+    def _one_source(self):
+        if (self.from_ is None) == (self.items is None):
+            raise ValueError("give either `from` or `items`")
+        return self
 
 
 class TemplatePatch(BaseModel):

@@ -3,10 +3,11 @@
   import { fmt, t } from '../lib/i18n';
   import { isPortionFood, PORTION_GRAMS, portionsText } from '../lib/portion';
   import { changed, closeAdd, loadMe, loadVision, openAmount, openEditor, toast, ui, visionReady, type AddTab } from '../lib/store.svelte';
-  import { MEALS, type Entry, type Food, type Meal, type RecentFood, type Template } from '../lib/types';
+  import { MEALS, type Combo, type Entry, type Food, type Meal, type RecentFood, type Template } from '../lib/types';
   import FoodRow from './FoodRow.svelte';
   import FoodSearch from './FoodSearch.svelte';
   import Icon from './Icon.svelte';
+  import ComboPick from './ComboPick.svelte';
   import CookidooPane from './CookidooPane.svelte';
   import MealPhoto from './MealPhoto.svelte';
   import ScanPane from './ScanPane.svelte';
@@ -30,10 +31,23 @@
   // svelte-ignore state_referenced_locally
   let photo = $state(initialPhoto && !replace);
 
-  // recent
+  // recent: the foods that fit the chosen meal first, and above them the combos the person often eats together in it (not when swapping one entry's food)
   let recent = $state<RecentFood[] | null>(null);
-  async function loadRecent() {
-    try { recent = await api.recent(20); } catch { recent = []; }
+  let combos = $state<Combo[]>([]);
+  let loadedFor = $state<Meal | null>(null);
+  let combo = $state<Combo | null>(null);
+  let savingCombo = $state(false);
+  let comboError = $state('');
+  let recentToken = 0;
+  async function loadRecent(forMeal: Meal) {
+    const token = ++recentToken;
+    const [list, found] = await Promise.all([
+      api.recent(20, forMeal).catch(() => [] as RecentFood[]),
+      replace ? Promise.resolve([] as Combo[]) : api.combos(forMeal).catch(() => [] as Combo[]),
+    ]);
+    if (token !== recentToken) return; // the meal changed meanwhile
+    recent = list;
+    combos = found;
   }
 
   // templates
@@ -52,7 +66,7 @@
   }
 
   $effect(() => {
-    if (tab === 'recent' && recent === null) void loadRecent();
+    if (tab === 'recent' && loadedFor !== meal) { loadedFor = meal; void loadRecent(meal); }
     if (tab === 'templates' && templates === null) void loadTemplates();
   });
 
@@ -78,6 +92,25 @@
       templateError = t('failed', { reason: err instanceof ApiError ? err.status : 'error' });
     } finally {
       applying = false;
+    }
+  }
+
+  const comboNames = (c: Combo) => c.items.map((i) => i.food.name ?? '?');
+  async function saveCombo(c: Combo) {
+    if (savingCombo) return;
+    savingCombo = true;
+    comboError = '';
+    const names = comboNames(c).join(' · ');
+    const name = names.length > 80 ? `${names.slice(0, 79)}…` : names;
+    try {
+      await api.createTemplateFromFoods(name, c.items.map((i) => ({ food_id: i.food.id, amount: i.amount })));
+      templates = null; // the list reloads when it is opened
+      toast(t('comboSaved', { name }));
+      void loadRecent(meal); // a combo that is a template now is no longer offered
+    } catch (err) {
+      comboError = t('comboSaveFailed', { reason: err instanceof ApiError ? err.status || err.message : 'error' });
+    } finally {
+      savingCombo = false;
     }
   }
 
@@ -148,6 +181,8 @@
 
   {#if photo}
     <MealPhoto {meal} {day} onback={() => (photo = false)} />
+  {:else if combo}
+    <ComboPick {combo} {meal} {day} onback={() => (combo = null)} />
   {:else}
   <div class="tabs" class:five={tabs.length > 4} role="tablist">
     {#each tabs as item, i}
@@ -172,6 +207,22 @@
       {:else if recent.length === 0}
         <p class="note">{t('noRecent')}</p>
       {:else}
+        {#if combos.length}
+          <h3 class="sub">{t('comboHeading')}</h3>
+          {#if comboError}<p class="note warn" role="alert">{comboError}</p>{/if}
+          <ul class="rows combos">
+            {#each combos as c (c.items.map((i) => i.food.id).join('-'))}
+              <li>
+                <button class="row-pill" onclick={() => (combo = c)}>
+                  <span class="t"><strong>{comboNames(c).join(' · ')}</strong><small>{t('comboDays', { n: c.days })}</small></span>
+                  <span class="v">{fmt(Math.round(c.kcal))}<span class="u"> kcal</span></span>
+                </button>
+                <button class="save" disabled={savingCombo} aria-label={t('comboSaveTplAria', { foods: comboNames(c).join(', ') })} onclick={() => saveCombo(c)}><Icon name="bookmark" size={14} />{t('comboSaveTpl')}</button>
+              </li>
+            {/each}
+          </ul>
+          <h3 class="sub">{t('comboSingles')}</h3>
+        {/if}
         <ul class="rows">
           {#each recent as r (r.food.id)}
             <FoodRow food={r.food} extra={t('lastTime', { amount: isPortionFood(r.food) ? portionsText(r.last_amount / PORTION_GRAMS) : `${r.last_amount} ${r.food.unit}` })} onpick={(f) => pick(f, r.last_amount)} />
@@ -237,6 +288,14 @@
   .photo { align-self: stretch; }
   .empty { background: var(--paper); border-radius: 28px 28px 28px 8px; padding: 22px 20px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; color: var(--green-text); }
   .empty p { color: var(--quiet); font-size: 14px; line-height: 1.45; }
+  .sub { font-size: 14px; font-weight: 700; color: var(--quiet); margin-top: 2px; }
+  .combos li { background: var(--paper); border-radius: 20px; overflow: hidden; }
+  .combos .row-pill { background: transparent; }
+  .combos .row-pill .t strong { white-space: normal; overflow: visible; }
+  .combos .row-pill .t small { white-space: normal; }
+  .combos .v .u { font-size: 11px; font-weight: 500; color: var(--quiet); }
+  .save { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; font-size: 13px; font-weight: 600; color: var(--green-text); }
+  .save:disabled { opacity: 0.5; }
   .tpl li { background: var(--paper); border-radius: 20px; overflow: hidden; }
   .line { display: flex; align-items: center; gap: 4px; padding-right: 4px; }
   .line .row-pill { background: transparent; flex: 1; min-width: 0; }

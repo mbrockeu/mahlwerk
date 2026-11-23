@@ -1174,6 +1174,17 @@ class Store:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    def meal_rows_since(self, user_id: int, meal: str, first: str) -> list[dict]:
+        """Entries of one meal type from `first` on (day, then entry id) that name a food which still exists:
+        `{day, food_id, amount}`. The input of the combo mining (combos.py)."""
+        with self._connect() as con:
+            rows = con.execute(
+                "SELECT e.day, e.food_id, e.amount FROM diary_entry e JOIN food f ON f.id = e.food_id AND f.found = 1 "
+                "WHERE e.user_id = ? AND e.meal = ? AND e.day >= ? ORDER BY e.day, e.id",
+                (user_id, meal, first),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
     # templates (per user)
 
     @staticmethod

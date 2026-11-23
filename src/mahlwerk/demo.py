@@ -143,6 +143,23 @@ def _day(rng: random.Random, target: float, today: bool) -> list[dict]:
     ]
 
 
+# Habit breakfasts: on about two days in five the breakfast is one of these, so the demo has foods that are eaten
+# together (the "Combos" of the add sheet); name, usual amount
+_HABITS = (
+    (("Haferflocken", 50), ("Joghurt natur", 200), ("Erdbeeren", 120)),
+    (("Vollkornbrot", 80), ("Butter", 10), ("Gouda", 40)),
+)
+
+
+def _habit_breakfast(rng: random.Random, entries: list[dict]) -> list[dict]:
+    """Swap the generated breakfast for a habit one on some days (own random generator: the rest of the demo stays as it was)."""
+    if rng.random() >= 0.4:
+        return entries
+    habit = _HABITS[rng.randrange(len(_HABITS))]
+    others = [e for e in entries if e["meal"] != "breakfast"]
+    return [{"meal": "breakfast", "food": name, "amount": amount} for name, amount in habit] + others
+
+
 # Demo workouts: a kind with its usual minutes range and kilometres per hour (None: no distance)
 _WORKOUTS = (
     ("running", (25, 55), 9.5), ("cycling", (40, 110), 18.0), ("walking", (30, 70), 5.0), ("strength", (35, 65), None),
@@ -223,7 +240,8 @@ def generate(store: Store, user_id: int, today: date, days: int, marker: str = "
                 target = goal["kcal"] * (1 + rng.uniform(low, high))
                 if slept < 360:  # after a short night people tend to eat more
                     target *= 1.12
-                entries += [{"day": iso, **e} for e in _day(rng, target, is_today)]
+                made = _habit_breakfast(_rng(user_id, iso, "habit"), _day(rng, target, is_today))
+                entries += [{"day": iso, **e} for e in made]
         if iso not in weighed:
             rng = _rng(user_id, iso, "weight")
             if rng.random() < 5 / 7:

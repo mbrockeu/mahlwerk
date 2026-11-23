@@ -192,7 +192,8 @@ Editing or deleting the food later does not change past days; deleting sets `foo
 | GET | `/api/v1/foods?q=&source=&limit=` | – | Food[] | search name, brand, barcode (`source`: `own`, `openfoodfacts`, `recipe`, `yazio`, `bls`, `cookidoo` or `web`; recipes are included without it); newest first; empty shells hidden; limit default 50, max 1000 (a run that takes over many Cookidoo recipes can leave several hundred) |
 | GET | `/api/v1/catalog?q=&source=&limit=` | – | CatalogItem[] | see Product catalogue; `q` under 2 characters gives `[]`; `source` (`openfoodfacts`\|`bls`) limits it to one source, else both; limit default 25, max 50 |
 | POST | `/api/v1/catalog/adopt` | `{source, code}` | Food (201, or 200 if the food existed) | stores a catalogue item as a regular food, without network access; 404 unknown item |
-| GET | `/api/v1/foods/recent?limit=` | – | `[{food:Food, last_amount:number, last_meal:Meal}]` | distinct foods this user logged, most recent first, default 20 |
+| GET | `/api/v1/foods/recent?limit=&meal=` | – | `[{food:Food, last_amount:number, last_meal:Meal}]` | distinct foods this user logged, most recent first, default 20. With `meal` the foods that fit that meal come first: those eaten in it on the most days of the last 42, a recent day counting more (weight halves every 14 days); the rest follow newest first. For the fitting ones `last_amount` and `last_meal` are those of the latest entry in this meal. Without `meal` nothing changes; an unknown meal → 422 |
+| GET | `/api/v1/foods/combos?meal=` | – | `Combo[]` | up to 3 sets of foods this user often eats together in this meal, for the "Combos" in the add sheet; `meal` is required. `Combo = {items:[{food:Food, amount:number, kcal:number\|null}], kcal, days, last_day}`: 2–8 foods in the order they were logged, with the amounts of the last time the whole set was eaten (a food logged twice in one meal that day: summed), the energy at those amounts, on how many different days of the last 42 the set was in this meal (at least 3) and the latest of them. Only foods that still exist count. A set that is contained in a larger one with at least 75 % of its days is left out; best first by days, then latest day, then size. A set equal to the foods of one of the user's templates is not offered. Computed from the diary, nothing is stored; also readable by the demo account |
 | POST | `/api/v1/foods` | FoodIn | Food (201) | own food without barcode |
 | GET | `/api/v1/foods/{id}` | – | Food | |
 | PUT | `/api/v1/foods/{id}` | FoodIn | Food | turns the food into `own`; a recipe food → 409 |
@@ -207,7 +208,7 @@ Editing or deleting the food later does not change past days; deleting sets `foo
 | DELETE | `/api/v1/diary/entries/{id}` | – | 204 | only own entries, else 404 |
 | POST | `/api/v1/diary/{day}/copy` | `{from_day, meal?, to_meal?}` | `{entries:Entry[]}` (201) | see Copying and templates |
 | GET | `/api/v1/templates` | – | Template[] | this user's templates, newest first |
-| POST | `/api/v1/templates` | `{name, from:{day, meal}}` | Template (201) | from a logged meal of this user; 404 when it has no entries; name 1–80 characters |
+| POST | `/api/v1/templates` | `{name, from:{day, meal}}` or `{name, items:[{food_id, amount}]}` | Template (201) | `from`: a logged meal of this user, 404 when it has no entries; `items`: 1–30 foods with amounts (amount > 0, ≤ 5000; unknown food → 404), the add sheet saves a favourite combo this way; exactly one of the two (else 422); name 1–80 characters |
 | PATCH | `/api/v1/templates/{id}` | `{name}` | Template | other users' templates → 404 |
 | DELETE | `/api/v1/templates/{id}` | – | 204 | |
 | POST | `/api/v1/templates/{id}/apply` | `{day, meal}` | `{entries:Entry[]}` (201) | |

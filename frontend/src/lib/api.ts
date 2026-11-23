@@ -1,6 +1,6 @@
 // API client. All paths are relative (`api/v1/...`) so the app works below any path prefix.
 import type {
-  Account, FoodPiece, ActivityDayOut, CookidooAccount, CookidooBulkPreview, CookidooBulkRun, CookidooBulkScope, CookidooPicturePreview, RecipeGroup, CookidooScope, YazioPreview, YazioRun, YazioState, AccessToken, AuthStatus, AccessTokenCreated, AdminOverview, AdminUser, DemoAccountState, Badges, CatalogItem, Connector, CookidooCollection, CookidooPlanDay, CookidooPreview, RefreshState, TokenScope, Webhook, WebhookCreated, WebhookDelivery, WebhookIn, FoodDetail, FoodList, FoodSort, Granularity, NutrientCurve, DemoResult, Day, Entry, Fast, Fasting, Food, FoodIn, Goal, GoalChange, HistoryDay, ImportBatch, ImportRemoved, Insights, LabelScan, Me, Meal, NutrientInfo, RecentFood, Recipe, RecipeIn, Review, Settings, SettingsPatch, SuggestFocus, Suggestions, Template, WebPreview, WebPreviewIn, WeightPoint, Workout, WorkoutIn, VisionMeal, VisionRecipe, VisionState, IngredientMatches,
+  Account, Combo, FoodPiece, ActivityDayOut, CookidooAccount, CookidooBulkPreview, CookidooBulkRun, CookidooBulkScope, CookidooPicturePreview, RecipeGroup, CookidooScope, YazioPreview, YazioRun, YazioState, AccessToken, AuthStatus, AccessTokenCreated, AdminOverview, AdminUser, DemoAccountState, Badges, CatalogItem, Connector, CookidooCollection, CookidooPlanDay, CookidooPreview, RefreshState, TokenScope, Webhook, WebhookCreated, WebhookDelivery, WebhookIn, FoodDetail, FoodList, FoodSort, Granularity, NutrientCurve, DemoResult, Day, Entry, Fast, Fasting, Food, FoodIn, Goal, GoalChange, HistoryDay, ImportBatch, ImportRemoved, Insights, LabelScan, Me, Meal, NutrientInfo, RecentFood, Recipe, RecipeIn, Review, Settings, SettingsPatch, SuggestFocus, Suggestions, Template, WebPreview, WebPreviewIn, WeightPoint, Workout, WorkoutIn, VisionMeal, VisionRecipe, VisionState, IngredientMatches,
 } from './types';
 
 export class ApiError extends Error {
@@ -108,7 +108,8 @@ export const api = {
   food: (id: number) => request<Food>('GET', `foods/${id}`),
   foods: (query = '', limit = 50, filter: { source?: Food['source']; exclude?: Food['source'][] } = {}) =>
     request<Food[]>('GET', `foods${q({ q: query, limit, source: filter.source })}${(filter.exclude ?? []).map((s) => `&exclude_source=${s}`).join('')}`),
-  recent: (limit = 20) => request<RecentFood[]>('GET', `foods/recent${q({ limit })}`),
+  recent: (limit = 20, meal?: Meal) => request<RecentFood[]>('GET', `foods/recent${q({ limit, meal })}`),
+  combos: (meal: Meal) => request<Combo[]>('GET', `foods/combos${q({ meal })}`),
   createFood: (food: FoodIn) => request<Food>('POST', 'foods', food),
   updateFood: (id: number, food: FoodIn) => request<Food>('PUT', `foods/${id}`, food),
   deleteFood: (id: number) => request<void>('DELETE', `foods/${id}`),
@@ -175,6 +176,7 @@ export const api = {
 
   templates: () => request<Template[]>('GET', 'templates'),
   createTemplate: (name: string, from: { day: string; meal: Meal }) => request<Template>('POST', 'templates', { name, from }),
+  createTemplateFromFoods: (name: string, items: { food_id: number; amount: number }[]) => request<Template>('POST', 'templates', { name, items }),
   renameTemplate: (id: number, name: string) => request<Template>('PATCH', `templates/${id}`, { name }),
   deleteTemplate: (id: number) => request<void>('DELETE', `templates/${id}`),
   applyTemplate: (id: number, to: { day: string; meal: Meal }) => request<{ entries: Entry[] }>('POST', `templates/${id}/apply`, to),

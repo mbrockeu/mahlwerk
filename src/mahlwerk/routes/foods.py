@@ -11,14 +11,17 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 
-from .. import cookidoo, imageproc, imagesize, imagestore, label, nutrients, off, webrecipes
+from .. import combos, cookidoo, imageproc, imagesize, imagestore, label, nutrients, off, webrecipes
 from ..auth import current_user
 from ..catalog import OFF, food_data
 from ..db import Store
 from ..deps import get_store
 from .. import ownership
-from ..models import Food, FoodDrink, FoodImage, FoodIn, FoodPiece, LabelScan, RecentFood
-from ..nutrition import guess_unit, is_complete, parse_serving, valid_gtin
+from . import diary
+from ..models import Combo, ComboItem, Food, FoodDrink, FoodImage, FoodIn, FoodPiece, LabelScan, RecentFood
+from ..nutrition import guess_unit, is_complete, parse_serving, r1, scale, valid_gtin
+
+FIT_POOL = 500  # foods looked at when ordering the recent foods by fit to a meal
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(current_user)])
 
@@ -187,12 +190,48 @@ def search_foods(
 
 @router.get("/foods/recent", response_model=list[RecentFood])
 def recent_foods(
-    limit: int = Query(20, ge=1, le=200), user: dict = Depends(current_user), store: Store = Depends(get_store)
+    limit: int = Query(20, ge=1, le=200),
+    meal: Literal["breakfast", "lunch", "dinner", "snack"] | None = Query(
+        None, description="order by fit to this meal: the foods eaten most in it over the last 6 weeks (recent days count more) first, "
+        "then the rest newest first. `last_amount` and `last_meal` then come from the latest entry in this meal."),
+    user: dict = Depends(current_user), store: Store = Depends(get_store),
 ) -> list[RecentFood]:
-    items = store.recent_foods(user["id"], limit)
+    items = store.recent_foods(user["id"], limit if meal is None else max(limit, FIT_POOL))
+    if meal is not None:
+        scores = combos.fit_scores(store.meal_rows_since(user["id"], meal, combos.window_start(diary.today())), diary.today())
+        by_food = {item["food_id"]: item for item in items}
+        # a food that fits but fell out of the pool of newest foods cannot happen within 42 days unless there are hundreds
+        fit = sorted((f for f in scores if f in by_food), key=lambda f: scores[f]["score"], reverse=True)
+        fitting = [{"food_id": f, "amount": scores[f]["amount"], "meal": meal} for f in fit]
+        items = (fitting + [i for i in items if i["food_id"] not in scores])[:limit]
     rows = store.get_foods([item["food_id"] for item in items], demo_view=bool(user.get("is_demo")))  # one query, not one per food
     return [RecentFood(food=build_food(rows[item["food_id"]], user), last_amount=item["amount"], last_meal=item["meal"])
             for item in items if item["food_id"] in rows]
+
+
+@router.get("/foods/combos", response_model=list[Combo])
+def food_combos(
+    meal: Literal["breakfast", "lunch", "dinner", "snack"],
+    user: dict = Depends(current_user), store: Store = Depends(get_store),
+) -> list[Combo]:
+    """Up to 3 sets of foods this person often eats together in this meal (at least 3 different days of the last 42),
+    best first, each with the amounts of the last time. Sets that equal one of the person's templates are left out."""
+    rows = store.meal_rows_since(user["id"], meal, combos.window_start(diary.today()))
+    foods = store.get_foods(list({r["food_id"] for r in rows}), demo_view=bool(user.get("is_demo")))
+    rows = [r for r in rows if r["food_id"] in foods]
+    skip = set()
+    for template in store.list_templates(user["id"]):
+        ids = [i["food_id"] for i in template["items"]]
+        if None not in ids:
+            skip.add(frozenset(ids))
+    out = []
+    for combo in combos.mine(rows, skip):
+        items = []
+        for food_id, amount in combo["foods"]:
+            kcal = scale(foods[food_id]["data"]["per_100"], amount)["kcal"]
+            items.append(ComboItem(food=build_food(foods[food_id], user), amount=amount, kcal=None if kcal is None else r1(kcal)))
+        out.append(Combo(items=items, kcal=r1(sum(i.kcal or 0 for i in items)), days=combo["days"], last_day=combo["last_day"]))
+    return out
 
 
 @router.post("/foods", response_model=Food, status_code=201)

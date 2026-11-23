@@ -1547,7 +1547,7 @@ export async function mockRequest(method: string, path: string, body?: unknown, 
   }
   if (p === 'foods/recent') {
     const seen = new Set<number>();
-    const out: unknown[] = [];
+    const out: { food: Food; last_amount: number; last_meal: Meal }[] = [];
     const all = [...entries.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
     for (const [, es] of all) for (const e of [...es].reverse()) {
       if (e.food_id == null || seen.has(e.food_id)) continue;
@@ -1556,7 +1556,56 @@ export async function mockRequest(method: string, path: string, body?: unknown, 
       seen.add(e.food_id);
       out.push({ food, last_amount: e.amount, last_meal: e.meal });
     }
+    const meal = url.searchParams.get('meal') as Meal | null;
+    if (meal) {
+      // fits this meal first: foods eaten in it, the most often (and the most recently) first, with the amount of the last time in it
+      const score = new Map<number, { s: number; amount: number }>();
+      for (const [d, es] of [...entries.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+        const age = diffDays(d, today());
+        if (age > 41) continue;
+        for (const e of es) if (e.meal === meal && e.food_id != null) {
+          const cur = score.get(e.food_id) ?? { s: 0, amount: e.amount };
+          score.set(e.food_id, { s: cur.s + 0.5 ** (age / 14), amount: e.amount });
+        }
+      }
+      const fit = out.filter((o) => score.has(o.food.id)).sort((a, b) => num(score.get(b.food.id)?.s) - num(score.get(a.food.id)?.s))
+        .map((o) => ({ ...o, last_amount: score.get(o.food.id)?.amount ?? o.last_amount, last_meal: meal }));
+      out.splice(0, out.length, ...fit, ...out.filter((o) => !score.has(o.food.id)));
+    }
     return clone(out.slice(0, Number(url.searchParams.get('limit') ?? 20)));
+  }
+  if (p === 'foods/combos') {
+    // the same rule as the server (src/mahlwerk/combos.py), shortened: day sets of the meal, their pairwise intersections, 3+ days, maximal ones
+    const meal = url.searchParams.get('meal') as Meal;
+    const days: { day: string; amounts: Map<number, number> }[] = [];
+    for (const [d, es] of [...entries.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+      if (diffDays(d, today()) > 41) continue;
+      const amounts = new Map<number, number>();
+      for (const e of es) if (e.meal === meal && e.food_id != null) amounts.set(e.food_id, (amounts.get(e.food_id) ?? 0) + e.amount);
+      if (amounts.size) days.push({ day: d, amounts });
+    }
+    const key = (ids: number[]) => ids.slice().sort((a, b) => a - b).join(',');
+    const cands = new Map<string, number[]>();
+    const sets = days.map((d) => [...d.amounts.keys()]).filter((ids) => ids.length >= 2);
+    for (const ids of sets) if (ids.length <= 8) cands.set(key(ids), ids);
+    for (let i = 0; i < sets.length; i += 1) for (let j = i + 1; j < sets.length; j += 1) {
+      const both = sets[i].filter((x) => sets[j].includes(x));
+      if (both.length >= 2 && both.length <= 8) cands.set(key(both), both);
+    }
+    const found = [...cands.values()].map((ids) => {
+      const eaten = days.filter((d) => ids.every((x) => d.amounts.has(x)));
+      return { ids, support: eaten.length, last: eaten[eaten.length - 1] };
+    }).filter((c) => c.support >= 3);
+    const keep = found.filter((c) => !found.some((o) => o.ids.length > c.ids.length && c.ids.every((x) => o.ids.includes(x)) && o.support >= 0.75 * c.support));
+    keep.sort((a, b) => b.support - a.support || (a.last.day < b.last.day ? 1 : -1) || b.ids.length - a.ids.length);
+    const skip = new Set(templates.map((tpl) => key(tpl.items.map((i) => i.food_id ?? -1))));
+    return clone(keep.filter((c) => !skip.has(key(c.ids))).slice(0, 3).map((c) => {
+      const items = [...c.last.amounts].filter(([id]) => c.ids.includes(id)).map(([id, amount]) => {
+        const food = foods.find((f) => f.id === id) as Food;
+        return { food, amount, kcal: food.per_100.kcal == null ? null : Math.round(food.per_100.kcal * amount) / 100 };
+      });
+      return { items, kcal: Math.round(items.reduce((a, i) => a + num(i.kcal), 0) * 10) / 10, days: c.support, last_day: c.last.day };
+    }));
   }
   if (p === 'foods' && method === 'GET') {
     const query = (url.searchParams.get('q') ?? '').toLowerCase();
@@ -1668,8 +1717,10 @@ export async function mockRequest(method: string, path: string, body?: unknown, 
 
   if (p === 'templates' && method === 'GET') return clone(templates.map(templateOut).reverse());
   if (p === 'templates' && method === 'POST') {
-    const b = body as { name: string; from: { day: string; meal: Meal } };
-    const source = (entries.get(b.from.day) ?? []).filter((e) => e.meal === b.from.meal);
+    const b = body as { name: string; from?: { day: string; meal: Meal }; items?: { food_id: number; amount: number }[] };
+    const source = b.items
+      ? b.items.map((i) => makeEntry(foods.find((f) => f.id === i.food_id) as Food, 'breakfast', i.amount))
+      : (entries.get((b.from as { day: string }).day) ?? []).filter((e) => e.meal === b.from?.meal);
     if (!source.length) throw new ApiError(404, 'that meal has no entries');
     const name = b.name.trim();
     if (!name || name.length > 80) throw new ApiError(422, 'name');

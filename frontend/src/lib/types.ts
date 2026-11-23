@@ -324,6 +324,20 @@ export interface RecentFood {
   last_meal: Meal;
 }
 
+export interface ComboItem {
+  food: Food;
+  amount: number;
+  kcal: number | null;
+}
+
+/** Foods the person often eats together in one meal (GET /foods/combos). */
+export interface Combo {
+  items: ComboItem[];
+  kcal: number;
+  days: number;
+  last_day: string;
+}
+
 export interface HistoryDay {
   day: string;
   kcal: number;

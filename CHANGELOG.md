@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Favourite combos in the add sheet: the tab "Recent" shows up to 3 sets of foods you often eat together in the chosen meal
+  (at least 3 different days of the last 6 weeks), e.g. "Quark · Oats · Berries – 420 kcal". A tap opens a checklist with the amounts
+  of the last time (changeable); "Add" books the checked ones into the day and meal of the sheet, with Undo. A combo can be saved as a
+  template with one tap (`POST /templates` also takes `items: [{food_id, amount}]`); sets equal to a template are not offered.
+  `GET /foods/combos?meal=` is new, `GET /foods/recent` takes an optional `meal` that puts the foods which fit that meal first
+  (the single foods in "Recent" now follow the chosen meal). The demo data repeats two habit breakfasts, so the demo shows combos.
 - Sleep: `POST /health/sync` takes `sleep_minutes` per day (the night that ends on that morning; under 60 minutes is ignored as
   "watch not worn") and answers a `sleep` count. The evaluation gets a card "Sleep and eating" (tab Body) and `GET /insights` a
   `sleep` block: the average sleep and, for logged days after nights under 6 h against nights of 7 h or more, the mean kcal and the
