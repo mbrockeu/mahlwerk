@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- `GET /summary/today` also returns `meals` (kcal per meal today) and `meal_entries` (entries per meal), so a client can
+  tell which meals are already logged, for example to skip a meal reminder.
 - Tap a macro tile on the day view to see where that day's protein, carbs or fat came from: per meal with share and the
   foods that gave the most, with tabs to switch between the three.
 

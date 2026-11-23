@@ -236,6 +236,8 @@ def test_summary_today_for_a_read_token(client, make_client, food):
     assert body["water_ml"] == 500 and body["water_goal_ml"] == 2000
     assert body["weight_kg"] == 81.2 and body["weight_day"] == day
     assert body["fasting"] is None and body["logged_today"] is True and body["last_entry_at"] > 0
+    assert body["meals"] == {"breakfast": 0, "lunch": 200, "dinner": 0, "snack": 0}
+    assert body["meal_entries"] == {"breakfast": 0, "lunch": 1, "dinner": 0, "snack": 0}
 
 
 def test_summary_today_on_an_empty_account(client):
@@ -243,6 +245,7 @@ def test_summary_today_on_an_empty_account(client):
     assert body["kcal_eaten"] == 0 and body["kcal_goal"] is None and body["kcal_left"] is None
     assert body["weight_kg"] is None and body["weight_day"] is None
     assert body["logged_today"] is False and body["last_entry_at"] is None and body["water_ml"] == 0
+    assert set(body["meals"]) == {"breakfast", "lunch", "snack", "dinner"} and not any(body["meal_entries"].values())
 
 
 def test_summary_today_fasting(client):

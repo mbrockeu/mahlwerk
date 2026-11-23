@@ -100,6 +100,8 @@ class SummaryToday(BaseModel):
     lean_kg: float | None = Field(None, description="lean body mass of that day, null without a value")
     fasting: FastingToday | None = Field(description="null when the fasting timer is off and no fast is running")
     logged_today: bool
+    meals: dict[str, float] = Field(default_factory=dict, description="kcal per meal today (breakfast, lunch, snack, dinner; 0 when empty)")
+    meal_entries: dict[str, int] = Field(default_factory=dict, description="number of entries per meal today; > 0 means the meal is logged, also with 0 kcal")
     last_entry_at: int | None = Field(description="unix seconds of the latest entry ever made")
 
 

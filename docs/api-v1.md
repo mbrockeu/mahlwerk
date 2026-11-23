@@ -907,7 +907,7 @@ most once per minute.
 ### Summary for home automation
 
 `GET /summary/today` (any token scope): `{day, kcal_eaten, kcal_goal, kcal_left, protein, carbs, fat, water_ml,
-water_goal_ml, water_drinks_ml, steps, steps_goal, active_kcal, workouts, kcal_goal_bonus, weight_kg, weight_day, body_fat_pct, lean_kg, fasting, logged_today, last_entry_at}`. `kcal_goal` and `kcal_left` are null
+water_goal_ml, water_drinks_ml, steps, steps_goal, active_kcal, workouts, kcal_goal_bonus, weight_kg, weight_day, body_fat_pct, lean_kg, fasting, logged_today, meals, meal_entries, last_entry_at}`. `meals` maps each meal (`breakfast`, `lunch`, `snack`, `dinner`) to today's kcal of it, `meal_entries` to its number of entries (use this to tell whether a meal is logged: a black coffee has 0 kcal). `kcal_goal` and `kcal_left` are null
 without a goal (`kcal_left` is negative above the goal). `weight_kg` is the latest value of any day (`body_fat_pct` and `lean_kg` come from the same day, null without a value). `fasting` is
 `{active, elapsed_seconds, target_hours}`, or null when the timer is off and no fast runs. `last_entry_at` is unix
 seconds of the latest entry ever made. "Today" is the server's date.

@@ -10,6 +10,7 @@ from ..admin_models import SummaryToday
 from ..auth import current_user
 from ..db import DEFAULT_WATER_GOAL, Store
 from ..deps import get_store
+from ..models import MEALS
 from ..hydration import day_drinks_ml
 from ..nutrition import r1, scale, total
 from .diary import today
@@ -23,6 +24,7 @@ def summary_today(user: dict = Depends(current_user), store: Store = Depends(get
     day = today().isoformat()
     rows = store.entries_on(uid, day)
     sums = total([scale(r["per_100"], r["amount"]) for r in rows])
+    by_meal = {m: [r for r in rows if r["meal"] == m] for m in MEALS}
     goal = store.goal_on(uid, day)
     today_activity = day_activities(store, uid, day, day, goal)[day]
     kcal_goal = round(activity.day_goal_kcal(goal["kcal"], {day: today_activity.bonus_kcal}, day)) if goal else None
@@ -59,5 +61,7 @@ def summary_today(user: dict = Depends(current_user), store: Store = Depends(get
         "lean_kg": weight["lean_kg"] if weight else None,
         "fasting": fast,
         "logged_today": bool(rows),
+        "meals": {m: r1(total([scale(r["per_100"], r["amount"]) for r in by_meal[m]])["kcal"]) for m in MEALS},
+        "meal_entries": {m: len(by_meal[m]) for m in MEALS},
         "last_entry_at": store.last_entry_at(uid),
     }
