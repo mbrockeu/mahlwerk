@@ -13,20 +13,32 @@
   let body: HTMLDivElement;
   let zone: HTMLDivElement;
   let opener: Element | null = null;
-  // Sheets can be stacked: the page behind is made inert while at least one is open (counted in the DOM, see cleanup).
-  const BEHIND = 'main, nav, [data-menu]';
+  let wrap: HTMLDivElement;
+  // Everything behind the sheet is made inert: the siblings of the sheet and of each of its ancestors up to <body>. A sheet
+  // is often rendered inside the view (in <main>), so <main> itself must stay usable. Each sheet undoes only what it set,
+  // which keeps stacked sheets right.
+  function makeBehindInert(): HTMLElement[] {
+    const set: HTMLElement[] = [];
+    for (let node: HTMLElement | null = wrap; node && node !== document.body; node = node.parentElement) {
+      for (const sib of node.parentElement?.children ?? []) {
+        if (sib === node || !(sib instanceof HTMLElement) || sib.hasAttribute('inert')) continue;
+        if (sib.tagName === 'SCRIPT' || sib.tagName === 'STYLE' || sib.classList.contains('toast-live')) continue; // toasts (undo) stay usable
+        sib.setAttribute('inert', '');
+        set.push(sib);
+      }
+    }
+    return set;
+  }
 
   onMount(() => {
     opener = document.activeElement;
     document.body.classList.add('locked');
-    document.querySelectorAll(BEHIND).forEach((el) => el.setAttribute('inert', ''));
+    const inerted = makeBehindInert();
     sheet.focus({ preventScroll: true });
     return () => {
       const others = document.querySelectorAll('.sheet-wrap').length;
-      if (others <= 1) {
-        document.body.classList.remove('locked');
-        document.querySelectorAll(BEHIND).forEach((el) => el.removeAttribute('inert'));
-      }
+      inerted.forEach((el) => el.removeAttribute('inert'));
+      if (others <= 1) document.body.classList.remove('locked');
       if (opener instanceof HTMLElement && document.contains(opener)) opener.focus({ preventScroll: true });
     };
   });
@@ -153,7 +165,7 @@
   }
 </script>
 
-<div class="sheet-wrap">
+<div class="sheet-wrap" bind:this={wrap}>
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="backdrop" bind:this={backdrop} onclick={onclose}></div>
   <div class="sheet" class:tall bind:this={sheet} role="dialog" aria-modal="true" aria-label={label ?? title} tabindex="-1" onkeydown={keydown}>
