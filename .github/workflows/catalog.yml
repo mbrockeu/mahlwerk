@@ -49,6 +49,7 @@ jobs:
           gh release edit catalog --notes-file notes.md
           gh release upload catalog "out/$name" --clobber
           gh release upload catalog out/catalog.json --clobber   # after the file, so the manifest never names a missing one
-          gh release view catalog --json assets -q '.assets[].name' | grep '^catalog-de-.*\.db\.gz$' | grep -vx "$name" \
-            | xargs -r -n1 gh release delete-asset catalog -y
+          # the older files: none on the first run (grep finds nothing and must not fail the step)
+          old=$(gh release view catalog --json assets -q '.assets[].name' | grep '^catalog-de-.*\.db\.gz$' | grep -vx "$name" || true)
+          for asset in $old; do gh release delete-asset catalog "$asset" -y; done
           cat out/catalog.json >> "$GITHUB_STEP_SUMMARY"
