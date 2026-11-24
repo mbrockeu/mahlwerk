@@ -37,7 +37,7 @@ const en = {
   invalid: 'That is not a valid EAN/UPC barcode.', failed: 'Lookup failed ({reason}). Try again.',
   unknownBarcode: 'Not found yet. Add it once and it stays available.',
   emptyBarcode: 'Open Food Facts has this barcode, but no name and no nutrition facts yet.',
-  searchPlaceholder: 'Name, brand or barcode', noResults: 'Nothing found.', newProduct: 'New product',
+  searchPlaceholder: 'Name, brand or barcode', noResults: 'Nothing found.', showMoreResults: 'Show {n} more', newProduct: 'New product',
   noRecent: 'Nothing logged yet. Scan or search for a product first.', searching: 'Searching …',
   lastTime: 'last {amount}', yourProducts: 'Your products', basicFoods: 'Basic foods', moreProducts: 'More products',
 
@@ -788,7 +788,7 @@ const de: Record<Key, string> = {
   invalid: 'Das ist kein gültiger EAN-/UPC-Barcode.', failed: 'Abfrage fehlgeschlagen ({reason}). Bitte noch einmal.',
   unknownBarcode: 'Noch nicht bekannt. Einmal anlegen, dann ist es dauerhaft vorhanden.',
   emptyBarcode: 'Open Food Facts kennt den Barcode, hat aber weder Namen noch Nährwerte.',
-  searchPlaceholder: 'Name, Marke oder Barcode', noResults: 'Nichts gefunden.', newProduct: 'Neues Produkt',
+  searchPlaceholder: 'Name, Marke oder Barcode', noResults: 'Nichts gefunden.', showMoreResults: '{n} weitere anzeigen', newProduct: 'Neues Produkt',
   noRecent: 'Noch nichts eingetragen. Scanne oder suche zuerst ein Produkt.', searching: 'Suche …',
   lastTime: 'zuletzt {amount}', yourProducts: 'Deine Produkte', basicFoods: 'Grundnahrungsmittel', moreProducts: 'Weitere Produkte',
 
