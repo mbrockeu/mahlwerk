@@ -308,7 +308,9 @@ into their own account; an access key is refused (**403**), the demo account too
   when a change here is newer than the file's newest, the file's goal is recorded as a change from today on, like `PUT /me/goal` (warning
   `goal_from_today`), so earlier days keep their goal. Settings: only the keys of `PATCH /me/settings`,
   checked like there (`not_a_setting`, `invalid`). Webhooks are not imported (`not_imported`, their secret is not in the file).
-  Rows of other people are never changed.
+  Rows of other people are never changed. Ids are given per database: rows that were made on both sides independently (before any
+  import between them) only meet by a natural key; hand-logged entries, templates, own products without a barcode and recipes have none
+  and would come twice. Moving data is meant as export here, import there (or replace).
 - **Replace** first deletes the caller's own diary, weights, water, activity, sleep, workouts, fasts, templates, goal and goal history,
   the settings of the settings page, badges and Yazio import batches, then imports like merge. Shared products, recipes and groups, the
   account, sign-in, keys, webhooks and stored secrets stay. Refused (`ranged`) for a file with a `range`: it would delete everything else.
