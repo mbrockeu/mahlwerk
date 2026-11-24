@@ -11,6 +11,7 @@ try {
   if (!native) throw new Error('the native bridge (mahlwerkNative) is missing');
   const { dispatch } = await openLocal({ bridge: (msg) => native.postMessage(msg), schemaSql });
   (window as { mahlwerkLocal?: unknown }).mahlwerkLocal = localFetch(dispatch);
+  document.getElementById('boot')?.remove(); // the loading note of index.html (app build): the interface takes over
   await import('./main');
 } catch (e) {
   // no interface without the data: say why instead of a blank page (the database may have another schema version)

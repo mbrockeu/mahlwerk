@@ -26,7 +26,10 @@ export default defineConfig(({ mode }) => {
           order: 'pre' as const,
           handler: (html: string) => html
             .replace('src="/src/main.ts"', 'src="/src/appMain.ts"')
-            .replace(/\s*<link rel="manifest"[^>]*>/, ''), // not installable from inside the app
+            .replace(/\s*<link rel="manifest"[^>]*>/, '') // not installable from inside the app
+            // the first start opens the database and lays out the schema before the interface exists: say so instead of a blank page
+            .replace('<div id="app"></div>', '<div id="app"><p id="boot" style="margin:40vh 0 0;text-align:center;font:15px system-ui,sans-serif;opacity:.6">'
+              + '<script>document.write(/^de/i.test(navigator.language) ? "Mahlwerk wird geladen …" : "Mahlwerk is loading …")</script></p></div>'),
         },
       },
     ],
