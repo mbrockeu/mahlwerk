@@ -309,7 +309,7 @@ export interface Me {
   features?: { access_tokens: boolean; webhooks: boolean; cookidoo?: boolean; web_recipes?: boolean };
 }
 
-/** One import run (see `python -m mahlwerk.yazio`); the counts are what the run created. */
+/** One import run (the Yazio import in the profile); the counts are what the run created. */
 export interface ImportBatch {
   id: number;
   kind: 'yazio';
