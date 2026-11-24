@@ -5,7 +5,8 @@
 // hosted providers alike; there is no provider library, only the outgoing HTTP of the app.
 //   * meal: a photo of a meal -> the parts it recognises, each with an estimated amount and estimated nutrition values;
 //   * recipe: a photo of a recipe -> name, portions and ingredient lines (and the nutrition table per portion if the page has one). The
-//     method text is NOT taken over.
+//     method text is NOT taken over;
+//   * label: a photo of a nutrition table on a pack -> the values per 100 g or 100 ml (replaces the OCR of the Python app).
 // Configuration is the environment only (the operator sets it, nobody else): MAHLWERK_VISION_URL, MAHLWERK_VISION_MODEL and,
 // optionally, MAHLWERK_VISION_KEY (a Bearer token) and MAHLWERK_VISION_TEMPERATURE=off. A second model, MAHLWERK_VISION_FALLBACK_URL /
 // _MODEL / _KEY / _TEMPERATURE, is asked when the first one cannot be reached, refuses the request or is busy (not after a timeout and
@@ -138,6 +139,13 @@ export function prompt(kind: string, lang: string): string {
       + 'JSON shape: {"items": [{"name": string, "grams": number, "kcal": number, "protein_g": number, "fat_g": number, '
       + '"carbs_g": number, "confidence": number between 0 and 1}], "note": string or null}. '
       + 'At most 30 items. If there is no food in the photo, return an empty list. ' + RULES;
+  }
+  if (kind === 'label') {
+    return 'The photo shows the nutrition table of a food package. Read the values of the column per 100 g or per 100 ml '
+      + '(not per portion; if the table only has a portion column, return null for every value). '
+      + 'Give grams for fat, saturated fat, carbohydrates, sugars, fibre, protein and salt, and the energy in kcal (not kJ). '
+      + 'JSON shape: {"basis": "100g" or "100ml" or null, "kcal": number, "fat": number, "saturated_fat": number, '
+      + '"carbs": number, "sugars": number, "fiber": number, "protein": number, "salt": number}. ' + RULES;
   }
   return 'The photo shows a recipe (a book page, a print-out or a screen). Read its name, the number of portions and the '
     + 'ingredient lines. Do NOT copy the preparation steps or any other text. '
@@ -272,7 +280,25 @@ export function parseRecipe(text: string) {
   return { name, portions: cleanNumber(data.portions, 0.25, 100, 2), ingredients: lines, nutrition_per_portion: perPortion, note: cleanText(data.note, MAX_NOTE) };
 }
 
-const PARSERS = { meal: parseMeal, recipe: parseRecipe } as const;
+export const LABEL_KEYS = ['kcal', 'fat', 'saturated_fat', 'carbs', 'sugars', 'fiber', 'protein', 'salt'] as const;
+
+/** The values per 100 g/ml with the plausibility warnings of the OCR (label.py: interpret), so the editor shows the same hints. */
+export function parseLabel(text: string) {
+  const data: any = jsonObject(text);
+  if (!isObj(data)) throw new VisionError('unusable');
+  const per_100 = Object.fromEntries(LABEL_KEYS.map((k) => [k, cleanNumber(data[k], 0, k === 'kcal' ? 900 : 100)])) as Record<(typeof LABEL_KEYS)[number], number | null>;
+  const basis = data.basis === '100g' || data.basis === '100ml' ? data.basis : null;
+  const warnings: string[] = [];
+  const { kcal, fat, carbs, protein, fiber } = per_100;
+  if (kcal === null || fat === null || carbs === null || protein === null) warnings.push('core_values_missing');
+  else if (Math.abs(9 * fat + 4 * carbs + 4 * protein + 2 * (fiber ?? 0) - kcal) > Math.max(25, 0.2 * kcal)) warnings.push('energy_mismatch');
+  for (const [part, whole] of [['saturated_fat', 'fat'], ['sugars', 'carbs']] as const) {
+    if (per_100[part] !== null && per_100[whole] !== null && per_100[part]! > per_100[whole]! + 0.05) warnings.push(`${part}_exceeds_${whole}`);
+  }
+  return { per_100, basis, warnings, text: '' };
+}
+
+const PARSERS = { meal: parseMeal, recipe: parseRecipe, label: parseLabel } as const;
 
 // ---- the call ----
 
@@ -288,7 +314,7 @@ const base64 = (bytes: Uint8Array): string => {
 };
 
 /** Ask the model about the photo (a clean JPEG, see forModel) and return the checked result of `kind`. Throws VisionError. */
-export async function describe(ctx: Ctx, settings: Settings, kind: 'meal' | 'recipe', lang: string, jpeg: Uint8Array): Promise<ReturnType<typeof parseMeal> | ReturnType<typeof parseRecipe>> {
+export async function describe(ctx: Ctx, settings: Settings, kind: keyof typeof PARSERS, lang: string, jpeg: Uint8Array): Promise<ReturnType<(typeof PARSERS)[keyof typeof PARSERS]>> {
   const body: Obj = {
     model: settings.model, max_tokens: MAX_TOKENS, stream: false,
     messages: [{ role: 'user', content: [{ type: 'text', text: prompt(kind, lang) }, { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + base64(jpeg) } }] }],

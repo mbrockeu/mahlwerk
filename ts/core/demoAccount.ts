@@ -52,8 +52,7 @@ classify('own', // these write only rows of the signed-in user, which for a demo
   'POST /badges/seen', 'POST /water/{day}', 'PUT /water/{day}',
   'POST /fasting/start', 'POST /fasting/stop', 'PATCH /fasting/{fast_id}', 'DELETE /fasting/{fast_id}',
   'PUT /activity/{day}', 'POST /workouts', 'PATCH /workouts/{workout_id}', 'DELETE /workouts/{workout_id}', 'POST /health/sync',
-  'POST /recipes/ingredients/match', // reads a pasted ingredient list and looks up foods; writes nothing
-  'POST /label-scans'); // reads a photo; writes nothing for the demo account
+  'POST /recipes/ingredients/match'); // reads a pasted ingredient list and looks up foods; writes nothing
 classify('blocked',
   // the account itself: no name change, no password, no own test data, no accounts
   'PATCH /me', 'POST /me/demo-data', 'DELETE /me/demo-data', 'POST /auth/password',
@@ -81,7 +80,7 @@ classify('blocked',
   'GET /admin/overview', 'GET /admin/users', 'GET /admin/connectors', 'PATCH /admin/connectors/{key}',
   'GET /admin/catalog/refresh', 'POST /admin/catalog/refresh',
   'GET /admin/cookidoo/account', 'PUT /admin/cookidoo/account', 'DELETE /admin/cookidoo/account', 'POST /admin/cookidoo/account/check',
-  'GET /vision/status', 'POST /vision/meal', 'POST /vision/recipe', // photos would go to a model the operator pays for
+  'GET /vision/status', 'POST /vision/meal', 'POST /vision/recipe', 'POST /label-scans', // photos would go to a model the operator pays for
   'POST /admin/demo-account/reset', 'DELETE /admin/demo-account');
 
 export const verdict = (method: string, path: string): string | undefined => POLICY.get(`${method.toUpperCase()} ${path}`);

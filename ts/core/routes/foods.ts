@@ -1,5 +1,5 @@
 // Own foods: create, read, change, delete, search, the piece and drink settings, recent foods (routes/foods.py).
-// Not ported here: label scans (OCR dropped), images, combos.
+// Not ported here: label scans (routes/labelScans.ts, read by the image model), images, combos.
 import { z } from 'zod';
 import { fitScores, windowStart } from '../combos.ts';
 import { today } from '../dates.ts';

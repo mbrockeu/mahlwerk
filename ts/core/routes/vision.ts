@@ -20,11 +20,11 @@ const STATUS: Record<string, number> = { too_large: 413, too_many_pixels: 413, b
 const FAILURE: Record<string, number> = { timeout: 504, unavailable: 502, unusable: 502, busy: 429 };
 
 /** The dependency of the router: a caller who signed in the normal way (an access token is refused). */
-const sessionUser = (req: Req) => { if (req.user!.via_token) throw new HttpError(403, 'not available with an access token'); };
+export const sessionUser = (req: Req) => { if (req.user!.via_token) throw new HttpError(403, 'not available with an access token'); };
 
 const query = z.object({ lang: z.enum(['de', 'en']).default('en') });
 
-async function run(req: Req, kind: 'meal' | 'recipe', lang: string) {
+export async function run(req: Req, kind: 'meal' | 'recipe' | 'label', lang: string) {
   const { ctx } = req;
   const user = req.user!;
   if (!(await featureOn(ctx, 'vision.enabled'))) throw new HttpError(404, 'photo recognition is switched off (admin area)');
