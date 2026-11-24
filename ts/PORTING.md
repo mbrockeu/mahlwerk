@@ -1,6 +1,6 @@
 # Porting the backend to TypeScript – rules for every package
 
-Goal: the TS server answers `/api/v1` exactly like the Python server (src/mahlwerk) on the same SQLite file (schema v20).
+Goal: the TS server answers `/api/v1` exactly like the Python server (src/mahlwerk) on the same SQLite file (schema v21).
 The frontend and the iOS app must not notice the switch. Python stays the reference until the switch.
 
 ## Layout
@@ -10,7 +10,12 @@ The frontend and the iOS app must not notice the switch. Python stays the refere
   - `core/<module>.ts` – the pure logic of `src/mahlwerk/<module>.py`.
 - `server/` – Node only: HTTP, node:sqlite adapter, later images (sharp), outgoing HTTP.
 - `app/` – the app host (no `node:*` either): core for one device inside the iOS app's web view, see "App-Host" below.
-- `core/schema.sql` is generated from a fresh Python database. Never edit it, never migrate: TS refuses other versions.
+- `core/schema.sql` is generated from a fresh Python database (`PYTHONPATH=src python scripts/schema_sql.py`; tests/test_db.py checks it).
+  Never edit it by hand. The TS server never migrates: it refuses other versions. The one exception is the app (see App-Host): it runs
+  `core/migrations/v21.sql` (the same text as db.py's `V21_TABLES`, a test checks that) on a v20 database on the phone.
+- `uid` (v21): diary entries, workouts, fasts, templates, recipes, recipe groups and foods get a random id from an AFTER INSERT trigger
+  whatever code inserts them; the export carries it, the import (`core/dataImport.ts`) matches on it. An edit must keep a row (UPDATE),
+  never delete and insert it again.
 
 ## The ladder (Ponytail) – before writing any code, take the first option that fully works
 1. Does it need to exist? (dead code, unused parameters, Python-only workarounds: leave them out, name them in the report)
@@ -45,11 +50,18 @@ The same interface and core run in the iOS app (WKWebView), the data in SQLite o
 like `server/main.ts` for one device and answers requests in-process through `core/dispatch.ts` (the router the server uses), without
 host check, CSRF and security headers; the body limit stays. Fixed off (`APP_ENV`): tokens, webhooks, Cookidoo pictures, web recipes, Yazio
 sign-in, demo account, photo recognition / label reader, demo data; the catalogue refresh loads the file the workflow
-`.github/workflows/catalog.yml` publishes (`ts/app/catalogDownload.ts`: manifest over `http`, then `download`); the Yazio file import is on;
+`.github/workflows/catalog.yml` publishes (`ts/app/catalogDownload.ts`: manifest over `http`, then `download`); the Yazio file import and the
+import of an own export (`/me/import/*`, `core/dataImport.ts`) are on;
 no picture service (501 like a server without one). Auth is `single`. Cookidoo is on (shared and own account; the
 vault key comes from the keychain, see `secretKey`).
 - Build: `cd frontend && npm run build:app` -> `web/dist-app/` (index.html + assets; entry `src/appMain.ts`, which sets
   `window.mahlwerkLocal`; `src/lib/local.ts` routes `request()`, pictures and the export through it). `npm run build` is unchanged.
+- Schema: an empty database gets `core/schema.sql`; a v20 database (phones that had the app before v21) is migrated by
+  `openLocal({..., migrations: {20: core/migrations/v21.sql}})` (`src/appMain.ts` passes it) in one transaction, rolled back on error;
+  any other version is refused (SchemaMismatch). The server never passes `migrations`.
+- Data import: the export (ZIP) of the server can be imported in the app and the other way round (`POST /me/import/preview`, then
+  `/me/import/confirm` with the token; docs/api-v1.md "Importing an own export"). Unpacking uses DecompressionStream; the import is one
+  transaction with batched inserts (`INSERT … SELECT … FROM json_each(?)`): 15,000 diary entries take about 400 bridge ops.
 - Tests: `ts/tests/appHost.test.ts` (node:sqlite stand-in of the native side, `tests/appBridge.ts`); `e2e/run.sh app` runs the
   browser flows against `web/dist-app` with SQLite WASM in a SharedWorker as the native side (`e2e/app/`).
 - Bridge (JS calls `await window.webkit.messageHandlers.mahlwerkNative.postMessage({op, ...})`, a handler with reply; a failure
@@ -62,7 +74,7 @@ vault key comes from the keychain, see `secretKey`).
     `changes`/`lastId`: sqlite3_changes / sqlite3_last_insert_rowid after the statement. Errors: the sqlite3_errmsg text
     (core matches e.g. `constraint`). `bls`/`catalog` read-only; a missing file: error `missing`.
   - `{op:"exec", db:"main", sql}` -> `{}`: sqlite3_exec, several statements in one call (the schema is sent as
-    `BEGIN; …; PRAGMA user_version = 20; COMMIT;`), BEGIN IMMEDIATE / COMMIT / ROLLBACK. The JS side holds the transaction lock.
+    `BEGIN; …; PRAGMA user_version = 21; COMMIT;`, the v20 → v21 step as `BEGIN IMMEDIATE; …; COMMIT;`), BEGIN IMMEDIATE / COMMIT / ROLLBACK. The JS side holds the transaction lock.
   - `{op:"http", method, url, headers, bodyB64|null, timeoutMs, connectTimeoutMs, maxBytes}` -> `{status, headers, bodyB64}`:
     no redirects followed, no cookies stored or added (URLSession: `httpShouldSetCookies = false`, no cookie storage), the request
     headers sent as given (also `User-Agent` and `Cookie`). Errors start with `timeout`, `too_large` or `connect` (anything else counts
