@@ -198,7 +198,8 @@
   header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; }
   header h2 { flex: 1; }
   h2 { font-family: var(--f-display); font-weight: 800; font-size: 26px; letter-spacing: -0.03em; line-height: 1.05; min-width: 0; }
-  .body { overflow-y: auto; overscroll-behavior: contain; padding: 4px 0 calc(24px + var(--safe-b)); display: flex; flex-direction: column; gap: 14px; flex: 1; }
+  /* 5px at the sides (taken back by the margin): room for the focus ring (3px outside the field), which the scroll box would cut off */
+  .body { overflow-y: auto; overscroll-behavior: contain; padding: 4px 5px calc(24px + var(--safe-b)); margin: 0 -5px; display: flex; flex-direction: column; gap: 14px; flex: 1; }
   @keyframes rise { from { transform: translateY(100%); } to { transform: none; } }
   @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
   /* wide screens: a centred dialog instead of a sheet from the bottom */
