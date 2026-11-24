@@ -7,17 +7,12 @@
 import { Worker } from 'node:worker_threads';
 import { countries } from '../core/features.ts';
 import type { Ctx } from '../core/http.ts';
-import type { Catalog } from '../core/catalog.ts';
+import type { Catalog, CatalogRefreshService, RefreshState } from '../core/catalog.ts';
 import { OFF_URL } from './catalogImport.ts';
 
 const MAX_ERROR = 300;
 
-export interface RefreshState {
-  state: 'idle' | 'running' | 'done' | 'error'; started_at: number | null; finished_at: number | null; progress: string | null;
-  countries: string[]; result: { rows_read: number; products: number; seconds: number; truncated: boolean } | null; error: string | null;
-}
-
-export class CatalogRefresh {
+export class CatalogRefresh implements CatalogRefreshService {
   ctx: Ctx;
   catalog: Catalog;
   source: string;

@@ -193,3 +193,17 @@ export class Catalog {
 
 /** The catalogue of the host; without one everything is empty. */
 export const catalogOf = (ctx: Ctx): Catalog => (ctx.services.catalog as Catalog | undefined) ?? new Catalog({ all: async () => null });
+
+/** The catalogue refresh of the host (jobs.py `CatalogRefresh`, `ctx.services.refresh`): the admin routes start it and show its state. */
+export interface RefreshState {
+  state: 'idle' | 'running' | 'done' | 'error'; started_at: number | null; finished_at: number | null; progress: string | null;
+  countries: string[]; result: { rows_read: number; products: number; seconds: number; truncated: boolean } | null; error: string | null;
+}
+export interface CatalogRefreshService {
+  /** false when the host switched the refresh off (MAHLWERK_CATALOG_REFRESH=off) */
+  enabled: boolean;
+  status(): RefreshState;
+  /** Start a refresh; false when one is already running (or it is switched off). */
+  start(): Promise<boolean>;
+  wait(timeoutSeconds?: number): Promise<void>;
+}

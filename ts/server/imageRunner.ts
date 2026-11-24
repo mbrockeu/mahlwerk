@@ -1,6 +1,11 @@
 // Runs the picture child (imageproc.py `_run_child`): one child at a time, at most MAX_WAITING more requests wait for their turn, a
-// wall-clock limit, and the limits the operating system enforces where the system offers them (prlimit, an own empty network and
-// user namespace by `unshare`; both silently skipped when missing). The child is a fresh process with an empty environment, `/` as
+// wall-clock limit, and the limits the operating system enforces where the system offers them (prlimit: CPU time,
+// no core dumps, no files written, few descriptors; an own empty network and user namespace by `unshare`; both silently skipped when missing).
+// Not carried over from the Python child: RLIMIT_NPROC 0 (Node needs threads) and the 768 MB address space (RLIMIT_AS: the TypeScript
+// loader of Node alone needs more than 8 GiB of address space for its WebAssembly, V8 and libvips reserve far more than they use; a
+// 24 megapixel picture peaks at ~180 MB resident). What bounds memory instead: the checks of `imageChild.ts` (24 megapixels, 300 MB of
+// decoded pixels, first frame only, one child at a time), `--max-old-space-size`, and the wall clock. A build that ships the child as
+// plain JavaScript can add `--as=` here. The child is a fresh process with an empty environment, `/` as
 // working directory and nothing inherited but stdin/stdout/stderr. If it is killed, crashes in a library or times out, the answer is a
 // plain refusal, never an error page and never a hung server.
 import { spawn, spawnSync } from 'node:child_process';

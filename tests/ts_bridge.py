@@ -7,8 +7,8 @@ TCP peer to pretend (`client=(peer, port)`). A `clock` given to create_app is se
 
 Outgoing HTTP of the TS app never leaves the machine: a small HTTP server in a thread of this process (`_Bridge`) receives
 every request the TS app wants to send, keyed by purpose (off, oidc, yazio, web, vision, webhook), and answers it with the mock
-transport the test gave `create_app` (transport= is "off", the others by name; webhooks have none and get the web one when
-the test gave it, else the connection fails). DNS questions of the TS netguard are answered by `netguard.resolver`, which
+transport the test gave `create_app` (transport= is "off", the others by name; webhooks have none: the receivers of the tests
+are real servers, so a webhook to 127.0.0.1 or ::1 is really sent, everything else fails to connect). DNS questions of the TS netguard are answered by `netguard.resolver`, which
 conftest replaces by the fake resolver. Test-only: the production server has no such path.
 
 Tests that reach into the Python internals (`app.state`, the Store, module functions) cannot run this way; the in-scope
@@ -18,6 +18,7 @@ list is ts/api_tests.txt.
 import asyncio
 import atexit
 import base64
+import inspect
 import json
 import os
 import subprocess
@@ -60,9 +61,16 @@ def _error_kind(exc: Exception) -> str:
 
 
 def _call_transport(transport, payload: dict) -> dict:
-    request = httpx.Request(payload["method"], payload["url"], headers=payload["headers"],
+    url, headers, extensions = payload["url"], payload["headers"], {}
+    if payload.get("address"):  # the app connects to the address it checked: a mock sees what a Python mock sees (the IP, the name in Host)
+        from mahlwerk import netguard
+
+        url, pinned, extensions = netguard.pinned_target(url, payload["address"])
+        headers = {**headers, **pinned}
+    request = httpx.Request(payload["method"], url, headers=headers, extensions=extensions,
                             content=base64.b64decode(payload["body"]) if payload["body"] else None)
-    if not isinstance(transport, httpx.BaseTransport):  # (a MockTransport is both: the sync way is used)
+    # (a MockTransport is both kinds: the sync way is used, unless its handler is an async function, as for Yazio)
+    if not isinstance(transport, httpx.BaseTransport) or (isinstance(transport, httpx.MockTransport) and inspect.iscoroutinefunction(transport.handler)):
         async def run():
             response = await transport.handle_async_request(request)
             body = response.content if response.is_stream_consumed else b"".join([c async for c in response.aiter_raw()])
@@ -93,8 +101,10 @@ class _Handler(BaseHTTPRequestHandler):
                 answer = {"addresses": list(netguard.resolver(payload["host"], payload["port"]))}
             else:
                 transport = getattr(app, _PURPOSE[parts[1]], None)
-                if transport is None and parts[1] == "webhook":
-                    transport = app.web_transport
+                if transport is None and parts[1] == "webhook" and payload.get("address") in ("127.0.0.1", "::1"):
+                    # Python's webhook sender has no mock either: the receivers of the tests are real servers on the loopback
+                    # address, and only there (nothing else leaves the machine)
+                    transport = httpx.HTTPTransport()
                 answer = _call_transport(transport, payload) if transport is not None else {"error": "connect", "message": "no transport"}
         except Exception as exc:  # what a real network does: an error the caller maps (a mock that raises httpx errors)
             answer = {"error": _error_kind(exc), "message": f"{type(exc).__name__}: {exc}"[:200]}

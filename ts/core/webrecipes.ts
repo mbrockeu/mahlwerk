@@ -345,7 +345,7 @@ export class Fetcher {
       let res;
       try {
         res = await outgoing(this.ctx).fetch('web', {
-          method: 'GET', url: current, headers, address: ip, timeout: Math.min(remaining, 5.0), connectTimeout: Math.min(remaining, 4.0),
+          method: 'GET', url: current, headers, address: ip, timeout: remaining, connectTimeout: Math.min(remaining, 4.0),
           maxBytes: image ? MAX_IMAGE_BYTES : MAX_BYTES,
         });
       } catch (e) {
