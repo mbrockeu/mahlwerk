@@ -256,7 +256,7 @@ test('rows that exist on both sides under different ids meet by their natural ke
   const one = await world(), two = await world();
   await fill(one, 'ann');
   // an entry from a Yazio import and a workout from Apple Health carry the id of their source
-  await one.ctx.db.run("UPDATE diary_entry SET external_id = 'yazio:e1' WHERE id = (SELECT min(id) FROM diary_entry)");
+  await one.ctx.db.run("UPDATE diary_entry SET external_id = 'yazio:e1' WHERE id = (SELECT min(id) FROM diary_entry WHERE meal = 'snack')");
   await one.ctx.db.run("UPDATE workout SET external_id = 'health:w1'");
   const zip = await exportZip(one, 'ann');
   const first = await preview(two, 'ann', zip);
@@ -308,4 +308,131 @@ test('replace: the products of a removed Yazio batch lose the batch; a guest\'s 
   assert.equal((await confirm(w, 'gast', g.json.token, 'merge', '')).status, 200);
   const owner = await w.ctx.db.get<any>("SELECT created_by FROM food WHERE code = '4000000000017'");
   assert.equal(owner!.created_by, (await w.ctx.db.get<any>("SELECT id FROM user WHERE username = 'gast'"))!.id);
+});
+
+// ---- review fixes ------------------------------------------------------------------------------------------------------------------
+
+const idOf = async (w: World, name: string) => (await w.ctx.db.get<any>('SELECT id FROM user WHERE username = ?', [name]))!.id as number;
+
+test('sample data: a demo row here is never overwritten, and sample rows of the file make no real rows', async () => {
+  const w = await world();
+  await fill(w, 'ann');
+  const file = await jsonOf(await exportZip(w, 'ann'));
+  const ann = await idOf(w, 'ann');
+  await w.ctx.db.run('UPDATE diary_entry SET demo = 1 WHERE user_id = ? AND uid = ?', [ann, file.diary[0].uid]);
+  await w.ctx.db.run("UPDATE weight SET demo = 1 WHERE user_id = ? AND day = '2026-03-09'", [ann]);
+  file.diary[0].amount = 77;
+  file.weight[0].kg = 66;
+  const sampleFood = { ...file.foods[0], uid: 'cd'.repeat(16), code: null, data: { ...file.foods[0].data, name: 'Sample', demo_account: true } };
+  const p = await preview(w, 'ann', JSON.stringify({ ...file, foods: [...file.foods, sampleFood], activity: [...file.activity, { day: '2026-01-01', steps: 5, source: 'demo' }] }));
+  assert.equal(p.status, 200, p.text);
+  const m = p.json.modes.merge.counts;
+  assert.deepEqual([m.diary.reasons, m.weight.reasons, m.foods.reasons, m.activity.reasons], [{ demo: 1 }, { demo: 1 }, { demo: 1 }, { demo: 1 }]);
+  assert.equal((await confirm(w, 'ann', p.json.token)).status, 200);
+  assert.equal((await w.ctx.db.get<any>('SELECT amount, demo FROM diary_entry WHERE uid = ?', [file.diary[0].uid]))!.amount, 50);
+  assert.equal((await w.ctx.db.get<any>("SELECT kg FROM weight WHERE user_id = ? AND day = '2026-03-09'", [ann]))!.kg, 71.5);
+  assert.equal((await w.ctx.db.get<any>("SELECT count(*) AS n FROM food WHERE json_extract(data, '$.name') = 'Sample'"))!.n, 0);
+  assert.equal((await w.ctx.db.get<any>("SELECT count(*) AS n FROM activity_day WHERE day = '2026-01-01'"))!.n, 0);
+});
+
+test('shared rows changed here after the file was made stay as they are (newer_here); a shared group keeps its name', async () => {
+  const w = await world();
+  const ann = await fill(w, 'ann');
+  const file = await jsonOf(await exportZip(w, 'ann'));
+  await w.ctx.db.run('UPDATE food SET fetched_at = fetched_at + 1000 WHERE id = ?', [ann.bar.id]);
+  await w.ctx.db.run('UPDATE recipe SET updated_at = updated_at + 1000 WHERE id = ?', [ann.recipe.id]);
+  const bar = file.foods.find((x: any) => x.code);
+  bar.data.name = 'Old bar';
+  file.recipes[0].portions = 7;
+  file.recipe_groups[0].name = 'Old group name';
+  const p = await preview(w, 'ann', JSON.stringify(file));
+  const m = p.json.modes.merge.counts;
+  assert.deepEqual([m.foods.reasons, m.recipes.reasons, m.recipe_groups.reasons], [{ newer_here: 1 }, { newer_here: 1 }, { name_kept: 1 }]);
+  assert.equal((await confirm(w, 'ann', p.json.token)).status, 200);
+  assert.equal((await send(w, 'ann', 'GET', `/api/v1/foods/${ann.bar.id}`)).json.name, 'Bar');
+  assert.equal((await send(w, 'ann', 'GET', `/api/v1/recipes/${ann.recipe.id}`)).json.portions, 2);
+  assert.equal((await send(w, 'ann', 'GET', '/api/v1/recipe-groups')).json[0].name, 'Breakfast ann');
+  // per-user rows: the file still wins
+  file.diary[1].amount = 12;
+  const q = await preview(w, 'ann', JSON.stringify(file));
+  assert.equal(q.json.modes.merge.counts.diary.changed, 1);
+});
+
+test('reading is lenient where the stores are: odd further nutrients are cleaned, long names pass; errors name the row', async () => {
+  const w = await world();
+  await fill(w, 'ann');
+  const file = await jsonOf(await exportZip(w, 'ann'));
+  const long = 'L'.repeat(2000);
+  file.diary[0] = { ...file.diary[0], name: long, brand: long, extra_per_100: { iron: 'lots', zinc: null, calcium: 120 } };
+  file.templates[0].items[0].extra = null;
+  const p = await preview(w, 'cleo', JSON.stringify(file));
+  assert.equal(p.status, 200, p.text);
+  assert.equal((await confirm(w, 'cleo', p.json.token)).status, 200);
+  const row = await w.ctx.db.get<any>('SELECT name, extra FROM diary_entry WHERE user_id = ? AND name = ?', [await idOf(w, 'cleo'), long]);
+  assert.deepEqual(JSON.parse(row!.extra), { calcium: 120 });
+  const bad = await preview(w, 'cleo', JSON.stringify({ ...file, diary: [file.diary[1], { ...file.diary[2], amount: 'x' }] }));
+  assert.equal(bad.status, 422);
+  assert.match(bad.json.detail, /diary\[1\]\.amount/);
+  // 1e999 is infinity after parsing: refused as a value, never a server error
+  for (const [from, to] of [['"data":{', '"data":{"weird":1e999,'], ['"amount":50', '"amount":1e999'], ['"settings":{', '"settings":{"tour_seen":1e999,']]) {
+    const text = JSON.stringify(file).replace(from!, to!);
+    assert.ok(text.includes('1e999'), from);
+    const inf = await preview(w, 'cleo', text);
+    assert.equal(inf.status, 422, `${from}: ${inf.text}`);
+  }
+});
+
+test('fasts: the file ends the fast that runs here and starts another one, in either order of the file', async () => {
+  const w = await world();
+  await fill(w, 'ann');
+  const ann = await idOf(w, 'ann');
+  await w.ctx.db.run('DELETE FROM fast WHERE user_id = ?', [ann]);
+  await w.ctx.db.run('INSERT INTO fast (user_id, started_at, ended_at, target_hours) VALUES (?, 1773000000, 1773050000, 16), (?, 1773100000, NULL, 16)', [ann, ann]);
+  const file = await jsonOf(await exportZip(w, 'ann'));
+  const [closed, running] = [file.fasting.find((x: any) => x.ended_at), file.fasting.find((x: any) => !x.ended_at)];
+  const fasting = [{ ...closed, ended_at: null }, { ...running, ended_at: '2026-03-10T12:00:00+00:00' }]; // the opening one first
+  const p = await preview(w, 'ann', JSON.stringify({ ...file, fasting }));
+  assert.deepEqual([p.json.modes.merge.counts.fasting.changed, p.json.modes.merge.counts.fasting.skipped], [2, 0]);
+  const c = await confirm(w, 'ann', p.json.token);
+  assert.equal(c.status, 200, c.text);
+  const open = await w.ctx.db.all<any>('SELECT uid FROM fast WHERE ended_at IS NULL');
+  assert.deepEqual(open.map((x) => x.uid), [closed.uid]);
+});
+
+test('an external id that another row here has is skipped (external_id_taken), not a failed import', async () => {
+  const w = await world();
+  await fill(w, 'ann');
+  const ann = await idOf(w, 'ann');
+  const rows = await w.ctx.db.all<any>('SELECT id, uid FROM diary_entry WHERE user_id = ? ORDER BY id', [ann]);
+  await w.ctx.db.run("UPDATE diary_entry SET external_id = 'yazio:1' WHERE id = ?", [rows[0].id]);
+  const file = await jsonOf(await exportZip(w, 'ann'));
+  const other = file.diary.find((x: any) => x.uid === rows[1].uid);
+  const p = await preview(w, 'ann', JSON.stringify({ ...file, diary: [{ ...other, external_id: 'yazio:1' }], workouts: [] }));
+  assert.deepEqual(p.json.modes.merge.counts.diary.reasons, { external_id_taken: 1 });
+  assert.equal((await confirm(w, 'ann', p.json.token)).status, 200);
+});
+
+test('the file wins over a link too: no link in the file clears the link here', async () => {
+  const w = await world();
+  await fill(w, 'ann');
+  const file = await jsonOf(await exportZip(w, 'ann'));
+  const e = file.diary[0];
+  const p = await preview(w, 'ann', JSON.stringify({ ...file, diary: [{ ...e, food_uid: null, food_code: null }] }));
+  assert.equal(p.json.modes.merge.counts.diary.changed, 1);
+  assert.equal((await confirm(w, 'ann', p.json.token)).status, 200);
+  assert.equal((await w.ctx.db.get<any>('SELECT food_id FROM diary_entry WHERE uid = ?', [e.uid]))!.food_id, null);
+});
+
+test('an own export imported again is a real no-op: stored values the export cleans, partial settings, import marks', async () => {
+  const w = await world();
+  await fill(w, 'ann');
+  const ann = await idOf(w, 'ann');
+  await w.ctx.db.run("INSERT OR REPLACE INTO user_setting (user_id, key, value) VALUES (?, 'activity', '{\"add_to_goal\": true}'), (?, 'water_glasses', '[500, 250]')", [ann, ann]);
+  await w.ctx.db.run("UPDATE diary_entry SET extra = '{\"iron\": 3, \"bogus\": \"x\"}', import_id = 42 WHERE user_id = ?", [ann]);
+  const zip = await exportZip(w, 'ann');
+  const p = await preview(w, 'ann', zip);
+  const m = p.json.modes.merge.counts;
+  assert.equal(sum(m, 'new') + sum(m, 'changed') + sum(m, 'skipped'), 0, JSON.stringify(m));
+  assert.equal((await confirm(w, 'ann', p.json.token)).status, 200);
+  assert.equal((await w.ctx.db.get<any>('SELECT count(*) AS n FROM diary_entry WHERE import_id = 42'))!.n, 4);
 });

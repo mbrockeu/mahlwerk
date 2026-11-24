@@ -68,13 +68,21 @@ const day = z.string().refine((d) => d === SINCE_START || dayToDate(d) !== null,
 const iso = z.string().max(40).refine((s) => /^\d{4}-\d\d-\d\dT/.test(s) && !Number.isNaN(Date.parse(s)), 'not a time');
 const text = (max: number) => z.string().max(max);
 const num = (min: number, max: number) => z.number().min(min).max(max);
-const per100 = z.record(text(40), z.number().nullable()).refine((o) => Object.keys(o).length <= 60);
-const extra = z.record(text(40), z.number()).refine((o) => Object.keys(o).length <= 200);
+/** A name or brand as the stores keep it: no limit there (products from Open Food Facts and Yazio can be long); only absurd lengths are
+ * refused, everything else is taken as it is. */
+const NAME = 10_000;
+/** Values per 100 g/ml: what is not a number is read as unknown (null), like the views read it. */
+const per100 = z.record(text(60), z.unknown()).refine((o) => Object.keys(o).length <= 100)
+  .transform((o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, typeof v === 'number' && Number.isFinite(v) ? v : null])));
+/** Further nutrients: cleaned like nutrients.clean on every write (unknown keys, text, null, implausible values are dropped). */
+const extra = z.unknown().transform((o) => nutrients.clean(o));
 const link = { food_uid: uid.nullable().optional(), food_code: text(64).nullable().optional() };
-const item = z.object({ name: text(300), brand: text(300).nullable().optional(), amount: num(0, 1e6), unit: z.enum(['g', 'ml']), per_100: per100, extra: extra.nullable().optional(), ...link });
+const item = z.object({ name: text(NAME), brand: text(NAME).nullable().optional(), amount: num(0, 1e6), unit: z.enum(['g', 'ml']), per_100: per100, extra: extra.optional(), ...link });
+/** toJson refuses NaN/infinity (a 1e999 in the file): such a value makes the row invalid (422), never a server error. */
+const storable = (v: unknown, max: number): boolean => { try { return toJson(v).length <= max; } catch { return false; } };
 const ACTIVITY_SOURCES = ['manual', 'health', 'yazio', 'demo'] as const;
 const FOOD_SOURCES = ['own', 'openfoodfacts', 'recipe', 'yazio', 'bls', 'cookidoo', 'web'] as const;
-const foodData = z.looseObject({ name: text(300).nullable().optional(), per_100: per100 }).refine((d) => toJson(d).length <= 200_000, 'too large');
+const foodData = z.looseObject({ name: text(NAME).nullable().optional(), per_100: per100 }).refine((d) => storable(d, 200_000), 'too large or not a number');
 
 const fileSchema = z.object({
   format_version: z.number(),
@@ -84,30 +92,31 @@ const fileSchema = z.object({
   account: z.object({ username: text(200).nullable().optional(), display_name: text(200).nullable().optional() }).nullable().optional(),
   goal: z.object({ kcal: num(0, 50000), protein: num(0, 5000), carbs: num(0, 5000), fat: num(0, 5000), water_ml: num(0, 100000).nullable().optional(), steps: num(0, 1e6).nullable().optional() }).nullable().optional(),
   goal_history: z.array(z.object({ valid_from: day, kcal: num(0, 50000), protein: num(0, 5000), carbs: num(0, 5000), fat: num(0, 5000), water_ml: num(0, 100000).nullable().optional(), steps: num(0, 1e6).nullable().optional(), changed_at: iso.nullable().optional() })).max(5000).default([]),
-  settings: z.record(text(60), z.unknown()).nullable().optional(),
+  settings: z.record(text(60), z.unknown()).nullable().optional().refine((v) => storable(v ?? {}, 1_000_000), 'not storable'),
   diary: z.array(z.object({
-    uid: uid.optional(), day, meal: z.enum(MEALS), name: text(300), brand: text(300).nullable().optional(), amount: num(0, 1e6), unit: z.enum(['g', 'ml']),
-    logged_at: iso.nullable().optional(), per_100: per100, extra_per_100: extra.nullable().optional(), external_id: text(200).nullable().optional(), ...link,
+    uid: uid.optional(), day, meal: z.enum(MEALS), name: text(NAME), brand: text(NAME).nullable().optional(), amount: num(0, 1e6), unit: z.enum(['g', 'ml']),
+    logged_at: iso.nullable().optional(), per_100: per100, extra_per_100: extra.optional(), external_id: text(200).nullable().optional(), ...link,
   })).default([]),
   weight: z.array(z.object({ day, kg: num(0, 1000), body_fat_pct: num(0, 100).nullable().optional(), lean_kg: num(0, 1000).nullable().optional(), health: z.boolean().optional(), body_fat_health: z.boolean().optional(), lean_health: z.boolean().optional() })).default([]),
   activity: z.array(z.object({ day, steps: num(0, 1e7).nullable().optional(), active_kcal: num(0, 1e6).nullable().optional(), distance_m: num(0, 1e8).nullable().optional(), source: z.enum(ACTIVITY_SOURCES) })).default([]),
   sleep: z.array(z.object({ day, minutes: z.number().int().min(0).max(100000), source: z.enum(['manual', 'health', 'demo']) })).default([]),
   workouts: z.array(z.object({
-    uid: uid.optional(), day, started_at: iso.nullable().optional(), kind: text(60), name: text(300), minutes: num(0, 1e6), kcal: num(0, 1e6).nullable().optional(),
-    distance_m: num(0, 1e8).nullable().optional(), steps: num(0, 1e8).nullable().optional(), note: text(5000).nullable().optional(), source: z.enum(ACTIVITY_SOURCES),
+    uid: uid.optional(), day, started_at: iso.nullable().optional(), kind: text(60), name: text(NAME), minutes: num(0, 1e6), kcal: num(0, 1e6).nullable().optional(),
+    distance_m: num(0, 1e8).nullable().optional(), steps: num(0, 1e8).nullable().optional(), note: text(NAME).nullable().optional(), source: z.enum(ACTIVITY_SOURCES),
     external_id: text(200).nullable().optional(),
   })).default([]),
   water: z.array(z.object({ day, ml: z.number().int().min(0).max(100000), health: z.boolean().optional() })).default([]),
   fasting: z.array(z.object({ uid: uid.optional(), started_at: iso, ended_at: iso.nullable().optional(), target_hours: num(0, 10000) })).default([]),
-  templates: z.array(z.object({ uid: uid.optional(), name: text(300), created_at: iso.nullable().optional(), items: z.array(item).max(500) })).default([]),
+  templates: z.array(z.object({ uid: uid.optional(), name: text(NAME), created_at: iso.nullable().optional(), items: z.array(item).max(500) })).default([]),
   recipes: z.array(z.object({
-    uid: uid.optional(), food_uid: uid.optional(), name: text(300).nullable(), portions: z.number().gt(0).max(10000), total_weight: z.number().gt(0).max(1e6).nullable().optional(),
+    uid: uid.optional(), food_uid: uid.optional(), name: text(NAME).nullable(), portions: z.number().gt(0).max(10000), total_weight: z.number().gt(0).max(1e6).nullable().optional(),
     updated_at: iso.nullable().optional(), items: z.array(item).max(500),
   })).default([]),
-  recipe_groups: z.array(z.object({ uid, name: text(60).min(1), source: text(200).nullable().optional(), created_at: iso.nullable().optional(), members: z.array(uid).max(10000) })).default([]),
+  recipe_groups: z.array(z.object({ uid, name: text(200).min(1), source: text(200).nullable().optional(), created_at: iso.nullable().optional(), members: z.array(uid).max(10000) })).default([]),
   foods: z.array(z.object({
     uid, code: text(64).nullable().optional(), source: z.enum(FOOD_SOURCES), external_id: text(300).nullable().optional(), data: foodData,
     piece_label: text(60).nullable().optional(), piece_grams: z.number().gt(0).max(100000).nullable().optional(), drink: z.boolean().nullable().optional(), own: z.boolean().optional(),
+    fetched_at: iso.nullable().optional(),
   })).default([]),
   badges: z.array(z.object({ code: text(60), earned_at: iso.nullable().optional() })).default([]),
   webhooks: z.array(z.unknown()).default([]),
@@ -136,7 +145,7 @@ export function parseExport(json: Uint8Array): ExportFile {
   if (!FORMATS.includes(version)) throw new ImportError(`the file has export format ${Math.trunc(version)}; this version reads formats ${FORMATS.join(' and ')}`);
   const parsed = fileSchema.safeParse(value);
   if (!parsed.success) {
-    const where = parsed.error.issues[0]?.path.filter((p) => typeof p === 'string').join('.') || 'file';
+    const where = (parsed.error.issues[0]?.path ?? []).map((p, i) => (typeof p === 'number' ? `[${p}]` : `${i ? '.' : ''}${String(p)}`)).join('') || 'file';
     throw new ImportError(`the file is not a valid Mahlwerk data export (${where})`);
   }
   const f = parsed.data;
@@ -252,7 +261,7 @@ async function importFoods(r: Run): Promise<Foods> {
   const itemLinks = [...f.diary, ...f.templates.flatMap((t) => t.items), ...f.recipes.flatMap((x) => x.items)];
   const uids = [...f.foods.map((x) => x.uid), ...f.recipes.map((x) => x.food_uid), ...f.recipe_groups.flatMap((g) => g.members), ...itemLinks.map((i) => i.food_uid)];
   const codes = [...f.foods.map((x) => x.code), ...itemLinks.map((i) => i.food_code)];
-  const rows = await db.all('SELECT id, uid, code, source, found, data, piece_label, piece_grams, drink, external_id, created_by, '
+  const rows = await db.all('SELECT id, uid, code, source, found, data, fetched_at, piece_label, piece_grams, drink, external_id, created_by, '
     + '(SELECT recipe.created_by FROM recipe WHERE recipe.food_id = food.id) AS recipe_owner FROM food '
     + 'WHERE uid IN (SELECT value FROM json_each(?)) OR code IN (SELECT value FROM json_each(?)) OR external_id IN (SELECT value FROM json_each(?))',
   [json(uids), json(codes), json(f.foods.map((x) => x.external_id))]);
@@ -266,22 +275,28 @@ async function importFoods(r: Run): Promise<Foods> {
   }
   for (const x of f.foods) {
     if (x.source === 'recipe') { skip(r, 'foods', 'recipe_food'); continue; } // a recipe comes with its recipe
-    const { demo: _d, demo_account: _a, ...rest } = x.data as Record<string, unknown>; // never a sample food here
-    const data = { ...rest, ...(rest.extra !== undefined ? { extra: nutrients.clean(rest.extra) } : {}) };
+    // sample foods (of the test data or the demo account) never become real products: skipped, their entries keep their values
+    if (isSample(x.data)) { skip(r, 'foods', 'demo'); continue; }
+    const data = foodView(x.data);
+    const changedAt = seconds(x.fetched_at) ?? r.now;
     const want = { source: x.source, data, piece_label: x.piece_label ?? null, piece_grams: x.piece_grams ?? null, drink: x.drink ?? null };
     const row = (x.code ? local.code.get(x.code) : undefined) ?? (x.external_id ? local.ext.get(x.external_id) : undefined) ?? local.uid.get(x.uid);
     if (row) {
       m.byUid.set(x.uid, row.id);
       if (row.source === 'recipe') { skip(r, 'foods', 'recipe_food'); continue; }
-      const have = { source: row.source, data: parseJson(row.data), piece_label: row.piece_label, piece_grams: row.piece_grams, drink: row.drink === null ? null : Boolean(row.drink) };
+      const stored = parseJson(row.data);
+      if (row.found && isSample(stored)) { skip(r, 'foods', 'demo'); continue; } // a sample food here is never overwritten
+      const have = { source: row.source, data: foodView(stored), piece_label: row.piece_label, piece_grams: row.piece_grams, drink: row.drink === null ? null : Boolean(row.drink) };
       if (row.found && same(have, want)) { count(r, 'foods', 'unchanged'); continue; }
       if (row.found && !canEdit(user, row.created_by ?? row.recipe_owner)) { skip(r, 'foods', 'not_editable'); continue; }
+      // shared: changed here after the file's version was made, the change here stays (a remembered miss is no change)
+      if (row.found && (x.fetched_at ? row.fetched_at > changedAt : true)) { skip(r, 'foods', 'newer_here'); continue; }
       count(r, 'foods', 'changed');
       m.source.set(row.id, x.source);
       if (r.write) {
         await db.run('UPDATE food SET source = ?, found = 1, data = ?, fetched_at = ?, import_id = NULL, piece_label = ?, piece_grams = ?, drink = ?, '
           + 'created_by = CASE WHEN found = 0 THEN ? ELSE created_by END WHERE id = ?',
-        [x.source, toJson(data), r.now, want.piece_label, want.piece_grams, want.drink === null ? null : flag(want.drink), x.own || !user.household ? user.id : null, row.id]);
+        [x.source, toJson(data), changedAt, want.piece_label, want.piece_grams, want.drink === null ? null : flag(want.drink), x.own || !user.household ? user.id : null, row.id]);
       }
       continue;
     }
@@ -293,7 +308,7 @@ async function importFoods(r: Run): Promise<Foods> {
     let id = m.nextFake--;
     if (r.write) {
       id = (await db.run('INSERT INTO food (uid, code, source, found, data, fetched_at, external_id, piece_label, piece_grams, drink, created_by) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)',
-        [newUid, x.code ?? null, x.source, toJson(data), r.now, x.external_id ?? null, want.piece_label, want.piece_grams, want.drink === null ? null : flag(want.drink), owner])).lastId;
+        [newUid, x.code ?? null, x.source, toJson(data), changedAt, x.external_id ?? null, want.piece_label, want.piece_grams, want.drink === null ? null : flag(want.drink), owner])).lastId;
     }
     if (newUid) m.takenUids.add(newUid);
     m.byUid.set(x.uid, id);
@@ -303,12 +318,26 @@ async function importFoods(r: Run): Promise<Foods> {
   return m;
 }
 
+/** A sample food: the test data of an own account (`demo`) or the demo account (`demo_account`). */
+const isSample = (data: unknown): boolean => {
+  const d = (data ?? {}) as Record<string, unknown>;
+  return d.demo === true || d.demo === 1 || d.demo_account === true || d.demo_account === 1;
+};
+/** The food data as it is written (and so compared): further nutrients cleaned. */
+const foodView = (data: unknown): Record<string, unknown> => {
+  const d = { ...((data ?? {}) as Record<string, unknown>) };
+  if (d.extra !== undefined) d.extra = nutrients.clean(d.extra);
+  return d;
+};
+
 const resolve = (m: Foods, foodUid?: string | null, code?: string | null): number | null =>
   (foodUid ? m.byUid.get(foodUid) : undefined) ?? (code ? m.byCode.get(code) : undefined) ?? null;
 
 type FileItem = z.output<typeof item>;
+const per100View = (o: unknown): Record<string, number | null> =>
+  Object.fromEntries(Object.entries((o ?? {}) as Record<string, unknown>).map(([k, v]) => [k, typeof v === 'number' && Number.isFinite(v) ? v : null]));
 const itemView = (i: { name: string; brand?: string | null; amount: number; unit: string; per_100: unknown; extra?: unknown }) =>
-  ({ name: i.name, brand: i.brand ?? null, amount: i.amount, unit: i.unit, per_100: i.per_100, extra: nutrients.clean(i.extra ?? {}) });
+  ({ name: i.name, brand: i.brand ?? null, amount: i.amount, unit: i.unit, per_100: per100View(i.per_100), extra: nutrients.clean(i.extra ?? {}) });
 const localItem = (row: Row) => itemView({ name: row.name, brand: row.brand, amount: row.amount, unit: row.unit, per_100: JSON.parse(row.per_100), extra: parseJson(row.extra) });
 
 /** An item's link: a food that is there or comes with the file; never a recipe (a recipe cannot be part of a template's or recipe's food,
@@ -333,7 +362,7 @@ async function writeItems(db: Db, table: 'template_item' | 'recipe_item', parent
 /** Recipes: by uid (format 1: an own recipe of the same name). The calculated food is made again from the items, like the edit route does. */
 async function importRecipes(r: Run, m: Foods): Promise<void> {
   const { db, f, user } = r;
-  const rows = await db.all('SELECT r.id, r.uid, r.food_id, r.portions, r.total_weight, r.created_by, fo.uid AS food_uid, fo.data, fo.created_by AS food_owner '
+  const rows = await db.all('SELECT r.id, r.uid, r.food_id, r.portions, r.total_weight, r.created_by, r.updated_at, fo.uid AS food_uid, fo.data, fo.created_by AS food_owner '
     + 'FROM recipe r JOIN food fo ON fo.id = r.food_id WHERE r.uid IN (SELECT value FROM json_each(?)) OR r.created_by = ?', [json(f.recipes.map((x) => x.uid)), user.id]);
   const byUid = new Map(rows.filter((x) => x.uid).map((x) => [x.uid as string, x]));
   const byName = new Map(rows.filter((x) => x.created_by === user.id).map((x) => [asciiLower(String(parseJson(x.data).name ?? '')), x]));
@@ -352,11 +381,13 @@ async function importRecipes(r: Run, m: Foods): Promise<void> {
       if (x.food_uid) m.byUid.set(x.food_uid, row.food_id);
       const have = { name: parseJson(row.data).name ?? null, portions: row.portions, total_weight: row.total_weight, items: (items.get(row.id) ?? []).map(localItem) };
       const want = { name: x.name, portions: x.portions, total_weight: x.total_weight ?? null, items: x.items.map(itemView) };
+      if (isSample(parseJson(row.data))) { skip(r, 'recipes', 'demo'); continue; }
       if (same(have, want)) { count(r, 'recipes', 'unchanged'); continue; }
       if (!canEdit(user, row.food_owner ?? row.created_by)) { skip(r, 'recipes', 'not_editable'); continue; }
+      if (row.updated_at > (seconds(x.updated_at) ?? 0)) { skip(r, 'recipes', 'newer_here'); continue; } // changed here after the file's version
       count(r, 'recipes', 'changed');
       if (r.write) {
-        await db.run('UPDATE food SET data = ?, fetched_at = ? WHERE id = ?', [toJson(data), r.now, row.food_id]);
+        await db.run('UPDATE food SET data = ?, fetched_at = ? WHERE id = ?', [toJson(data), updated, row.food_id]);
         await db.run('UPDATE recipe SET portions = ?, total_weight = ?, updated_at = ? WHERE id = ?', [x.portions, x.total_weight ?? null, updated, row.id]);
         await db.run('DELETE FROM recipe_item WHERE recipe_id = ?', [row.id]);
         await writeItems(db, 'recipe_item', row.id, fileItems);
@@ -367,7 +398,7 @@ async function importRecipes(r: Run, m: Foods): Promise<void> {
     let foodId = m.nextFake--;
     const foodUid = x.food_uid && !m.takenUids.has(x.food_uid) ? x.food_uid : null;
     if (r.write) {
-      foodId = (await db.run("INSERT INTO food (uid, code, source, found, data, fetched_at, created_by) VALUES (?, NULL, 'recipe', 1, ?, ?, ?)", [foodUid, toJson(data), r.now, user.id])).lastId;
+      foodId = (await db.run("INSERT INTO food (uid, code, source, found, data, fetched_at, created_by) VALUES (?, NULL, 'recipe', 1, ?, ?, ?)", [foodUid, toJson(data), updated, user.id])).lastId;
       const recipeUid = x.uid && !takenRecipeUids.has(x.uid) ? x.uid : null;
       const recipeId = (await db.run('INSERT INTO recipe (uid, food_id, portions, total_weight, created_by, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
         [recipeUid, foodId, x.portions, x.total_weight ?? null, user.id, updated])).lastId;
@@ -404,13 +435,15 @@ async function importGroups(r: Run, m: Foods): Promise<void> {
     if (row) {
       const have = members.get(row.id) ?? new Set();
       const missing = wanted.filter((id) => !have.has(id));
-      const other = byName.get(asciiLower(g.name));
-      const rename = row.name !== g.name && (!other || other.id === row.id);
-      if (!missing.length && !rename) { count(r, 'recipe_groups', 'unchanged'); continue; }
+      // a shared group keeps its name: it has no time of change, so which name is newer cannot be told (members are only added)
+      if (!missing.length) {
+        if (row.name !== g.name) skip(r, 'recipe_groups', 'name_kept');
+        else count(r, 'recipe_groups', 'unchanged');
+        continue;
+      }
       if (!canEdit(user, row.created_by)) { skip(r, 'recipe_groups', 'not_editable'); continue; }
       count(r, 'recipe_groups', 'changed');
       if (r.write) {
-        if (rename) await db.run('UPDATE recipe_group SET name = ? WHERE id = ?', [g.name, row.id]);
         for (const id of missing) await db.run('INSERT OR IGNORE INTO recipe_group_item (group_id, food_id) VALUES (?, ?)', [row.id, id]);
       }
       continue;
@@ -435,13 +468,23 @@ function matcher(rows: Row[]) {
   const byUid = new Map(rows.filter((x) => x.uid).map((x) => [x.uid as string, x]));
   const byExt = new Map(rows.filter((x) => x.external_id).map((x) => [x.external_id as string, x]));
   const claimed = new Set<number>();
-  return (u?: string, ext?: string | null): Row | 'taken' | undefined => {
+  const find = (u?: string, ext?: string | null): Row | 'taken' | undefined => {
     const row = (u ? byUid.get(u) : undefined) ?? (ext ? byExt.get(ext) : undefined);
     if (!row) return undefined;
     if (claimed.has(row.id)) return 'taken';
     claimed.add(row.id);
     return row;
   };
+  /** Whether `row` may take the external id `ext` (UNIQUE per user): no other row here has it. Records the move when it may. */
+  const takeExt = (row: Row, ext: string | null): boolean => {
+    if (!ext || ext === row.external_id) return true;
+    const owner = byExt.get(ext);
+    if (owner && owner.id !== row.id) return false;
+    if (row.external_id) byExt.delete(row.external_id);
+    byExt.set(ext, row);
+    return true;
+  };
+  return Object.assign(find, { takeExt });
 }
 
 async function importDiary(r: Run, m: Foods): Promise<void> {
@@ -451,20 +494,25 @@ async function importDiary(r: Run, m: Foods): Promise<void> {
   const fresh: unknown[][] = [];
   for (const e of f.diary) {
     const created = seconds(e.logged_at);
-    const want = { day: e.day, meal: e.meal, amount: e.amount, unit: e.unit, name: e.name, brand: e.brand ?? null, per_100: e.per_100, extra: nutrients.clean(e.extra_per_100 ?? {}) };
+    const want = { day: e.day, meal: e.meal, amount: e.amount, unit: e.unit, name: e.name, brand: e.brand ?? null, per_100: e.per_100, extra: e.extra_per_100 ?? {} };
+    const linked = Boolean(e.food_uid || e.food_code);
     const foodId = resolve(m, e.food_uid, e.food_code);
-    if ((e.food_uid || e.food_code) && foodId === null) warn(r, 'links_unknown');
+    if (linked && foodId === null) warn(r, 'links_unknown');
     const row = find(e.uid, e.external_id);
     if (row === 'taken') { skip(r, 'diary', 'duplicate'); continue; }
     if (row) {
-      const have = { day: row.day, meal: row.meal, amount: row.amount, unit: row.unit, name: row.name, brand: row.brand, per_100: JSON.parse(row.per_100), extra: nutrients.clean(parseJson(row.extra)) };
+      if (row.demo) { skip(r, 'diary', 'demo'); continue; } // sample data here is never overwritten
+      const have = { day: row.day, meal: row.meal, amount: row.amount, unit: row.unit, name: row.name, brand: row.brand, per_100: per100View(JSON.parse(row.per_100)), extra: nutrients.clean(parseJson(row.extra)) };
       const ext = e.external_id === undefined ? row.external_id : e.external_id;
-      if (same(have, want) && (created ?? row.created_at) === row.created_at && ext === row.external_id && !row.demo) { count(r, 'diary', 'unchanged'); continue; }
+      // the file's link wins, also "no link"; a link to a product that is neither here nor in the file leaves the link here alone
+      const link = !linked ? null : foodId ?? row.food_id;
+      if (same(have, want) && (created ?? row.created_at) === row.created_at && ext === row.external_id && link === row.food_id) { count(r, 'diary', 'unchanged'); continue; }
+      if (!find.takeExt(row, ext)) { skip(r, 'diary', 'external_id_taken'); continue; }
       count(r, 'diary', 'changed');
       if (r.write) {
         await db.run('UPDATE diary_entry SET day = ?, meal = ?, amount = ?, unit = ?, name = ?, brand = ?, per_100 = ?, extra = ?, created_at = ?, external_id = ?, '
           + 'food_id = ?, demo = 0, import_id = NULL WHERE id = ?',
-        [want.day, want.meal, want.amount, want.unit, want.name, want.brand, toJson(want.per_100), toJson(want.extra), created ?? row.created_at, ext ?? null, foodId ?? row.food_id, row.id]);
+        [want.day, want.meal, want.amount, want.unit, want.name, want.brand, toJson(want.per_100), toJson(want.extra), created ?? row.created_at, ext ?? null, link, row.id]);
       }
       continue;
     }
@@ -516,12 +564,14 @@ async function importDays(r: Run, kind: 'weight' | 'water' | 'activity' | 'sleep
   const fresh: unknown[][] = [];
   for (const row of rows) {
     const want = cols.map((c) => row[c] ?? null);
+    if (row.source === 'demo') { skip(r, kind, 'demo'); continue; } // sample values of the file make no real rows
     const have = byDay.get(row.day as string);
     if (have) {
-      if (!have.demo && same(cols.map((c) => have[c]), want)) { count(r, kind, 'unchanged'); continue; }
+      if (have.demo) { skip(r, kind, 'demo'); continue; } // sample data here is never overwritten
+      if (same(cols.map((c) => have[c]), want)) { count(r, kind, 'unchanged'); continue; }
       count(r, kind, 'changed');
       const importCol = table === 'sleep_day' ? '' : ', import_id = NULL';
-      if (r.write) await db.run(`UPDATE ${table} SET ${cols.map((c) => `${c} = ?`).join(', ')}, demo = 0${importCol} WHERE user_id = ? AND day = ?`, [...(want as any[]), user.id, row.day as string]);
+      if (r.write) await db.run(`UPDATE ${table} SET ${cols.map((c) => `${c} = ?`).join(', ')}${importCol} WHERE user_id = ? AND day = ?`, [...(want as any[]), user.id, row.day as string]);
       continue;
     }
     count(r, kind, 'new');
@@ -538,13 +588,16 @@ async function importWorkouts(r: Run): Promise<void> {
   const fresh: unknown[][] = [];
   for (const w of f.workouts) {
     const want = [w.day, seconds(w.started_at), w.kind, w.name, w.minutes, w.kcal ?? null, w.distance_m ?? null, w.steps ?? null, w.note ?? null, w.source];
+    if (w.source === 'demo') { skip(r, 'workouts', 'demo'); continue; } // sample workouts of the file make no real rows
     const row = find(w.uid, w.external_id);
     if (row === 'taken') { skip(r, 'workouts', 'duplicate'); continue; }
     if (row) {
+      if (row.demo) { skip(r, 'workouts', 'demo'); continue; }
       const ext = w.external_id === undefined ? row.external_id : w.external_id;
-      if (!row.demo && same(cols.map((c) => row[c]), want) && ext === row.external_id) { count(r, 'workouts', 'unchanged'); continue; }
+      if (same(cols.map((c) => row[c]), want) && ext === row.external_id) { count(r, 'workouts', 'unchanged'); continue; }
+      if (!find.takeExt(row, ext ?? null)) { skip(r, 'workouts', 'external_id_taken'); continue; }
       count(r, 'workouts', 'changed');
-      if (r.write) await db.run(`UPDATE workout SET ${cols.map((c) => `${c} = ?`).join(', ')}, external_id = ?, demo = 0, import_id = NULL WHERE id = ?`, [...(want as any[]), ext ?? null, row.id]);
+      if (r.write) await db.run(`UPDATE workout SET ${cols.map((c) => `${c} = ?`).join(', ')}, external_id = ?, import_id = NULL WHERE id = ?`, [...(want as any[]), ext ?? null, row.id]);
       continue;
     }
     count(r, 'workouts', 'new');
@@ -566,7 +619,10 @@ async function importFasts(r: Run): Promise<void> {
     plan.push([x, row]);
     if (row && row.id === running && x.ended_at) running = null; // the file ends the fast that runs here
   }
-  for (const [x, row] of plan) { // updates first, so that a fast the file ends makes room for a running one
+  // updates first, and among them those that end a fast before those that open one: the fast that runs here ends before another
+  // starts (UNIQUE fast_open), then new fasts
+  const updates = plan.filter(([, row]) => row).sort(([a], [b]) => Number(!a.ended_at) - Number(!b.ended_at));
+  for (const [x, row] of updates) {
     if (!row) continue;
     const want = [seconds(x.started_at), seconds(x.ended_at), x.target_hours];
     if (same([row.started_at, row.ended_at, row.target_hours], want)) { count(r, 'fasting', 'unchanged'); continue; }
@@ -642,9 +698,13 @@ async function importSettings(r: Run): Promise<void> {
   const local = new Map((r.mode === 'replace' ? [] : await db.all('SELECT key, value FROM user_setting WHERE user_id = ?', [user.id])).map((x) => [x.key as string, JSON.parse(x.value)]));
   for (const [key, raw] of Object.entries(f.settings ?? {})) {
     if (!SETTING_KEYS.includes(key)) { skip(r, 'settings', 'not_a_setting'); continue; }
-    const parsed = (SETTINGS.shape as Record<string, z.ZodType>)[key]!.safeParse(raw);
+    const schema = (SETTINGS.shape as Record<string, z.ZodType>)[key]!;
+    const parsed = schema.safeParse(raw);
     if (!parsed.success) { skip(r, 'settings', 'invalid'); continue; }
-    if (local.has(key) && same(local.get(key), parsed.data)) { count(r, 'settings', 'unchanged'); continue; }
+    // the stored value read the way the settings page reads it (defaults of a partial object, glass sizes sorted): an own export
+    // imported again changes nothing
+    const here = local.has(key) ? schema.safeParse(local.get(key)) : null;
+    if (here?.success && same(here.data, parsed.data)) { count(r, 'settings', 'unchanged'); continue; }
     count(r, 'settings', local.has(key) ? 'changed' : 'new');
     if (r.write) {
       await db.run('INSERT INTO user_setting (user_id, key, value) VALUES (?, ?, ?) ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value', [user.id, key, toJson(parsed.data ?? null)]);
