@@ -13,3 +13,15 @@ export function roundHalfEven(x: number, digits = 0): number {
   const out = Number(n) / 10 ** digits;
   return x < 0 ? -out || 0 : out;
 }
+
+/** Python's sum() of floats (3.12+ adds with Neumaier compensation, so sums of decimals differ from a plain loop). */
+export function pySum(values: Iterable<number>): number {
+  let sum = 0;
+  let c = 0;
+  for (const x of values) {
+    const t = sum + x;
+    c += Math.abs(sum) >= Math.abs(x) ? (sum - t) + x : (x - t) + sum;
+    sum = t;
+  }
+  return c !== 0 && Number.isFinite(c) ? sum + c : sum;
+}

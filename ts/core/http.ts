@@ -2,6 +2,7 @@
 // knows about node:http; the server (or later the app) builds the `Req` and turns the result into a response.
 import { z } from 'zod';
 import type { Db } from './db.ts';
+import { pyInt } from './models/common.ts';
 
 export interface User {
   id: number;
@@ -75,7 +76,7 @@ export const route = (method: string, path: string, handler: Handler, opts: Part
 
 /** A FastAPI-like 422 from a zod error: `{"detail": [{"type", "loc", "msg"}]}`. Never echoes the input. */
 export function invalid(error: z.ZodError, where: 'body' | 'query' | 'path'): HttpError {
-  const detail = error.issues.map((i) => ({ type: i.code, loc: [where, ...i.path.map(String)], msg: i.message }));
+  const detail = error.issues.map((i) => ({ type: i.code, loc: [where, ...i.path.map((p) => (typeof p === 'number' ? p : String(p)))], msg: i.message }));
   return new HttpError(422, detail);
 }
 
@@ -88,3 +89,6 @@ export function parse<T extends z.ZodType>(schema: T, value: unknown, where: 'bo
 
 /** Query parameters as a plain object (the last value of a repeated name wins, like FastAPI for scalar parameters). */
 export const queryObject = (q: URLSearchParams): Record<string, string> => Object.fromEntries(q.entries());
+
+/** An `int` path parameter like FastAPI: a 422 with loc `["path", name]` when it is none. */
+export const pathInt = (req: Req, name: string): number => parse(z.object({ [name]: pyInt() }), { [name]: req.params[name] }, 'path')[name] as number;
