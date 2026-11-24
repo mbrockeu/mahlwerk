@@ -62,7 +62,7 @@ function send(r: OutRequest): Promise<OutResponse> {
       res.on('end', () => {
         const h: Record<string, string> = {};
         for (const [k, v] of Object.entries(res.headers)) if (v !== undefined) h[k] = Array.isArray(v) ? v.join(', ') : v;
-        finish({ status: res.statusCode ?? 0, headers: h, body: new Uint8Array(Buffer.concat(parts)) });
+        finish({ status: res.statusCode ?? 0, headers: h, setCookies: res.headers['set-cookie'], body: new Uint8Array(Buffer.concat(parts)) });
       });
       res.on('error', (e) => finish(toError(e)));
     });
