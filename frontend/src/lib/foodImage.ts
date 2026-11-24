@@ -10,6 +10,9 @@ export const imageRegistry: Record<string, string> = {};
 /** Relative, so that the app works below any path prefix; the hash is the content hash, so the address never changes for a picture. */
 export const imageUrl = (hash: string, size: ImageSize): string => imageRegistry[hash] ?? `api/v1/images/${hash}/${size}`;
 
+/** The `src` of a picture: in the app none (the `localImage` action of lib/local.ts fills it from the app host), else `imageUrl`. */
+export const imageSrc = (hash: string, size: ImageSize): string | undefined => ((globalThis as { mahlwerkLocal?: unknown }).mahlwerkLocal && !imageRegistry[hash] ? undefined : imageUrl(hash, size));
+
 /** "Image: Cookidoo" / "Image: recipes.example.org" for a picture taken over from a provider, else null. */
 export const imageCredit = (image: FoodImage | null | undefined): string | null => (image && image.origin !== 'own' ? image.credit : null);
 

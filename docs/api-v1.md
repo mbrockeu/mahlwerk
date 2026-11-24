@@ -183,6 +183,10 @@ Editing or deleting the food later does not change past days; deleting sets `foo
 | GET | `/api/v1/me/imports` | – | ImportBatch[] | this user's import batches, newest first, see Importing from Yazio |
 | DELETE | `/api/v1/me/imports/{id}` | – | `{entries, weights, water, activity, workouts, foods:int, goal:bool}` | takes back one of the user's own batches (404 for an unknown or foreign one); the numbers are what was removed |
 | GET | `/api/v1/me/export?from=&to=&lang=` | – | ZIP (`application/zip`) | the caller's own data, see Personal data export; `from`/`to` (`YYYY-MM-DD`, inclusive) limit the day-based data, an invalid date or `from` after `to` → 422; works with a read key |
+| GET | `/api/v1/me/import` | – | `{available:true, max_bytes, max_unpacked_bytes, formats:[1,2]}` | TS server and app only (the Python server answers 404: no import offered); see Importing an own export |
+| POST | `/api/v1/me/import/preview` | the export ZIP or its `mahlwerk-export.json` as the raw body | ImportPreview | TS server and app only, see Importing an own export; nothing is written |
+| POST | `/api/v1/me/import/confirm` | `{token, mode: "merge"\|"replace"}` | ImportResult | imports the waiting file in one transaction; see Importing an own export |
+| DELETE | `/api/v1/me/import/staged` | – | 204 | drops the waiting file |
 | PUT | `/api/v1/me/goal` | Goal | Goal | kcal 500–10000, macros 0–1000, water_ml 500–6000; counts from today on, earlier days keep their goal (see Goal history) |
 | GET | `/api/v1/me/goal/history` | – | `[GoalChange]` | every goal change, newest first; empty without a goal (see Goal history) |
 | PATCH | `/api/v1/me/settings` | `{playful?:bool, fasting?:{enabled?:bool, target_hours?:number}, activity?:{add_to_goal?:bool, workouts_week?:int (0-7)}, tour_seen?:bool, suggestions?:bool, home?:HomeCard[]\|null, water_glasses?:int[]\|null, water_drinks?:bool}` | `{playful, fasting, activity, tour_seen, suggestions, home, water_glasses, water_drinks}` | per-user settings (only the given fields of `fasting` and `activity` change), `playful` defaults to true, `fasting` to `{enabled:false, target_hours:16}` (hours 8–72), `activity` to `{add_to_goal:false}`, `tour_seen` to false (set once the first-run tour of the day view was shown or skipped; the profile can reset it), `suggestions` to true (the day view shows the card "what still fits today"; `GET /recipes/suggestions` answers either way), `home` to null (the default layout of the day view; otherwise a list of `{id, hidden, wide}` with `id` one of `ring, macros, fasting, water, activity, weight, meals, micros, suggestions`, no duplicates, at most 9; **422** otherwise; the list replaces the whole layout, `null` resets it; cards missing from the list are appended by the client), `water_glasses` to null (the default glasses 250 and 500 ml of the quick buttons on the water card; otherwise 1–3 whole numbers of 50–1000 ml, no duplicates, **422** otherwise; stored ascending, `null` resets it), `water_drinks` to true (drinks of the diary count towards the water card, see "Drinks count as water"); fields left out stay as they are, also inside `fasting` and `activity` |
@@ -260,14 +264,69 @@ database and no route for an admin to take other people's data: the caller is al
   `en`: `,` and decimal point. `diary.csv` has day, meal, name, brand, amount, unit and the nutrients for that amount (energy, protein,
   carbohydrates, fat, saturated fat, sugars, fibre, salt, plus a column for every other nutrient some entry knows). Times are ISO 8601 in
   the server's local time zone. A text that starts with `=`, `+`, `-` or `@` gets a leading `'` so that a spreadsheet does not run it.
-- **JSON.** `mahlwerk-export.json` holds `format_version` (1), `exported_at`, `app_version`, `range` (`from`/`to`, null when open) and the
+- **JSON.** `mahlwerk-export.json` holds `format_version` (2; 1 before stable ids), `exported_at`, `app_version`, `range` (`from`/`to`, null when open) and the
   sections `account` (user name, display name, creation time), `goal`, `goal_history` (every change, oldest first, `valid_from`,
   `changed_at` as ISO time or null), `settings`, `diary` (with the values per 100 g/ml and the
   nutrients for the amount), `weight`, `activity`, `sleep` (`day`, `minutes`, `source`), `workouts`, `water`, `fasting`, `templates` (with items), `recipes` (the recipes the
-  user created, with ingredients), `badges` and `webhooks` (name, host, events, switch only).
+  user created, with ingredients), `recipe_groups`, `foods`, `badges` and `webhooks` (name, host, events, switch only).
+- **Format 2 (stable ids).** Every row of diary, workouts, fasting, templates, recipes, recipe groups and foods carries `uid` (32 lower-case
+  hex digits, fixed for the life of the row, schema v21). Diary entries and the items of templates and recipes name their food by
+  `food_uid` and `food_code` (barcode; both null without a link); diary entries and workouts carry `external_id` (Yazio, Apple Health), weight
+  rows `health`, `body_fat_health`, `lean_health` and water rows `health` (where a value came from, so that a later Health sync behaves the
+  same after an import). A recipe carries `uid` and `food_uid` (its calculated food). `recipe_groups`: the groups the user made
+  (`uid`, `name`, `position`, `source`, `created_at`, `members` = food uids). `foods`: the products the user made plus those their diary
+  (in the range), templates, own recipes and own groups use, as `{uid, code, source, external_id, data, piece_label, piece_grams, drink,
+  own, fetched_at}` (`own`: made by this user; `fetched_at`: last change, ISO); never a recipe's calculated food (that is the recipe), a remembered miss, a sample food or a picture.
 - **Never included.** Password hash, sign-in sessions, access keys, webhook secrets and addresses beyond the host, stored connector
   secrets, the identity at a sign-in provider, other users' data. Demo rows (test data of the own account) are left out; the demo account
   itself exports its sample data.
+
+## Importing an own export
+
+The TS server and the app take a Mahlwerk export back in; `GET /me/import` says so (and the size limit), the Python server has no import
+and answers 404 there, so the interface offers it only where it exists. (Not a key of `GET /me` `features`: both servers keep that object
+identical.) Use: to move between the server and the app, onto a new device, or to bring a backup back. Only the signed-in person, only
+into their own account; an access key is refused (**403**), the demo account too.
+
+- **Reading.** Further nutrients that are not numbers (or unknown) are dropped like on every write, a value per 100 g that is no number
+  reads as unknown; names and brands may be as long as the stores keep them (up to 10,000 characters). A 422 names the row
+  (`diary[12].amount`).
+- **Preview.** `POST /me/import/preview`, body = the file itself (the ZIP of `GET /me/export`, only its `mahlwerk-export.json` is read, or
+  that JSON; send it as `application/octet-stream`). At most 32 MB as sent (**413**); 48 MB unpacked, a packed-to-unpacked ratio above 100,
+  more than 400,000 objects/lists or 4 million elements, ZIP64 and unsafe paths are refused before anything is parsed (**413**/**422**). Every
+  row is checked; an unknown `format_version`, a missing uid in format 2, or a key twice in the file (a uid, a barcode, a day of weight …)
+  answers **422** without echoing content. **429** while another upload/import runs on the server (shared with the Yazio import), **409**
+  while one of the caller's own runs. The file then waits 20 minutes. Answer (ImportPreview): `{token, format_version, exported_at,
+  app_version, account:{username, display_name}, same_account, range:{from, to}, mode_allowed:["merge"|"replace"], modes:{merge, replace},
+  warnings:[{code, count}]}`; each mode is `{allowed, reason, reason_text, counts, deleted}`, `counts` per kind (`foods`, `recipes`,
+  `recipe_groups`, `diary`, `templates`, `weight`, `water`, `activity`, `sleep`, `workouts`, `fasting`, `goal`, `goal_history`, `settings`,
+  `badges`, `webhooks`) `{new, changed, unchanged, skipped, reasons:{reason: n}}`; `deleted` (replace) counts the own rows per kind that go first.
+- **Confirm.** `POST /me/import/confirm {token, mode}` (mode default `merge`) → `{mode, counts, deleted, warnings}`, one transaction. **410**
+  when nothing waits (expired, discarded, imported), **409** for another token or a mode that is not allowed for this file (`reason_text`).
+- **Merge** deletes nothing. Matching: diary entries and workouts by uid, then `external_id`; fasts and templates by uid; weight, water,
+  activity and sleep by day; goal history by `valid_from`; badges by code (missing ones are added, seen). The same row with other content: the
+  file wins (also over a food link: no link in the file clears it). Shared rows: products by barcode, then `external_id`, then uid; recipes
+  by uid; groups by Cookidoo link (`source`), then name (case-insensitive), then uid. They change only where the caller may change them
+  under the normal rules (Guests and the household), otherwise they count as skipped (`not_editable`), and only when the file's version is
+  not older than the one here (product `fetched_at`, recipe `updated_at`; else `newer_here`). A group is never emptied and keeps its name
+  (it has no time of change; `name_kept`): members the file names are added. Sample data is never touched or made: a row here with the demo
+  mark, a sample product here, a product of the file with `demo`/`demo_account` in its data and activity, sleep or workouts with source
+  `demo` are skipped (`demo`); entries that link a skipped sample product keep their values. An external id (Yazio, Health) that another
+  row here already has is skipped (`external_id_taken`). Values are compared after the cleaning a write applies (further nutrients, the
+  settings schema with its defaults), so importing an own export again changes nothing; unchanged rows are not written at all. New products and
+  recipes belong to the importing user (a product that was not `own` in the file belongs to the household). Links of entries and items go to
+  the local food with that uid or barcode, else stay null (the entry keeps its values; warning `links_unknown`). The goal is the file's;
+  when a change here is newer than the file's newest, the file's goal is recorded as a change from today on, like `PUT /me/goal` (warning
+  `goal_from_today`), so earlier days keep their goal. Settings: only the keys of `PATCH /me/settings`,
+  checked like there (`not_a_setting`, `invalid`). Webhooks are not imported (`not_imported`, their secret is not in the file).
+  Rows of other people are never changed. Ids are given per database: rows that were made on both sides independently (before any
+  import between them) only meet by a natural key; hand-logged entries, templates, own products without a barcode and recipes have none
+  and would come twice. Moving data is meant as export here, import there (or replace).
+- **Replace** first deletes the caller's own diary, weights, water, activity, sleep, workouts, fasts, templates, goal and goal history,
+  the settings of the settings page, badges and Yazio import batches, then imports like merge. Shared products, recipes and groups, the
+  account, sign-in, keys, webhooks and stored secrets stay. Refused (`ranged`) for a file with a `range`: it would delete everything else.
+- **Format 1** (before stable ids): replace, or merge only into an account without diary, weight, water, activity, sleep, workout, fasting or
+  template rows (`old_format`): without ids merge could not tell its rows from what is there.
 
 ## Additional nutrients
 
@@ -925,7 +984,7 @@ Schema version 8. Details and examples: [integrations.md](integrations.md).
 
 ### Admin role
 
-`GET /api/v1/me` also returns `is_admin` and `features: {access_tokens, webhooks, cookidoo}`. In `proxy` mode the groups come from
+`GET /api/v1/me` also returns `is_admin` and `features: {access_tokens, webhooks, cookidoo, web_recipes}`. In `proxy` mode the groups come from
 the header `MAHLWERK_PROXY_GROUPS_HEADER` (default `Remote-Groups`, comma separated); a member of `MAHLWERK_ADMIN_GROUP`
 (default `admin`) is an admin. In `single` mode the one user is an admin. It is decided for every request, never stored.
 A caller who signed in with an access token is never an admin.

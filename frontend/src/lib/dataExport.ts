@@ -27,3 +27,29 @@ export function exportUrl(period: ExportPeriod, from: string, to: string, today:
   params.set('lang', lang);
   return `api/v1/me/export?${params}`;
 }
+
+// --- the import of an export (POST api/v1/me/import/...) ---
+
+type Count = { new: number; changed: number; unchanged: number; skipped: number; reasons: Record<string, number> };
+
+/** The kinds worth a row in the preview (anything in the file), in the order of the API, and the sums over all of them. */
+export function importRows<K extends string>(counts: Record<K, Count>): { kind: K; count: Count }[] {
+  return (Object.entries(counts) as [K, Count][])
+    .filter(([, c]) => c.new + c.changed + c.unchanged + c.skipped > 0)
+    .map(([kind, count]) => ({ kind, count }));
+}
+
+export function importTotals(counts: Record<string, Count>): { new: number; changed: number; unchanged: number; skipped: number } {
+  const out = { new: 0, changed: 0, unchanged: 0, skipped: 0 };
+  for (const c of Object.values(counts)) {
+    out.new += c.new;
+    out.changed += c.changed;
+    out.unchanged += c.unchanged;
+    out.skipped += c.skipped;
+  }
+  return out;
+}
+
+/** The rows replace would delete first, all kinds together (the Yazio import batches are bookkeeping, not data). */
+export const deletedTotal = (deleted: Record<string, number> | null): number =>
+  Object.entries(deleted ?? {}).reduce((n, [k, v]) => n + (k === 'imports' ? 0 : v), 0);

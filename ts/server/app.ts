@@ -5,31 +5,14 @@
 // check (421, not for /healthz), then the CSRF header (403 for a write under /api/ unless an access token is used), then routing,
 // then the dependencies of the route (who is calling), then validation and the handler. The security headers go on every answer.
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { bearerToken, currentUser, initAuth, normalizeHost } from '../core/auth.ts';
-import { HttpError, RES, type Ctx, type Req, type Res, type Route } from '../core/http.ts';
+import { bearerToken, initAuth, normalizeHost } from '../core/auth.ts';
+import { bodyOf, decodePath, errorRes, makeRouter } from '../core/dispatch.ts';
+import { HttpError, type Ctx, type Req, type Res, type Route } from '../core/http.ts';
 import { startLocal } from '../core/routes/auth.ts';
 import { ROUTES } from '../core/routes/index.ts';
 import { BODY_LIMIT_HEADERS, CSRF_HEADER, CSRF_VALUE, WRITE_METHODS, buildCsp, limitFor, withSecurityHeaders } from '../core/security.ts';
 import { VERSION } from '../core/version.ts';
 import { openWeb } from './web.ts';
-
-interface Compiled { route: Route; re: RegExp; names: string[] }
-
-function compile(routes: Route[]): Compiled[] {
-  return routes.map((route) => {
-    const names: string[] = [];
-    const re = new RegExp('^' + route.path.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{(\w+)(:path)?\}/g, (_m, n, p) => {
-      names.push(n);
-      return p ? '(.*)' : '([^/]+)';
-    }) + '$', 's');
-    return { route, re, names };
-  });
-}
-
-/** The path as the application sees it: percent escapes decoded once (like an ASGI server), nothing decoded a second time. */
-function decodePath(raw: string): string {
-  try { return decodeURIComponent(raw); } catch { return raw; }
-}
 
 const DEFAULT_WEB_DIR = new URL('../../web/dist', import.meta.url).pathname;
 
@@ -40,7 +23,7 @@ class Refused extends Error {
 }
 
 export function makeApp(ctx: Ctx, routes: Route[] = ROUTES) {
-  const table = compile(routes);
+  const routeRequest = makeRouter(routes);
   const config = initAuth(ctx).config;
   const web = openWeb(ctx.env.MAHLWERK_WEB_DIR || DEFAULT_WEB_DIR);
   const csp = web ? web.csp : buildCsp(null);
@@ -64,23 +47,9 @@ export function makeApp(ctx: Ctx, routes: Route[] = ROUTES) {
     if (WRITE_METHODS.includes(req.method) && req.path.startsWith('/api/') && bearerToken(req) === null && req.headers[CSRF_HEADER] !== CSRF_VALUE) {
       throw new HttpError(403, 'missing X-Mahlwerk-Request header');
     }
-    // the body is parsed when a handler first reads it, i.e. after the dependencies of the route (a 401 beats a 422)
-    let parsed: { value: unknown } | undefined;
-    Object.defineProperty(req, 'body', { configurable: true, enumerable: true, get() { return (parsed ??= { value: body() }).value; } });
-
-    let pathMatched = false;
-    for (const { route, re, names } of table) {
-      const m = re.exec(req.path);
-      if (!m) continue;
-      pathMatched = true;
-      if (route.method !== req.method && !(route.method === 'GET' && req.method === 'HEAD')) continue;
-      req.params = Object.fromEntries(names.map((n, i) => [n, m[i + 1]!]));
-      req.route = route.path;
-      if (route.auth !== false) req.user = await currentUser(req);
-      const out = await route.handler(req);
-      const res: Res = isRes(out) ? out : { status: route.status ?? 200, body: out };
-      return mergeOut(req, res);
-    }
+    const routed = await routeRequest(req, body);
+    if (!('pathMatched' in routed)) return routed;
+    const { pathMatched } = routed;
     if (docsOn && (req.method === 'GET' || req.method === 'HEAD') && ['/docs', '/redoc', '/openapi.json'].includes(req.path)) {
       if (req.path === '/openapi.json') return { status: 200, body: openapi };
       const list = Object.entries(paths).map(([p, m]) => `<li><code>${Object.keys(m).join(', ').toUpperCase()} ${p.replace(/</g, '&lt;')}</code></li>`).join('');
@@ -94,12 +63,6 @@ export function makeApp(ctx: Ctx, routes: Route[] = ROUTES) {
       throw new HttpError(404, 'Not Found');
     }
     throw new HttpError(pathMatched || web !== null ? 405 : 404, pathMatched || web !== null ? 'Method Not Allowed' : 'Not Found');
-  }
-
-  /** Headers and cookies the auth step collected (session renewal, the view header) go onto the answer of a successful request. */
-  function mergeOut(req: Req, res: Res): Res {
-    if (!req.out) return res;
-    return { ...res, headers: { ...req.out.headers, ...(res.headers ?? {}) }, cookies: [...(res.cookies ?? []), ...req.out.cookies] };
   }
 
   return async function handle(nreq: IncomingMessage, nres: ServerResponse, peer?: string, scheme?: string): Promise<void> {
@@ -122,24 +85,14 @@ export function makeApp(ctx: Ctx, routes: Route[] = ROUTES) {
       const type = String(nreq.headers['content-type'] ?? '');
       const headers: Record<string, string> = {};
       for (const [k, v] of Object.entries(nreq.headers)) if (v !== undefined) headers[k] = Array.isArray(v) ? v.join(', ') : v;
-      const body = (): unknown => {
-        if (!raw.length) return undefined;
-        if (!type.includes('json')) return new Uint8Array(raw);
-        try { return JSON.parse(raw.toString('utf8')); } catch {
-          throw new HttpError(422, [{ type: 'json_invalid', loc: ['body', 0], msg: 'JSON decode error' }]);
-        }
-      };
+      const body = bodyOf(raw, type);
       res = await dispatch({ method, path, params: {}, query, headers, body: undefined, raw, scheme: scheme ?? 'http',
         peer: peer ?? nreq.socket.remoteAddress ?? 'unknown', ctx }, body);
     } catch (e) {
       if (e instanceof Refused) {
         plain = true;
         res = { status: e.status, headers: BODY_LIMIT_HEADERS, body: e.status === 413 ? { detail: `request body too large (at most ${e.limit} bytes)` } : { detail: 'bad Content-Length' } };
-      } else if (e instanceof HttpError) res = { status: e.status, body: { detail: e.detail }, headers: e.headers };
-      else {
-        console.error(e);
-        res = { status: 500, body: 'Internal Server Error' };
-      }
+      } else res = errorRes(e);
     }
     if (!plain) res = { ...res, headers: withSecurityHeaders(res.headers, path, await csp) };
     try {
@@ -152,8 +105,6 @@ export function makeApp(ctx: Ctx, routes: Route[] = ROUTES) {
     if (plain) nres.on('finish', () => nreq.destroy()); // the refusal is on its way; whatever the client still sends is not read
   };
 }
-
-const isRes = (o: unknown): o is Res => typeof o === 'object' && o !== null && (o as any)[RES] === true;
 
 /** A body nobody asked for: thrown away unread. */
 function discard(req: IncomingMessage): Buffer {

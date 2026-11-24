@@ -188,7 +188,7 @@ function zipEntries(body: Uint8Array, endAt: number): ZipEntry[] {
 
 /** One entry's bytes: stored or deflated, read with the size and ratio limits whatever the entry declares, and checked against its
  * declared size and checksum. */
-async function readMember(body: Uint8Array, info: ZipEntry): Promise<Uint8Array> {
+async function readMember(body: Uint8Array, info: ZipEntry, limit: number): Promise<Uint8Array> {
   const view = new DataView(body.buffer, body.byteOffset, body.length);
   if (info.offset < 0 || info.offset + 30 > body.length || view.getUint32(info.offset, true) !== 0x04034b50) throw new StageError('bad_zip', 'the ZIP cannot be read');
   const nameLength = view.getUint16(info.offset + 26, true), extraLength = view.getUint16(info.offset + 28, true);
@@ -199,10 +199,10 @@ async function readMember(body: Uint8Array, info: ZipEntry): Promise<Uint8Array>
   const packed = body.subarray(from, from + info.packed);
   let data: Uint8Array;
   if (info.method === 0) {
-    if (packed.length > MAX_FILE) throw new StageError('too_large', 'a file is larger than allowed after unpacking');
+    if (packed.length > limit) throw new StageError('too_large', 'a file is larger than allowed after unpacking');
     data = packed;
   } else if (info.method === 8) {
-    try { data = await inflate('deflate-raw', packed, MAX_FILE, info.packed); } catch (e) {
+    try { data = await inflate('deflate-raw', packed, limit, info.packed); } catch (e) {
       if (e instanceof Damaged) throw new StageError('bad_zip', 'the ZIP cannot be read');
       throw e;
     }
@@ -211,10 +211,12 @@ async function readMember(body: Uint8Array, info: ZipEntry): Promise<Uint8Array>
   return data;
 }
 
-async function unzip(body: Uint8Array): Promise<Record<string, Uint8Array>> {
+/** The entries named `names` (by their last path part; everything else is never read), each at most `file` bytes unpacked, together
+ * at most `total`. The data import (dataImport.ts) uses it for the one JSON file of a Mahlwerk export. */
+export async function unzip(body: Uint8Array, names: readonly string[] = FILES, file = MAX_FILE, total = MAX_PERSON): Promise<Record<string, Uint8Array>> {
   const endAt = checkZipDirectory(body);
   const found: Record<string, Uint8Array> = Object.create(null);
-  let total = 0;
+  let sum = 0;
   try {
     for (const info of zipEntries(body, endAt)) {
       const path = info.name;
@@ -224,13 +226,13 @@ async function unzip(body: Uint8Array): Promise<Record<string, Uint8Array>> {
       }
       if (path.endsWith('/')) continue;
       const base = parts[parts.length - 1]!;
-      if (!(FILES as readonly string[]).includes(base)) continue; // anything else is ignored, never read
+      if (!names.includes(base)) continue; // anything else is ignored, never read
       if (info.flags & 0x1) throw new StageError('bad_zip', 'the ZIP is encrypted');
       if (base in found) throw new StageError('bad_zip', `the ZIP has ${base} twice`);
-      if (info.size > MAX_FILE) throw new StageError('too_large', 'a file is larger than allowed after unpacking');
-      const data = await readMember(body, info);
-      total += data.length;
-      if (total > MAX_PERSON) throw new StageError('too_large', 'the files are larger than allowed after unpacking');
+      if (info.size > file) throw new StageError('too_large', 'a file is larger than allowed after unpacking');
+      const data = await readMember(body, info, file);
+      sum += data.length;
+      if (sum > total) throw new StageError('too_large', 'the files are larger than allowed after unpacking');
       found[base] = data;
     }
   } catch (e) {

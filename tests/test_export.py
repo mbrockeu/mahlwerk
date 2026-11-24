@@ -89,19 +89,58 @@ def test_the_csv_files_hold_the_data_with_the_nutrients_for_the_amount(full):
 
 def test_the_json_file_holds_everything_else_too(full):
     data = json.loads(open_zip(full.get(EXPORT))["mahlwerk-export.json"])
-    assert data["format_version"] == 1 and data["range"] == {"from": None, "to": None}
+    assert data["format_version"] == 2 and data["range"] == {"from": None, "to": None}
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d", data["exported_at"]) and data["app_version"]
     assert data["account"]["username"] == "me" and data["account"]["created_at"]
     assert data["goal"]["kcal"] == 2100 and data["settings"]["playful"] is False
     entry = data["diary"][0]
     assert entry["per_100"]["kcal"] == 200 and entry["nutrients"]["kcal"] == 100 and entry["nutrients"]["protein"] == 5
-    assert data["weight"] == [{"day": DAY, "kg": 71.5, "body_fat_pct": 22.4, "lean_kg": 55.5}] and data["water"] == [{"day": DAY, "ml": 1750}]
+    assert data["weight"] == [{"day": DAY, "kg": 71.5, "body_fat_pct": 22.4, "lean_kg": 55.5, "health": False, "body_fat_health": False,
+                               "lean_health": False}]
+    assert data["water"] == [{"day": DAY, "ml": 1750, "health": False}]
     assert data["activity"][0]["steps"] == 8123 and data["workouts"][0]["name"] == "Morning run"
     assert data["fasting"][0]["hours"] == 19 and data["fasting"][0]["target_hours"] == 16
     assert [t["name"] for t in data["templates"]] == ["Usual lunch"] and data["templates"][0]["items"][0]["name"] == "Oats"
     recipe = data["recipes"][0]
     assert recipe["name"] == "Porridge" and recipe["portions"] == 2 and recipe["items"][0]["amount"] == 80
     assert isinstance(data["badges"], list) and data["webhooks"] == []
+
+
+UID = re.compile(r"[0-9a-f]{32}")
+
+
+def test_format_2_carries_stable_ids_food_links_the_used_products_and_the_groups(full, food):
+    group = full.post("/api/v1/recipe-groups", json={"name": "Breakfast"}).json()
+    recipe = full.get("/api/v1/recipes").json()[0]
+    assert full.post(f"/api/v1/recipe-groups/{group['id']}/members", json={"food_ids": [recipe["food"]["id"]]}).status_code == 200
+    data = json.loads(open_zip(full.get(EXPORT))["mahlwerk-export.json"])
+    rows = data["diary"] + data["workouts"] + data["fasting"] + data["templates"] + data["recipes"] + data["recipe_groups"] + data["foods"]
+    assert rows and all(UID.fullmatch(r["uid"]) for r in rows)
+    assert len({r["uid"] for r in rows}) == len(rows)
+    entry = data["diary"][0]
+    oats = next(f for f in data["foods"] if f["data"]["name"] == "Oats")
+    assert entry["food_uid"] == oats["uid"] and entry["food_code"] is None and entry["external_id"] is None
+    assert oats == {"uid": oats["uid"], "code": None, "source": "own", "external_id": None, "data": oats["data"], "piece_label": None,
+                    "piece_grams": None, "drink": None, "own": True, "fetched_at": oats["fetched_at"]}
+    assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d", oats["fetched_at"])  # when it was last changed: the import compares
+    assert data["templates"][0]["items"][0]["food_uid"] == oats["uid"]
+    porridge = data["recipes"][0]
+    assert porridge["items"][0]["food_uid"] == oats["uid"] and UID.fullmatch(porridge["food_uid"]) and porridge["food_uid"] != porridge["uid"]
+    assert all(f["source"] != "recipe" for f in data["foods"])  # a recipe comes as a recipe, not as its calculated food
+    assert [(g["name"], g["members"], g["source"]) for g in data["recipe_groups"]] == [("Breakfast", [porridge["food_uid"]], None)]
+    assert data["workouts"][0]["external_id"] is None
+
+
+def test_the_products_of_other_people_come_only_when_used(duo):
+    ann, ben = duo
+    oats = {"name": "Oats", "per_100": {"kcal": 200, "protein": 10, "carbs": 30, "fat": 4}}
+    ann_food = ann.post("/api/v1/foods", json=oats).json()
+    ben_used = ben.post("/api/v1/foods", json={**oats, "name": "Bens Hafer"}).json()
+    ben.post("/api/v1/foods", json={**oats, "name": "Bens Geheimnis"})
+    log(ann, ann_food)
+    log(ann, ben_used)
+    foods = json.loads(open_zip(ann.get(EXPORT))["mahlwerk-export.json"])["foods"]
+    assert sorted((f["data"]["name"], f["own"]) for f in foods) == [("Bens Hafer", False), ("Oats", True)]
 
 
 def test_a_period_limits_the_day_based_data_only(client, food):
@@ -219,6 +258,7 @@ def test_the_export_holds_nothing_of_other_users(duo):
     ben.patch("/api/v1/me", json={"display_name": "Bens Anzeigename"})
     files = open_zip(ann.get(EXPORT))
     everything = b"\n".join(files.values()).decode("utf-8-sig")
+    everything = re.sub(r"\b[0-9a-f]{32}\b", "", everything)  # the random row ids (format 2) may hold any digits
     for trace in ("BensGeheimnis", "BensLauf", "BensVorlage", "BensRezept", "99.9", "4321", "3333", "Bens Anzeigename", "ben"):
         assert trace not in everything, trace
     data = json.loads(files["mahlwerk-export.json"])

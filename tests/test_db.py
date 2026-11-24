@@ -1,4 +1,5 @@
 import json
+import re
 import sqlite3
 
 from conftest import DROP_V9
@@ -26,7 +27,7 @@ def test_prototype_database_is_migrated_without_losing_foods(tmp_path):
     store = Store(path)
 
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 20
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 21
     assert con.execute("SELECT code, source, found, fetched_at FROM food ORDER BY id").fetchall() == [
         ("3017620422003", "openfoodfacts", 1, 100),
         ("4068706059940", "own", 1, 200),
@@ -69,7 +70,7 @@ def test_migrated_own_food_is_served_with_derived_unit_and_serving(tmp_path):
 def test_fresh_database_gets_the_current_schema(tmp_path):
     path = str(tmp_path / "new.db")
     Store(path)
-    assert sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0] == 20
+    assert sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0] == 21
 
 
 V1_SCHEMA = """
@@ -99,7 +100,7 @@ def test_version_1_database_gets_demo_columns_and_keeps_its_data(tmp_path):
     store = Store(path)
 
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 20
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 21
     assert con.execute("SELECT name, amount, demo FROM diary_entry").fetchall() == [("Rice", 150, 0)]
     assert con.execute("SELECT kg, demo FROM weight").fetchall() == [(80.5, 0)]
     con.close()
@@ -136,7 +137,7 @@ def test_version_3_database_gets_templates_and_recipes_without_losing_data(tmp_p
     store = Store(path)
 
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 20
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 21
     assert {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")} >= {
         "template", "template_item", "recipe", "recipe_item"}
     assert con.execute("SELECT name, amount, extra FROM diary_entry").fetchall() == [("Rice", 150, '{"iron": 1}')]
@@ -186,7 +187,7 @@ def test_version_4_database_gets_settings_and_badges_without_losing_data(tmp_pat
     store = Store(path)
 
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 20
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 21
     assert {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")} >= {
         "user_setting", "badge_earned", "template", "recipe"}
     con.close()
@@ -225,7 +226,7 @@ def test_version_5_database_gets_water_and_fasting_without_losing_data(tmp_path)
     store = Store(path)
 
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 20
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 21
     assert {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")} >= {"water", "fast"}
     con.close()
     assert store.get_goal(1) == {"kcal": 2000, "protein": 100, "carbs": 200, "fat": 60, "water_ml": 2000, "steps": 8000}
@@ -244,3 +245,72 @@ def test_many_foods_are_read_in_chunks(client, food, monkeypatch):
     got = store.get_foods([*ids, food["id"], 999999, ids[0]])
     assert set(got) == {*ids, food["id"]} and got[ids[3]]["data"]["name"] == "F3"
     assert store.get_foods([]) == {}
+
+
+# --- version 21: stable row ids, and the schema the TS side applies ------------------------------------------------------------
+
+ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent
+UID_TABLES = ("diary_entry", "workout", "fast", "template", "recipe", "recipe_group", "food")
+
+
+def _schema_sql():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("schema_sql", ROOT / "scripts" / "schema_sql.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_ts_schema_is_the_schema_of_a_fresh_database():
+    assert (ROOT / "ts" / "core" / "schema.sql").read_text() == _schema_sql().fresh()
+
+
+def test_the_v21_migration_is_the_same_text_on_both_sides():
+    assert (ROOT / "ts" / "core" / "migrations" / "v21.sql").read_text() == db_module.V21_TABLES.lstrip("\n")
+
+
+def test_version_20_database_gets_stable_ids_and_keeps_its_rows(tmp_path):
+    from conftest import DROP_V21
+    path = str(tmp_path / "v20.db")
+    Store(path)
+    con = sqlite3.connect(path)
+    con.executescript(DROP_V21 + """
+        INSERT INTO user (id, username, display_name, created_at) VALUES (1, 'a', 'A', 1), (2, 'b', 'B', 1);
+        INSERT INTO food (id, code, source, found, data, fetched_at) VALUES (1, '4000000000001', 'own', 1, '{"name": "x"}', 1), (2, NULL, 'recipe', 1, '{}', 1);
+        INSERT INTO recipe (id, food_id, portions, created_by, updated_at) VALUES (1, 2, 1, 1, 1);
+        INSERT INTO recipe_group (id, name, position, created_at) VALUES (1, 'G', 1, 1);
+        INSERT INTO template (id, user_id, name, created_at) VALUES (1, 1, 'T', 1);
+        INSERT INTO fast (id, user_id, started_at, ended_at, target_hours) VALUES (1, 1, 1, 2, 16);
+        INSERT INTO workout (id, user_id, day, minutes, created_at) VALUES (1, 1, '2026-01-01', 30, 1);
+        PRAGMA user_version = 20;
+    """)
+    for i in range(50):
+        con.execute("INSERT INTO diary_entry (user_id, day, meal, food_id, amount, unit, name, per_100, created_at) "
+                    "VALUES (?, '2026-01-01', 'lunch', 1, 10, 'g', 'x', '{}', 1)", (1 + i % 2,))
+    con.commit()
+    before = {t: con.execute(f"SELECT count(*) FROM {t}").fetchone()[0] for t in UID_TABLES}
+    con.close()
+    Store(path)
+    con = sqlite3.connect(path)
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 21
+    assert _schema_sql().dump(path) == _schema_sql().fresh()  # exactly the schema of a new database
+    for table in UID_TABLES:
+        uids = [r[0] for r in con.execute(f"SELECT uid FROM {table}")]
+        assert len(uids) == before[table] and all(re.fullmatch(r"[0-9a-f]{32}", u) for u in uids), table
+        assert len(set(uids)) == len(uids), table
+    con.close()
+    Store(path)  # a second start changes nothing
+
+
+def test_every_new_row_gets_a_stable_id_and_keeps_it_on_change(client, food):
+    store = client.app.state.store
+    entry = client.post("/api/v1/diary/2026-03-10/entries", json={"food_id": food["id"], "meal": "lunch", "amount": 50}).json()
+    recipe = client.post("/api/v1/recipes", json={"name": "Porridge", "portions": 2, "items": [{"food_id": food["id"], "amount": 80}]}).json()
+    con = sqlite3.connect(store.path)
+    uid = lambda table, row_id: con.execute(f"SELECT uid FROM {table} WHERE id = ?", (row_id,)).fetchone()[0]  # noqa: E731
+    first = (uid("diary_entry", entry["id"]), uid("recipe", recipe["id"]), uid("food", recipe["food"]["id"]), uid("food", food["id"]))
+    assert all(re.fullmatch(r"[0-9a-f]{32}", u) for u in first) and len(set(first)) == 4
+    client.patch(f"/api/v1/diary/entries/{entry['id']}", json={"amount": 70})
+    client.put(f"/api/v1/recipes/{recipe['id']}", json={"name": "Porridge 2", "portions": 3, "items": [{"food_id": food["id"], "amount": 90}]})
+    client.put(f"/api/v1/foods/{food['id']}", json={"name": "Oats 2", "per_100": {"kcal": 200, "protein": 10, "carbs": 30, "fat": 4}})
+    assert (uid("diary_entry", entry["id"]), uid("recipe", recipe["id"]), uid("food", recipe["food"]["id"]), uid("food", food["id"])) == first

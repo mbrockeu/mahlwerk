@@ -42,7 +42,9 @@ const settings = z.object({
   water_drinks: pyBool().default(true),
 });
 export type Settings = z.output<typeof settings>;
-const SETTING_KEYS = Object.keys(settings.shape);
+export const SETTING_KEYS = Object.keys(settings.shape);
+/** The settings schema, for the data import (dataImport.ts checks every value like this route does). */
+export const SETTINGS = settings;
 
 const settingsPatch = z.object({
   playful: nullish(pyBool()),

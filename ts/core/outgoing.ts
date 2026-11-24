@@ -4,7 +4,7 @@
 import type { Ctx } from './http.ts';
 
 /** What a request is for; the tests answer each purpose with its own mock. */
-export type Purpose = 'off' | 'oidc' | 'yazio' | 'web' | 'vision' | 'webhook' | 'cookidoo';
+export type Purpose = 'off' | 'oidc' | 'yazio' | 'web' | 'vision' | 'webhook' | 'cookidoo' | 'catalog';
 
 export interface OutRequest {
   method?: string;

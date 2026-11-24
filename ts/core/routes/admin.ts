@@ -24,7 +24,7 @@ const MAX_LIST = 50;
 
 interface Card { status?: string; info?: Record<string, unknown>; config?: Record<string, unknown>; enabled?: boolean }
 type Cards = Partial<Record<'cookidoo' | 'vision' | 'yazio_login' | 'label_reader', () => Promise<Card> | Card>>;
-interface Refresh { status(): unknown; start(): boolean | Promise<boolean> }
+interface Refresh { status(): unknown; start(): boolean | Promise<boolean> } // status may be a promise (the app's download)
 
 const IDLE = { state: 'idle', started_at: null, finished_at: null, progress: null, countries: [], result: null, error: null };
 const cards = (ctx: Ctx): Cards => (ctx.services.cards as Cards | undefined) ?? {};
@@ -50,7 +50,7 @@ export async function connectorList(ctx: Ctx) {
   const extra = cards(ctx);
   const catalog = (ctx.services.catalog as { info(): Promise<any> } | undefined);
   const info = catalog ? await catalog.info() : { products: 0, updated_at: null, bls: { products: 0, updated_at: null } };
-  const refresh = (refreshOf(ctx)?.status() ?? IDLE) as { state: string };
+  const refresh = ((await refreshOf(ctx)?.status()) ?? IDLE) as { state: string };
   const counts = await adminCounts(ctx.db);
   const card = async (name: keyof Cards): Promise<Card> => (await extra[name]?.()) ?? {};
   const cookidoo = await card('cookidoo');
@@ -226,7 +226,7 @@ export const routes: Route[] = [
     return demoAccountConnector(ctx);
   }),
 
-  route('GET', '/api/v1/admin/catalog/refresh', async (req) => { await asAdmin(req); return refreshOf(req.ctx)?.status() ?? IDLE; }),
+  route('GET', '/api/v1/admin/catalog/refresh', async (req) => { await asAdmin(req); return (await refreshOf(req.ctx)?.status()) ?? IDLE; }),
 
   // Rebuild the Open Food Facts catalogue in the background (a download of several hundred MB). One at a time.
   route('POST', '/api/v1/admin/catalog/refresh', async (req) => {
@@ -234,6 +234,6 @@ export const routes: Route[] = [
     const refresh = refreshOf(req.ctx);
     if (!refresh) throw new HttpError(501, 'the catalogue refresh is not available in this server');
     if (!(await refresh.start())) throw new HttpError(409, 'a refresh is already running');
-    return refresh.status();
+    return await refresh.status();
   }, { status: 202 }),
 ];

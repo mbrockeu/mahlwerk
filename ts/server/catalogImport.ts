@@ -17,7 +17,7 @@ export const OFF_URL = 'https://static.openfoodfacts.org/data/en.openfoodfacts.o
 const PROGRESS_EVERY = 200_000;
 const BATCH = 5_000;
 
-const SCHEMA = `
+export const SCHEMA = `
 CREATE TABLE product (
     id INTEGER PRIMARY KEY, source TEXT NOT NULL, code TEXT NOT NULL, name TEXT NOT NULL, brand TEXT, quantity TEXT, serving_size TEXT,
     serving_quantity REAL, unit TEXT NOT NULL, kcal REAL NOT NULL, fat REAL, saturated_fat REAL, carbs REAL, sugars REAL, fiber REAL,

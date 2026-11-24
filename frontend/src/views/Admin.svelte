@@ -9,12 +9,15 @@
   import TagEditor from '../components/TagEditor.svelte';
   import Toggle from '../components/Toggle.svelte';
   import { api, ApiError } from '../lib/api';
+  import { localApi } from '../lib/local';
   import { fmt, fmtDate, lang, t } from '../lib/i18n';
   import { navigate } from '../lib/router.svelte';
   import { auth, loadMe, toast, ui } from '../lib/store.svelte';
   import type { AdminOverview, AdminUser, Connector, ConnectorKey, RefreshState, TechItem } from '../lib/types';
 
   // the connectors in four groups (by what they are for; the server's own `kind` is the fallback for a connector this list does not know)
+  /** In the app there is one person: no shared account, no choice about own accounts, no stored pictures. */
+  const inApp = !!localApi();
   const GROUPS: { id: string; title: () => string; keys: ConnectorKey[] }[] = [
     { id: 'food', title: () => t('admGroupFood'), keys: ['openfoodfacts_lookup', 'openfoodfacts_catalog', 'bls', 'label_reader', 'vision'] },
     { id: 'recipes', title: () => t('admGroupRecipes'), keys: ['cookidoo', 'web_recipes'] },
@@ -202,10 +205,12 @@
     lockedBy={switchLocked(c) ? (ENV_OF[`${c.key}.enabled`] ?? '') : ''} fact={fact(c)} expandable={expandable(c)} open={isOpen(c)} ontoggle={() => flip(c)}
     tech={tech(c)} techOpen={c.status === 'not_installed'}>
     {#if c.key === 'openfoodfacts_catalog'}
+      {#if !inApp}
       <div class="sub">
         <CountryPicker items={c.config.countries ?? []} hint={locked(c, 'config.countries') ? t('admLocked') : t('admCountriesHint')}
           disabled={busy === c.key || locked(c, 'config.countries')} onchange={(next) => patch(c, { config: { countries: next } })} />
       </div>
+      {/if}
       <div class="sub">
         <h5 class="micro quiet">{t('admRefreshTitle')}</h5>
         <div class="refresh">
@@ -223,12 +228,15 @@
             {/if}
           </div>
         </div>
-        <p class="note">{t('admRefreshHint')}</p>
+        <p class="note">{inApp ? t('admRefreshHintApp') : t('admRefreshHint')}</p>
       </div>
     {/if}
 
     {#if c.key === 'cookidoo'}
       <p class="note warnbox">{t('admCookidooWarn')}</p>
+      {#if inApp}
+      <p class="note">{t('admCookidooApp')}</p>
+      {:else}
       <div class="sub" role="group" aria-labelledby="ck-shared">
         <h5 id="ck-shared" class="micro quiet">{t('ckaTitleShared')}</h5>
         <p class="note">{t('ckaTextShared')}</p>
@@ -246,6 +254,7 @@
           disabled={busy === c.key || locked(c, 'config.images')} onchange={() => patch(c, { config: { images: c.config.images !== true } })} />
         <p class="note">{locked(c, 'config.images') ? t('admLocked') : t('admImagesCookidooHint')}</p>
       </div>
+      {/if}
       {#if c.info.error}<p class="note warn" role="alert">{t('admCookidooError', { reason: String(c.info.error) })}</p>{/if}
     {/if}
 

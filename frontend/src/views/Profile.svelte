@@ -6,6 +6,7 @@
   import CookidooAccount from '../components/CookidooAccount.svelte';
   import YazioImport from '../components/YazioImport.svelte';
   import DataExport from '../components/DataExport.svelte';
+  import DataImport from '../components/DataImport.svelte';
   import TokenCard from '../components/TokenCard.svelte';
   import WebhookCard from '../components/WebhookCard.svelte';
   import Icon from '../components/Icon.svelte';
@@ -18,7 +19,7 @@
     type MacroKey, type PresetId,
   } from '../lib/goals';
   import { MAX_WORKOUTS_WEEK } from '../lib/training';
-  import { GOAL_SINCE_START, type GoalChange, type ImportBatch } from '../lib/types';
+  import { GOAL_SINCE_START, type GoalChange, type ImportBatch, type ImportInfo } from '../lib/types';
   import { fromDay } from '../lib/date';
   import { fmt, fmtDate, lang, langPref, setLangPref, t, type LangPref } from '../lib/i18n';
   import { setThemePref, theme, type ThemePref } from '../lib/theme.svelte';
@@ -109,6 +110,7 @@
   let importConfirm = $state<number | null>(null);
   let importBusy = $state(false);
   let importError = $state('');
+  let importInfo = $state<ImportInfo | null>(null);
 
   onMount(() => {
     guard.block = (target) => {
@@ -129,6 +131,10 @@
       fastOther = FAST_PRESETS.includes(fasting.target_hours) ? '' : String(fasting.target_hours);
       loaded = true;
       try { imports = await api.imports(); } catch { imports = []; }
+      // the import of an own export: only where the server (or the app) has it; the Python server answers 404, the demo view never asks
+      if (!viewingDemo() && !import.meta.env.VITE_DEMO && !import.meta.env.VITE_MOCK) {
+        try { importInfo = await api.importInfo(); } catch { importInfo = null; }
+      }
       try { goalHistory = await api.goalHistory(); } catch { goalHistory = []; }
     })();
     return () => { guard.block = null; window.removeEventListener('beforeunload', beforeUnload); };
@@ -669,6 +675,7 @@
         {/if}
 
         {#if !viewingDemo() && !import.meta.env.VITE_DEMO}<DataExport />{/if}
+        {#if !viewingDemo() && importInfo?.available}<DataImport maxBytes={importInfo.max_bytes} onimported={async () => { try { imports = await api.imports(); } catch { /* keep the list */ } await refresh(); }} />{/if}
 
         <section class="card" aria-labelledby="cat-title">
           <h2 id="cat-title" class="micro quiet">{t('gpCatalog')}</h2>

@@ -74,6 +74,7 @@ classify('blocked',
   'GET /cookidoo/import/preview', 'POST /cookidoo/import', 'GET /cookidoo/import', 'GET /cookidoo/images/preview',
   'POST /cookidoo/images', 'DELETE /cookidoo/import',
   'POST /web-recipes/preview', 'POST /web-recipes', 'POST /web-recipes/{food_id}/reload',
+  'GET /me/import', 'POST /me/import/preview', 'POST /me/import/confirm', 'DELETE /me/import/staged', // the own data import: the sample data stays as it is
   'GET /me/yazio', 'PUT /me/yazio/files/{name}', 'DELETE /me/yazio', 'POST /me/yazio/preview', 'POST /me/yazio/confirm', 'POST /me/yazio/login',
   'GET /me/cookidoo-account', 'PUT /me/cookidoo-account', 'DELETE /me/cookidoo-account', 'POST /me/cookidoo-account/check',
   // the admin area (also closed by is_admin = false; listed so that the table is complete)

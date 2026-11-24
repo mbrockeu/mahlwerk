@@ -82,7 +82,7 @@ def test_version_19_database_gets_the_sleep_table(tmp_path):
     con.commit()
     con.close()
     store = Store(path)
-    assert sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0] == 20
+    assert sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0] == 21
     result = store.health_sync(1, [{"day": "2026-01-02", "sleep_minutes": 400}])
     assert result["counts"]["sleep"]["new"] == 1
     Store(path)  # a second start changes nothing
