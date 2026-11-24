@@ -170,14 +170,13 @@
   const tech = (c: Connector): TechItem[] => {
     const out: TechItem[] = [];
     if (c.key === 'cookidoo') {
-      if (c.status === 'not_installed') out.push({ text: t('admTechInstall'), cmd: 'pip install "mahlwerk[cookidoo]"' });
+      if (c.status === 'not_installed') out.push({ text: t('admTechInstall'), cmd: 'pip install "mahlwerk[cookidoo]"' }); // Python server only
       if (account(c)?.source === 'env') out.push({ text: t('admTechCookidooEnv'), cmd: 'MAHLWERK_COOKIDOO_EMAIL, MAHLWERK_COOKIDOO_PASSWORD, MAHLWERK_COOKIDOO_COUNTRY, MAHLWERK_COOKIDOO_LANGUAGE' });
       const key = account(c)?.key;
       if (key) out.push({ text: t('ckaKey', { where: t(`ckaKey_${key}` as K) }) });
     }
-    if (c.key === 'openfoodfacts_catalog') out.push({ text: t('admTechCatalog'), cmd: 'python -m mahlwerk.catalog import-off --country en:germany' });
-    if (c.key === 'bls') out.push({ text: t('admTechBls'), cmd: 'python -m mahlwerk.catalog import-bls FILE' });
-    if (c.key === 'yazio_import') out.push({ text: t('admTechYazio'), cmd: 'python -m mahlwerk.yazio' });
+    if (c.key === 'bls') out.push({ text: t('admTechBls'), cmd: 'MAHLWERK_CATALOG_BLS_DB' });
+    if (c.key === 'yazio_import') out.push({ text: t('admTechYazio') });
     if (c.key === 'demo_data') out.push({ text: t('admTechDemo'), cmd: 'MAHLWERK_DEMO_DATA=1' });
     if (c.key === 'demo_account') out.push({ text: t('admTechDemoAcct'), cmd: 'MAHLWERK_DEMO_ACCOUNT=1' });
     if (c.key === 'vision') {
