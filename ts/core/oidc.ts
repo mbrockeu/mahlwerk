@@ -120,7 +120,7 @@ export function oidcConfigFromEnv(env: Record<string, string | undefined>, admin
     const path = urlsplit(redirect).path;
     home = tail(path.slice(0, path.length - CALLBACK_PATH.length)) + '/';
   }
-  const method = (get('MAHLWERK_OIDC_CLIENT_AUTH') || 'basic').trim().toLowerCase();
+  const method = (env.MAHLWERK_OIDC_CLIENT_AUTH ?? 'basic').trim().toLowerCase(); // set but empty is refused, like in Python
   if (method !== 'basic' && method !== 'post') throw new Error("MAHLWERK_OIDC_CLIENT_AUTH must be 'basic' or 'post'");
   const label = chars(get('MAHLWERK_OIDC_BUTTON_LABEL').trim()).filter(printable).slice(0, 60).join('');
   const scopesRaw = get('MAHLWERK_OIDC_SCOPES').replace(/,/g, ' ').split(/\s+/).filter(Boolean).join(' ');

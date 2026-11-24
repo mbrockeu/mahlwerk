@@ -45,7 +45,7 @@ function cleanName(value: string): string {
 
 const username = () => pyStr(1, 40).transform((value, ctx) => {
   try { return cleanName(value); } catch (e) {
-    ctx.issues.push({ code: 'custom', message: (e as Error).message, input: value });
+    ctx.issues.push({ code: 'custom', message: 'Value error, ' + (e as Error).message, input: value });
     return z.NEVER;
   }
 });
@@ -277,6 +277,7 @@ export const routes: Route[] = [
     const tokens = await revokeUserTokens(ctx.db, row.id);
     const sessions = await deleteUserSessions(ctx.db, row.id);
     await userEnded(ctx, row.id); // like a sign-out: nothing of theirs stays in memory
+    console.info(`admin ${user.username} revoked the access of ${row.username} (${tokens} keys, ${sessions} sessions)`);
     return { tokens, sessions };
   }, { auth: false }),
 

@@ -67,7 +67,7 @@ function cleanName(value: string | null): string | null {
 const namePatch = z.object({
   display_name: z.string().nullable().default(null).transform((v, ctx) => {
     try { return cleanName(v); } catch (e) {
-      ctx.issues.push({ code: 'custom', message: (e as Error).message, input: v });
+      ctx.issues.push({ code: 'custom', message: 'Value error, ' + (e as Error).message, input: v });
       return z.NEVER;
     }
   }),

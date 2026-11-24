@@ -12,6 +12,7 @@ import { today } from '../dates.ts';
 import { FEATURE_ENV, countries, featureOn, fixedByEnv, webhookHosts } from '../features.ts';
 import { HttpError, parse, route, type Ctx, type Req, type Route } from '../http.ts';
 import { pyBool } from '../models/common.ts';
+import { urlsplit } from '../urlsplit.ts';
 import { VERSION } from '../version.ts';
 import { adminCounts, adminUsers, demoAccountReady, demoAccountSummary, demoNameTaken } from '../store/demo.ts';
 import { setGlobal } from '../store/globals.ts';
@@ -67,18 +68,21 @@ export async function connectorList(ctx: Ctx) {
       locked: locked(ctx, 'openfoodfacts_catalog.countries'), config: { countries: await countries(ctx) }, info: { products: info.products, updated_at: info.updated_at } },
     { key: 'bls', kind: 'source', enabled: info.bls.products > 0, status: info.bls.products ? 'ok' : 'empty', configurable: false, locked: [], config: {},
       info: { products: info.bls.products, updated_at: info.bls.updated_at, cli: true } },
-    { key: 'cookidoo', kind: 'source', enabled: cookidooOn, status: cookidoo.status ?? 'off', configurable: true,
+    { key: 'cookidoo', kind: 'source', enabled: cookidooOn,
+      status: cookidoo.status ?? ((ctx.env.MAHLWERK_COOKIDOO_EMAIL ?? '').trim() && (ctx.env.MAHLWERK_COOKIDOO_PASSWORD ?? '').trim() ? (cookidooOn ? 'ready' : 'off') : 'not_configured'), configurable: true,
       locked: locked(ctx, 'cookidoo.enabled', 'cookidoo.personal', 'cookidoo.images'),
       config: { personal: await featureOn(ctx, 'cookidoo.personal'), images: await featureOn(ctx, 'cookidoo.images') },
-      info: { error: null, shared_account: true, account: { source: 'none', email: null }, env: 'MAHLWERK_COOKIDOO_EMAIL, MAHLWERK_COOKIDOO_PASSWORD', ...(cookidoo.info ?? {}) } },
+      info: { error: null, shared_account: true, account: { source: 'none', key: 'none', email: null, country: null, language: null, editable: true, allowed: true, error: null }, env: 'MAHLWERK_COOKIDOO_EMAIL, MAHLWERK_COOKIDOO_PASSWORD', ...(cookidoo.info ?? {}) } },
     { key: 'web_recipes', kind: 'source', enabled: webRecipes, status: webRecipes ? 'ok' : 'off', configurable: true,
       locked: locked(ctx, 'web_recipes.enabled', 'web_recipes.images'), config: { images: await featureOn(ctx, 'web_recipes.images') }, info: {} },
     { key: 'yazio_import', kind: 'import', enabled: true, status: 'upload', configurable: false, locked: [], config: {},
       info: { batches: counts.import_batches, cli: true, upload: true } },
-    { key: 'yazio_login', kind: 'import', enabled: yazioOn, status: yazio.status ?? 'not_configured', configurable: true,
+    { key: 'yazio_login', kind: 'import', enabled: yazioOn,
+      status: yazio.status ?? ((ctx.env.MAHLWERK_YAZIO_CLIENT_ID ?? '').trim() && (ctx.env.MAHLWERK_YAZIO_CLIENT_SECRET ?? '').trim() ? (yazioOn ? 'ready' : 'off') : 'not_configured'), configurable: true,
       locked: locked(ctx, 'yazio_login.enabled'), config: {}, info: { unofficial: true, env: 'MAHLWERK_YAZIO_CLIENT_ID, MAHLWERK_YAZIO_CLIENT_SECRET' } },
-    { key: 'vision', kind: 'source', enabled: visionOn, status: vision.status ?? 'not_configured', configurable: true, locked: locked(ctx, 'vision.enabled'), config: {},
-      info: { model: null, fallback_model: null, per_hour: null,
+    { key: 'vision', kind: 'source', enabled: visionOn, status: vision.status ?? (visionModel(ctx.env) === null ? 'not_configured' : visionOn ? 'ready' : 'off'),
+      configurable: true, locked: locked(ctx, 'vision.enabled'), config: {},
+      info: { model: visionModel(ctx.env), fallback_model: visionModel(ctx.env, 'MAHLWERK_VISION_FALLBACK'), per_hour: visionPerHour(ctx.env),
         env: 'MAHLWERK_VISION_URL, MAHLWERK_VISION_MODEL, MAHLWERK_VISION_KEY (and _FALLBACK_URL, _FALLBACK_MODEL, _FALLBACK_KEY)', ...(vision.info ?? {}) } },
     { key: 'label_reader', kind: 'import', enabled: labelOn, status: label.status ?? (labelOn ? 'ok' : 'unavailable'), configurable: false, locked: [], config: {}, info: {} },
     { key: 'demo_data', kind: 'import', enabled: demoDataOn(ctx), status: demoDataOn(ctx) ? 'ok' : 'off', configurable: false, locked: [], config: {}, info: { env: 'MAHLWERK_DEMO_DATA' } },
@@ -98,6 +102,24 @@ function names(raw: unknown, pattern: RegExp, what: string, fix: (v: string) => 
   const values = [...new Set((raw as string[]).filter((v) => v.trim()).map((v) => fix(v.trim().toLowerCase())))];
   if (!values.every((v) => pattern.test(v))) throw new HttpError(422, `${what}: invalid entry`);
   return values;
+}
+
+/** vision.settings_from_env: the model named by the environment (the address and the key never appear on the card), or null. */
+function visionModel(env: Record<string, string | undefined>, prefix = 'MAHLWERK_VISION'): string | null {
+  const base = (env[`${prefix}_URL`] ?? '').trim().replace(/\/+$/, '');
+  const model = (env[`${prefix}_MODEL`] ?? '').trim();
+  if (!base || !model || [...model].length > 200) return null;
+  try {
+    const p = urlsplit(base);
+    return ['http', 'https'].includes(p.scheme) && p.hostname && !p.username && !p.password && !p.fragment && !p.query && !base.includes('?') && !base.includes('#') ? model : null;
+  } catch { return null; }
+}
+
+function visionPerHour(env: Record<string, string | undefined>): number {
+  const raw = (env.MAHLWERK_VISION_PER_HOUR ?? '').trim();
+  if (!raw) return 30;
+  if (!/^[+-]?\d+$/.test(raw)) return 30;
+  return Math.max(1, Math.min(10000, Number(raw)));
 }
 
 const country = (value: string) => (value.includes(':') ? value : `en:${value}`);

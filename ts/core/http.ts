@@ -91,7 +91,7 @@ export const route = (method: string, path: string, handler: Handler, opts: Part
 
 /** A FastAPI-like 422 from a zod error: `{"detail": [{"type", "loc", "msg"}]}`. Never echoes the input. */
 export function invalid(error: z.ZodError, where: 'body' | 'query' | 'path'): HttpError {
-  const detail = error.issues.map((i) => ({ type: i.code, loc: [where, ...i.path.map((p) => (typeof p === 'number' ? p : String(p)))], msg: i.message }));
+  const detail = error.issues.map((i) => ({ type: i.code === 'custom' ? 'value_error' : i.code, loc: [where, ...i.path.map((p) => (typeof p === 'number' ? p : String(p)))], msg: i.message }));
   return new HttpError(422, detail);
 }
 

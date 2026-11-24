@@ -105,15 +105,15 @@ export function makeApp(ctx: Ctx, routes: Route[] = ROUTES) {
   return async function handle(nreq: IncomingMessage, nres: ServerResponse, peer?: string, scheme?: string): Promise<void> {
     let res: Res;
     let path = '/';
-    await ready;
     let plain = false; // an answer of the body limit: it carries only its own headers
     try {
+      await ready;
       const url = new URL(nreq.url ?? '/', 'http://x');
       path = decodePath(url.pathname);
       const method = nreq.method ?? 'GET';
       const checked = WRITE_METHODS.includes(method) && path.startsWith('/api/');
-      const limit = checked ? limitFor(path) : Infinity;
-      const raw = await readBody(nreq, limit, checked ? nreq.headers['content-length'] : undefined);
+      // only a write under /api/ has a body that is read (and limited); the Python app never reads any other one
+      const raw = checked ? await readBody(nreq, limitFor(path), nreq.headers['content-length']) : discard(nreq);
       const type = String(nreq.headers['content-type'] ?? '');
       const headers: Record<string, string> = {};
       for (const [k, v] of Object.entries(nreq.headers)) if (v !== undefined) headers[k] = Array.isArray(v) ? v.join(', ') : v;
@@ -138,16 +138,22 @@ export function makeApp(ctx: Ctx, routes: Route[] = ROUTES) {
     }
     if (!plain) res = { ...res, headers: withSecurityHeaders(res.headers, path, await csp) };
     write(nres, res, nreq.method === 'HEAD');
-    if (plain) nreq.destroy();
+    if (plain) nres.on('finish', () => nreq.destroy()); // the refusal is on its way; whatever the client still sends is not read
   };
 }
 
 const isRes = (o: unknown): o is Res => typeof o === 'object' && o !== null && (o as any)[RES] === true;
 
+/** A body nobody asked for: thrown away unread. */
+function discard(req: IncomingMessage): Buffer {
+  req.resume();
+  return Buffer.alloc(0);
+}
+
 /** Reads the body; for a write under /api/ it checks Content-Length up front and counts the bytes of a streamed body as they arrive
  * (413 as soon as the limit is passed, 400 for a Content-Length that is no number). */
 function readBody(req: IncomingMessage, limit: number, declared: string | undefined): Promise<Buffer> {
-  if (limit !== Infinity && declared !== undefined) {
+  if (declared !== undefined) {
     if (!/^\s*[+-]?\d+\s*$/.test(declared)) throw new Refused(400, limit);
     if (Number(declared) > limit) throw new Refused(413, limit);
   }

@@ -1,7 +1,7 @@
 // The built frontend (main.py `mount_web`): files of the web directory, and index.html for every unknown path so that client-side
 // routes survive a reload. Node only (reads files).
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
-import { extname, join, sep } from 'node:path';
+import { extname, join, relative, sep } from 'node:path';
 import { buildCsp } from '../core/security.ts';
 import type { Res } from '../core/http.ts';
 
@@ -35,7 +35,7 @@ export function openWeb(dir: string): Web | null {
     serve(path) {
       try {
         const target = realpathSync(join(root, path)); // follows symlinks: what counts is where the file really is
-        if ((target === root || target.startsWith(root + sep)) && statSync(target).isFile()) return file(target, path.split('/')[0]!);
+        if ((target === root || target.startsWith(root + sep)) && statSync(target).isFile()) return file(target, relative(root, target).split(sep)[0]!);
       } catch { /* not there: index.html */ }
       const index = join(root, 'index.html');
       return existsSync(index) && statSync(index).isFile() ? file(index, 'index.html') : null;
