@@ -64,7 +64,7 @@ export async function exportRecipes(db: Db, userId: number, demo: boolean) {
  * a sample food or a picture. */
 export async function exportFoods(db: Db, userId: number, first: string, last: string, demo: boolean) {
   const hide = demo ? '' : ` AND NOT COALESCE(${DEMO_FOOD}, 0) AND NOT COALESCE(${DEMO_ACCOUNT_FOOD}, 0)`;
-  const rows = await db.all('SELECT uid, code, source, external_id, data, piece_label, piece_grams, drink, created_by FROM food '
+  const rows = await db.all('SELECT uid, code, source, external_id, data, piece_label, piece_grams, drink, created_by, fetched_at FROM food '
     + `WHERE found = 1 AND source <> 'recipe'${hide} AND (created_by = :u `
     + 'OR id IN (SELECT food_id FROM diary_entry WHERE user_id = :u AND day BETWEEN :a AND :b AND (:d OR demo = 0)) '
     + 'OR id IN (SELECT i.food_id FROM template_item i JOIN template t ON t.id = i.template_id WHERE t.user_id = :u) '
@@ -73,7 +73,7 @@ export async function exportFoods(db: Db, userId: number, first: string, last: s
     + 'ORDER BY id', { u: userId, a: first, b: last, d: demo ? 1 : 0 });
   return rows.map((r) => ({
     uid: r.uid, code: r.code, source: r.source, external_id: r.external_id, data: JSON.parse(r.data), piece_label: r.piece_label,
-    piece_grams: r.piece_grams, drink: r.drink === null ? null : Boolean(r.drink), own: r.created_by === userId,
+    piece_grams: r.piece_grams, drink: r.drink === null ? null : Boolean(r.drink), own: r.created_by === userId, fetched_at: r.fetched_at,
   }));
 }
 

@@ -121,7 +121,8 @@ def test_format_2_carries_stable_ids_food_links_the_used_products_and_the_groups
     oats = next(f for f in data["foods"] if f["data"]["name"] == "Oats")
     assert entry["food_uid"] == oats["uid"] and entry["food_code"] is None and entry["external_id"] is None
     assert oats == {"uid": oats["uid"], "code": None, "source": "own", "external_id": None, "data": oats["data"], "piece_label": None,
-                    "piece_grams": None, "drink": None, "own": True}
+                    "piece_grams": None, "drink": None, "own": True, "fetched_at": oats["fetched_at"]}
+    assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d", oats["fetched_at"])  # when it was last changed: the import compares
     assert data["templates"][0]["items"][0]["food_uid"] == oats["uid"]
     porridge = data["recipes"][0]
     assert porridge["items"][0]["food_uid"] == oats["uid"] and UID.fullmatch(porridge["food_uid"]) and porridge["food_uid"] != porridge["uid"]

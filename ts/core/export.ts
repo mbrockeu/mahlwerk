@@ -164,7 +164,7 @@ export async function buildExport(db: Db, user: { id: number; username: string; 
     templates: withDates(await exportTemplates(db, uid), 'created_at'),
     recipes: withDates(await exportRecipes(db, uid, demo), 'updated_at'),
     recipe_groups: withDates(await exportRecipeGroups(db, uid), 'created_at'),
-    foods: await exportFoods(db, uid, a, b, demo),
+    foods: withDates(await exportFoods(db, uid, a, b, demo), 'fetched_at'),
     badges: withDates(await exportBadges(db, uid, demo), 'earned_at'),
     webhooks: await webhooks(db, uid),
   };

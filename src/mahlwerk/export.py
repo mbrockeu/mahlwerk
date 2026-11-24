@@ -140,7 +140,7 @@ def recipes(store: Store, user: dict, demo: bool) -> list[dict]:
 
 
 def foods(store: Store, user: dict, first: str, last: str, demo: bool) -> list[dict]:
-    return store.export_foods(user["id"], first, last, demo)
+    return _with_dates(store.export_foods(user["id"], first, last, demo), "fetched_at")
 
 
 def recipe_groups(store: Store, user: dict) -> list[dict]:

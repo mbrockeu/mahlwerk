@@ -2691,7 +2691,7 @@ class Store:
         hide = "" if demo else f" AND NOT COALESCE({DEMO_FOOD}, 0) AND NOT COALESCE({DEMO_ACCOUNT_FOOD}, 0)"
         with self._connect() as con:
             rows = con.execute(
-                "SELECT uid, code, source, external_id, data, piece_label, piece_grams, drink, created_by FROM food "
+                "SELECT uid, code, source, external_id, data, piece_label, piece_grams, drink, created_by, fetched_at FROM food "
                 f"WHERE found = 1 AND source <> 'recipe'{hide} AND (created_by = :u "
                 "OR id IN (SELECT food_id FROM diary_entry WHERE user_id = :u AND day BETWEEN :a AND :b AND (:d OR demo = 0)) "
                 "OR id IN (SELECT i.food_id FROM template_item i JOIN template t ON t.id = i.template_id WHERE t.user_id = :u) "
@@ -2701,7 +2701,7 @@ class Store:
             ).fetchall()
         return [{"uid": r["uid"], "code": r["code"], "source": r["source"], "external_id": r["external_id"], "data": json.loads(r["data"]),
                  "piece_label": r["piece_label"], "piece_grams": r["piece_grams"], "drink": None if r["drink"] is None else bool(r["drink"]),
-                 "own": r["created_by"] == user_id} for r in rows]
+                 "own": r["created_by"] == user_id, "fetched_at": r["fetched_at"]} for r in rows]
 
     def export_recipe_groups(self, user_id: int) -> list[dict]:
         """The recipe groups this user made, with their members as the stable ids of the foods (own and taken-over recipes)."""
