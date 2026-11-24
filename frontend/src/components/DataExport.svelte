@@ -30,6 +30,7 @@
 <section class="icard" aria-labelledby="ex-title" data-testid="data-export">
   <h2 id="ex-title" class="micro quiet">{t('exTitle')}</h2>
   <p class="note">{t('exText')}</p>
+  {#if inApp}<p class="note app-note" data-testid="app-only-note">{t('exAppNote')}</p>{/if}
   <div class="field">
     <span id="ex-period">{t('exPeriod')}</span>
     <div class="chips" role="group" aria-labelledby="ex-period">
@@ -59,4 +60,5 @@
   .dates { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
   .dl { align-self: flex-start; text-decoration: none; }
   .dl.off { opacity: 0.55; pointer-events: none; }
+  .app-note { font-weight: 600; color: var(--text); }
 </style>

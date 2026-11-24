@@ -306,7 +306,8 @@ export interface Me {
   demo_account?: DemoAccountState;
   catalog: { products: number; updated_at: number | null; bls: { products: number; updated_at: number | null } };
   /** Integrations the admin has switched on; the profile hides the cards of switched-off ones. */
-  features?: { access_tokens: boolean; webhooks: boolean; cookidoo?: boolean; web_recipes?: boolean };
+  /** `data_import`: the server (or the app) takes an own data export back in; missing = no (the Python server has none). */
+  features?: { access_tokens: boolean; webhooks: boolean; cookidoo?: boolean; web_recipes?: boolean; data_import?: boolean };
 }
 
 /** One import run (the Yazio import in the profile); the counts are what the run created. */
@@ -904,6 +905,19 @@ export interface CookidooAccount {
   error: string | null;
 }
 export type CookidooScope = 'shared' | 'own';
+
+/** The import of an own data export (POST /me/import/preview, /me/import/confirm). */
+export type ImportKind = 'foods' | 'recipes' | 'recipe_groups' | 'diary' | 'templates' | 'weight' | 'water' | 'activity' | 'sleep' | 'workouts' | 'fasting'
+  | 'goal' | 'goal_history' | 'settings' | 'badges' | 'webhooks';
+export type ImportMode = 'merge' | 'replace';
+export interface ImportCount { new: number; changed: number; unchanged: number; skipped: number; reasons: Record<string, number> }
+export interface ImportModeView { allowed: boolean; reason: string | null; reason_text: string | null; counts: Record<ImportKind, ImportCount> | null; deleted: Record<string, number> | null }
+export interface ImportPreview {
+  token: string; format_version: number; exported_at: string | null; app_version: string | null;
+  account: { username: string | null; display_name: string | null }; same_account: boolean; range: { from: string | null; to: string | null };
+  mode_allowed: ImportMode[]; modes: Record<ImportMode, ImportModeView>; warnings: { code: string; count: number }[];
+}
+export interface ImportResult { mode: ImportMode; counts: Record<ImportKind, ImportCount>; deleted: Record<string, number> | null; warnings: { code: string; count: number }[] }
 
 /** The Yazio import in the app: files waiting for a preview, and the direct one-time sign-in. */
 interface YazioStage { token: string; source: 'upload' | 'login'; files: Record<string, number> }

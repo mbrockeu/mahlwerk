@@ -6,6 +6,7 @@
   import CookidooAccount from '../components/CookidooAccount.svelte';
   import YazioImport from '../components/YazioImport.svelte';
   import DataExport from '../components/DataExport.svelte';
+  import DataImport from '../components/DataImport.svelte';
   import TokenCard from '../components/TokenCard.svelte';
   import WebhookCard from '../components/WebhookCard.svelte';
   import Icon from '../components/Icon.svelte';
@@ -669,6 +670,7 @@
         {/if}
 
         {#if !viewingDemo() && !import.meta.env.VITE_DEMO}<DataExport />{/if}
+        {#if !viewingDemo() && ui.me?.features?.data_import}<DataImport onimported={async () => { try { imports = await api.imports(); } catch { /* keep the list */ } await refresh(); }} />{/if}
 
         <section class="card" aria-labelledby="cat-title">
           <h2 id="cat-title" class="micro quiet">{t('gpCatalog')}</h2>

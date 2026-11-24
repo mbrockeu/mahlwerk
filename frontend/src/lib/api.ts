@@ -1,6 +1,6 @@
 // API client. All paths are relative (`api/v1/...`) so the app works below any path prefix.
 import type {
-  Account, Combo, FoodPiece, ActivityDayOut, CookidooAccount, CookidooBulkPreview, CookidooBulkRun, CookidooBulkScope, CookidooPicturePreview, RecipeGroup, CookidooScope, YazioPreview, YazioRun, YazioState, AccessToken, AuthStatus, AccessTokenCreated, AdminOverview, AdminUser, DemoAccountState, Badges, CatalogItem, Connector, CookidooCollection, CookidooPlanDay, CookidooPreview, RefreshState, TokenScope, Webhook, WebhookCreated, WebhookDelivery, WebhookIn, FoodDetail, FoodList, FoodSort, Granularity, NutrientCurve, DemoResult, Day, Entry, Fast, Fasting, Food, FoodIn, Goal, GoalChange, HistoryDay, ImportBatch, ImportRemoved, Insights, LabelScan, Me, Meal, NutrientInfo, RecentFood, Recipe, RecipeIn, Review, Settings, SettingsPatch, SuggestFocus, Suggestions, Template, WebPreview, WebPreviewIn, WeightPoint, Workout, WorkoutIn, VisionMeal, VisionRecipe, VisionState, IngredientMatches,
+  Account, Combo, FoodPiece, ActivityDayOut, CookidooAccount, CookidooBulkPreview, CookidooBulkRun, CookidooBulkScope, CookidooPicturePreview, RecipeGroup, CookidooScope, YazioPreview, YazioRun, YazioState, AccessToken, AuthStatus, AccessTokenCreated, AdminOverview, AdminUser, DemoAccountState, Badges, CatalogItem, Connector, CookidooCollection, CookidooPlanDay, CookidooPreview, RefreshState, TokenScope, Webhook, WebhookCreated, WebhookDelivery, WebhookIn, FoodDetail, FoodList, FoodSort, Granularity, NutrientCurve, DemoResult, Day, Entry, Fast, Fasting, Food, FoodIn, Goal, GoalChange, HistoryDay, ImportBatch, ImportMode, ImportPreview, ImportRemoved, ImportResult, Insights, LabelScan, Me, Meal, NutrientInfo, RecentFood, Recipe, RecipeIn, Review, Settings, SettingsPatch, SuggestFocus, Suggestions, Template, WebPreview, WebPreviewIn, WeightPoint, Workout, WorkoutIn, VisionMeal, VisionRecipe, VisionState, IngredientMatches,
 } from './types';
 import { apiFetch } from './local';
 
@@ -232,6 +232,10 @@ export const api = {
   testWebhook: (id: number) => request<{ queued: boolean }>('POST', `me/webhooks/${id}/test`),
   webhookDeliveries: (id: number) => request<WebhookDelivery[]>('GET', `me/webhooks/${id}/deliveries`),
 
+  // the file goes as plain bytes: a .json file would otherwise be sent as JSON and read by the server's JSON parser
+  importPreview: (file: Blob) => request<ImportPreview>('POST', 'me/import/preview', undefined, new Blob([file], { type: 'application/octet-stream' })),
+  importConfirm: (token: string, mode: ImportMode) => request<ImportResult>('POST', 'me/import/confirm', { token, mode }),
+  importDiscard: () => request<void>('DELETE', 'me/import/staged'),
   yazioState: () => request<YazioState>('GET', 'me/yazio'),
   /** One file of the Yazio export (plain or gzip-packed) or `export.zip`, sent as the request body. */
   yazioUpload: (name: string, file: Blob) => request<NonNullable<YazioState['stage']>>('PUT', `me/yazio/files/${name}`, undefined, file),
