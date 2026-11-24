@@ -6,7 +6,7 @@
 // text hash) does the same job. What a given day gets differs from the Python server, but a day that is there stays as it is (rows
 // are only added for days that have none), so switching servers back and forth is harmless.
 import { estimateKcal } from './activity.ts';
-import { dayToDate, addDays, dateToDay, weekday } from './dates.ts';
+import { addDays, dayToDate, weekday } from './dates.ts';
 import type { Db } from './db.ts';
 import { CATALOG, MICROS } from './demoData.ts';
 import { PER_100_KEYS, parseServing } from './nutrition.ts';
@@ -233,4 +233,3 @@ export async function generate(db: Db, userId: number, today: string, days: numb
   return { ...(await addDemo(db, userId, FOODS, entries, weights, water, activity, workouts, sleep, marker)), goal_set: goalSet };
 }
 
-void dateToDay;
