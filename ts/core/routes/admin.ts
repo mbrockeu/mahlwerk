@@ -59,7 +59,7 @@ export async function connectorList(ctx: Ctx) {
   const label = await card('label_reader');
   const [tokens, webhooks, lookup, webRecipes, cookidooOn, yazioOn, visionOn] = await Promise.all(
     ['access_tokens.enabled', 'webhooks.enabled', 'openfoodfacts_lookup.enabled', 'web_recipes.enabled', 'cookidoo.enabled', 'yazio_login.enabled', 'vision.enabled'].map((k) => featureOn(ctx, k)));
-  const labelOn = label.enabled ?? false;
+  const labelOn = label.enabled ?? visionOn; // read by the photo recognition (routes/labelScans.ts)
   return [
     { key: 'openfoodfacts_lookup', kind: 'source', enabled: lookup, status: lookup ? 'ok' : 'off', configurable: true,
       locked: locked(ctx, 'openfoodfacts_lookup.enabled'), config: {}, info: { base_url: (ctx.env.MAHLWERK_OFF_BASE ?? 'https://world.openfoodfacts.org').replace(/\/+$/, '') } },
@@ -84,7 +84,7 @@ export async function connectorList(ctx: Ctx) {
       configurable: true, locked: locked(ctx, 'vision.enabled'), config: {},
       info: { model: visionModel(ctx.env), fallback_model: visionModel(ctx.env, 'MAHLWERK_VISION_FALLBACK'), per_hour: visionPerHour(ctx.env),
         env: 'MAHLWERK_VISION_URL, MAHLWERK_VISION_MODEL, MAHLWERK_VISION_KEY (and _FALLBACK_URL, _FALLBACK_MODEL, _FALLBACK_KEY)', ...(vision.info ?? {}) } },
-    { key: 'label_reader', kind: 'import', enabled: labelOn, status: label.status ?? (labelOn ? 'ok' : 'unavailable'), configurable: false, locked: [], config: {}, info: {} },
+    { key: 'label_reader', kind: 'import', enabled: labelOn, status: label.status ?? (labelOn ? 'ok' : 'off'), configurable: false, locked: [], config: {}, info: {} },
     { key: 'demo_data', kind: 'import', enabled: demoDataOn(ctx), status: demoDataOn(ctx) ? 'ok' : 'off', configurable: false, locked: [], config: {}, info: { env: 'MAHLWERK_DEMO_DATA' } },
     await demoAccountConnector(ctx),
     { key: 'access_tokens', kind: 'interface', enabled: tokens, status: tokens ? 'ok' : 'off', configurable: true, locked: locked(ctx, 'access_tokens.enabled'), config: {},
