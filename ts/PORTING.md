@@ -69,6 +69,10 @@ vault key comes from the keychain, see `secretKey`).
     there is no DNS op, so every netguard-checked target is refused.
   - `{op:"secretKey"}` -> `{keyB64}`: 32 random bytes, made once and kept in this device's keychain (not in the database, not in
     the export): the key of the stored secrets (Cookidoo accounts). Anything but 32 bytes, or an error: storing is refused (503).
+  - The other way round (native -> core): `await window.mahlwerkHost.request({method, path, query, body})` -> `{status, body}`, set
+    once the page has opened the database (`localHost.ts` `hostRequest`). `path` starts with `/api/`, `query` an object, `body` JSON
+    text, an object or null; the answer's `body` is JSON text or null. For the Health sync, the history, summary/today and the
+    widget's water button; runs in core like a request of the page.
   - When the web view loads a page (reload, crash), an open transaction must be rolled back; the JS side also sends a
     `ROLLBACK` (error ignored) before it opens the database.
 

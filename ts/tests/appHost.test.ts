@@ -9,7 +9,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { SchemaMismatch } from '../core/db.ts';
 import { outgoing } from '../core/outgoing.ts';
 import { pickAddress, TargetNotAllowed } from '../core/netguard.ts';
-import { APP_ROUTES, localFetch, openLocal } from '../app/localHost.ts';
+import { APP_ROUTES, hostRequest, localFetch, openLocal } from '../app/localHost.ts';
 import { nativeDb } from '../app/nativeDb.ts';
 import { buildBlsFixture, nodeBridge } from './appBridge.ts';
 
@@ -228,5 +228,23 @@ test('the Yazio file import works in the app: a gzip-packed file is unpacked, pr
   assert.equal(done.status, 200, new TextDecoder().decode(done.body!));
   const weights = (await native.bridge({ op: 'sql', db: 'main', sql: 'SELECT count(*) AS n FROM weight', args: [] })).rows[0].n;
   assert.equal(weights, 2);
+  native.close();
+});
+
+test('the native side reaches core through mahlwerkHost.request: Health sync, summary/today, water, history', async () => {
+  const native = fresh();
+  const { dispatch } = await openLocal({ bridge: native.bridge, schemaSql });
+  const request = hostRequest(dispatch);
+  const day = new Date().toISOString().slice(0, 10);
+  const sync = await request({ method: 'POST', path: '/api/v1/health/sync', body: { days: [{ day, steps: 5400, active_kcal: 310 }] } });
+  assert.equal(sync.status, 200, sync.body ?? '');
+  const water = await request({ method: 'POST', path: `/api/v1/water/${day}`, body: JSON.stringify({ add_ml: 250 }) });
+  assert.equal(water.status, 200, water.body ?? '');
+  const today = await request({ method: 'GET', path: '/api/v1/summary/today' });
+  assert.equal(today.status, 200);
+  assert.equal(typeof JSON.parse(today.body!), 'object');
+  const history = await request({ method: 'GET', path: '/api/v1/history', query: { days: 30 } });
+  assert.equal(history.status, 200, history.body ?? '');
+  assert.equal((await request({ method: 'GET', path: '/elsewhere' })).status, 400);
   native.close();
 });

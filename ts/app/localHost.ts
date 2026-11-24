@@ -122,3 +122,18 @@ export function localFetch(dispatch: Dispatch) {
     return new Response(a.body as BodyInit | null, { status: a.status, headers: a.headers });
   };
 }
+
+/** A request of the native side (window.mahlwerkHost.request): the Health sync, the history, summary/today and the water button of the
+ * widget. Runs in core like a request of the page (the one person of the app); `query` an object, `body` JSON text, an object or null.
+ * Answers `{status, body}` with the body as JSON text (or null for an empty answer). */
+export interface HostRequest { method: string; path: string; query?: Record<string, string | number> | null; body?: unknown }
+export function hostRequest(dispatch: Dispatch): (r: HostRequest) => Promise<{ status: number; body: string | null }> {
+  return async (r) => {
+    if (!r || typeof r.path !== 'string' || !r.path.startsWith('/api/')) return { status: 400, body: JSON.stringify({ detail: 'path must start with /api/' }) };
+    const query = new URLSearchParams(Object.entries(r.query ?? {}).map(([k, v]) => [k, String(v)])).toString();
+    const text = r.body === null || r.body === undefined ? null : typeof r.body === 'string' ? r.body : JSON.stringify(r.body);
+    const a = await dispatch(String(r.method || 'GET'), r.path, query, { 'content-type': 'application/json', 'x-mahlwerk-request': '1' },
+      text === null ? null : new TextEncoder().encode(text));
+    return { status: a.status, body: a.body && a.body.length ? new TextDecoder().decode(a.body) : null };
+  };
+}
