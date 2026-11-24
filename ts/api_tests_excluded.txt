@@ -1,0 +1,8 @@
+# API tests that cannot run against the TS server through tests/ts_bridge.py, and where their point is covered instead.
+# test id | why | covered by
+tests/test_api.py::test_an_upstream_failure_says_nothing_about_the_network | reads the Python log (caplog) | answer part passes in the same file; TS logs no address
+tests/test_hardening.py::test_a_warning_is_logged_once_for_a_private_peer_with_forwarding_headers | reads the Python log | log-only behaviour
+tests/test_hardening.py::test_a_random_setup_code_is_logged_once_for_a_database_with_users | reads the Python log | setup code checked by hand (status, 403, 201)
+tests/test_hardening.py::test_a_refused_request_logs_the_field_but_not_the_value | reads the Python log | 422 bodies never echo input (core/http.ts invalid())
+tests/test_hardening.py::test_a_bad_content_length_is_a_clean_400 | httpx refuses to send a bad Content-Length | checked with curl against server/main.ts
+tests/test_recipe_groups.py::test_removing_a_cookidoo_recipe_removes_it_from_its_groups | swaps the Cookidoo client through app.state | ts/tests/cookidooRoutes.test.ts (groups after delete)
