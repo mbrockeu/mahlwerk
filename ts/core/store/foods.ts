@@ -66,6 +66,7 @@ export async function getFoodByCode(db: Db, code: string): Promise<FoodRow | und
 export async function listFoods(db: Db, query = '', source: string | null = null, limit = 50, exclude: string[] = [], demoAccount = false): Promise<FoodRow[]> {
   const hide = demoAccount ? '' : ` AND NOT COALESCE(${DEMO_ACCOUNT_FOOD}, 0)`;
   const rows = await db.all(`${FOOD_SELECT} WHERE food.found = 1${hide} ORDER BY food.fetched_at DESC, food.id DESC`);
+  // with a search, the better matches first (matchRank), newest first among equally good ones
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const result: FoodRow[] = [];
   for (const row of rows) {
@@ -76,9 +77,18 @@ export async function listFoods(db: Db, query = '', source: string | null = null
     if (data.name == null && Object.values(data.per_100).every((v) => v == null)) continue; // empty shell
     const haystack = [food.code, data.name, data.brand].filter(Boolean).join(' ').toLowerCase();
     if (words.every((w) => haystack.includes(w))) result.push(food);
-    if (result.length >= limit) break;
+    if (!words.length && result.length >= limit) break;
   }
-  return result;
+  if (!words.length) return result;
+  const ranks = result.map((f) => matchRank(words, [f.code, f.data!.name, f.data!.brand].filter(Boolean).join(' ').toLowerCase()));
+  return result.map((f, i) => [f, i] as const).sort((a, b) => ranks[a[1]]! - ranks[b[1]]! || a[1] - b[1]).slice(0, limit).map(([f]) => f);
+}
+
+/** How well a product matches the search words (lower case; every word occurs in `haystack`), db.py `match_rank`: per word 0 for a
+ * whole word ("ei" in "Ei, gekocht"), 1 for the start of a word ("Eier"), 2 inside a word ("Kartoffelbrei"); the sum, lower is better. */
+export function matchRank(words: string[], haystack: string): number {
+  const tokens = haystack.split(/[^\p{L}\p{N}_]+/u).filter(Boolean);
+  return words.reduce((sum, w) => sum + (tokens.includes(w) ? 0 : tokens.some((t) => t.startsWith(w)) ? 1 : 2), 0);
 }
 
 /** Insert or, for a known barcode, replace. Returns [id, fetched_at]. `createdBy` becomes the owner of a new food, or of one that
