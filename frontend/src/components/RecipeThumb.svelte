@@ -2,7 +2,8 @@
   // The small picture of a recipe in a list row (`m`, 44 px) or among the suggestions (`s`, the same box, a little smaller). The box has a
   // fixed size whether or not there is a picture, so a list never jumps while pictures arrive. Without a picture (or when the file is
   // gone) it shows a quiet stand-in: a few ticks of the grinder dial and the first letter of the name. Decorative: the name stands beside it.
-  import { imageUrl, initial } from '../lib/foodImage';
+  import { imageSrc, imageUrl, initial } from '../lib/foodImage';
+  import { localImage } from '../lib/local';
   import type { Food } from '../lib/types';
 
   let { food, size = 'm', blank = true }: { food: Pick<Food, 'image' | 'name'>; size?: 'm' | 's'; blank?: boolean } = $props();
@@ -13,7 +14,7 @@
 </script>
 
 {#if hash && !failed}
-  <span class="thumb {size}" aria-hidden="true"><img src={imageUrl(hash, size)} alt="" width="44" height="44" loading="lazy" decoding="async" onerror={() => (failed = true)} /></span>
+  <span class="thumb {size}" aria-hidden="true"><img src={imageSrc(hash, size)} use:localImage={imageUrl(hash, size)} alt="" width="44" height="44" loading="lazy" decoding="async" onerror={() => (failed = true)} /></span>
 {:else if blank}
   <span class="thumb {size} ph" aria-hidden="true">
     <svg viewBox="0 0 44 44" focusable="false">

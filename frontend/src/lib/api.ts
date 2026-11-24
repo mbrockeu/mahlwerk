@@ -2,6 +2,7 @@
 import type {
   Account, Combo, FoodPiece, ActivityDayOut, CookidooAccount, CookidooBulkPreview, CookidooBulkRun, CookidooBulkScope, CookidooPicturePreview, RecipeGroup, CookidooScope, YazioPreview, YazioRun, YazioState, AccessToken, AuthStatus, AccessTokenCreated, AdminOverview, AdminUser, DemoAccountState, Badges, CatalogItem, Connector, CookidooCollection, CookidooPlanDay, CookidooPreview, RefreshState, TokenScope, Webhook, WebhookCreated, WebhookDelivery, WebhookIn, FoodDetail, FoodList, FoodSort, Granularity, NutrientCurve, DemoResult, Day, Entry, Fast, Fasting, Food, FoodIn, Goal, GoalChange, HistoryDay, ImportBatch, ImportRemoved, Insights, LabelScan, Me, Meal, NutrientInfo, RecentFood, Recipe, RecipeIn, Review, Settings, SettingsPatch, SuggestFocus, Suggestions, Template, WebPreview, WebPreviewIn, WeightPoint, Workout, WorkoutIn, VisionMeal, VisionRecipe, VisionState, IngredientMatches,
 } from './types';
+import { apiFetch } from './local';
 
 export class ApiError extends Error {
   status: number;
@@ -51,7 +52,7 @@ async function request<T>(method: string, path: string, body?: unknown, raw?: Bl
   }
   let response: Response;
   try {
-    response = await fetch(`api/v1/${path}`, { method, headers, body: payload, signal });
+    response = await apiFetch(`api/v1/${path}`, { method, headers, body: payload, signal });
   } catch (err) {
     throw new ApiError(0, err instanceof Error ? err.message : 'network');
   }

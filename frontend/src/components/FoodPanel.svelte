@@ -1,7 +1,8 @@
 <script lang="ts">
   import { api, ApiError } from '../lib/api';
-  import { imageCredit, imageUrl } from '../lib/foodImage';
+  import { imageCredit, imageSrc, imageUrl } from '../lib/foodImage';
   import { fmt, lang, t } from '../lib/i18n';
+  import { localImage } from '../lib/local';
   import { directory, ensureNutrients, fmtAmount, GROUP_ORDER, nutrientName } from '../lib/nutrients.svelte';
   import { ROWS } from '../lib/nutrition';
   import { isPortionFood, webHost } from '../lib/portion';
@@ -80,7 +81,7 @@
   <section class="hero on-dark" class:pic={hasPic && !wideDetail} aria-labelledby="fp-name">
     {#if image && hasPic && !wideDetail}
       <figure class="photo" data-testid="recipe-photo">
-        <img src={imageUrl(image.hash, 'l')} alt={t('imgAlt', { name })} width="960" height="720" decoding="async" onerror={() => (photoFailed = true)} />
+        <img src={imageSrc(image.hash, 'l')} use:localImage={imageUrl(image.hash, 'l')} alt={t('imgAlt', { name })} width="960" height="720" decoding="async" onerror={() => (photoFailed = true)} />
         {#if credit}<figcaption>{t('imgCredit', { name: credit })}</figcaption>{/if}
         {#if canPhoto}
           <div class="ptools">
@@ -147,7 +148,7 @@
 
     {#if wideDetail && image && hasPic}
       <figure class="card pcard" data-testid="recipe-photo">
-        <img src={imageUrl(image.hash, 'l')} alt={t('imgAlt', { name })} width="960" height="720" decoding="async" onerror={() => (photoFailed = true)} />
+        <img src={imageSrc(image.hash, 'l')} use:localImage={imageUrl(image.hash, 'l')} alt={t('imgAlt', { name })} width="960" height="720" decoding="async" onerror={() => (photoFailed = true)} />
         {#if credit}<figcaption>{t('imgCredit', { name: credit })}</figcaption>{/if}
         {#if canPhoto}
           <div class="ptools">
