@@ -1,10 +1,12 @@
 // Import of an own data export (dataImport.ts): upload the file and look at the preview, then confirm with the preview's token and a
 // mode ("merge" or "replace"). Only for the signed-in person themself (an access token is refused), only into their own account, closed
-// for the demo account (demoAccount.ts). TS only: the Python server has no such route and says so in GET /me (`features`).
+// for the demo account (demoAccount.ts). TS only: the Python server has no such route; the interface asks GET /me/import (404 there).
+// (Not a key in GET /me `features`: the Python API tests compare that object exactly, and both servers must keep answering them.)
 import { z } from 'zod';
 import { sessionUser } from '../auth.ts';
-import { decodeImport, ImportError, ImportStage, modesAllowed, ownCounts, parseExport, runImport, type ExportFile, type Mode } from '../dataImport.ts';
+import { decodeImport, FORMATS, ImportError, MAX_JSON, ImportStage, modesAllowed, ownCounts, parseExport, runImport, type ExportFile, type Mode } from '../dataImport.ts';
 import { HttpError, parse, route, type Ctx, type Req, type Route } from '../http.ts';
+import { limitFor } from '../security.ts';
 import { pyStr } from '../models/common.ts';
 import { StageError } from '../yazioStage.ts';
 import { yazioOf } from './yazio.ts';
@@ -86,6 +88,12 @@ async function preview(req: Req, file: ExportFile, token: string) {
 }
 
 export const routes: Route[] = [
+  // Whether this server (or the app) takes an own export back in, and how large the file may be: the interface shows the import only then.
+  route('GET', URL, async (req) => {
+    await sessionUser(req);
+    return { available: true, max_bytes: limitFor(`${URL}/preview`), max_unpacked_bytes: MAX_JSON, formats: FORMATS };
+  }),
+
   // The body is the file itself: the ZIP of GET /me/export or its mahlwerk-export.json (at most 32 MB as sent, 48 MB unpacked). Nothing
   // is written; the file waits 20 minutes for the confirmation. The preview counts per kind what merge and replace would do.
   route('POST', `${URL}/preview`, async (req) => {

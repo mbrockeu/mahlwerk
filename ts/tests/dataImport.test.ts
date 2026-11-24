@@ -244,10 +244,12 @@ test('refused: not an export, unknown format, a key twice, too large, a ZIP bomb
   assert.equal((await send(w, 'ann', 'DELETE', `${IMPORT}/staged`)).status, 204);
   assert.equal((await confirm(w, 'ann', p.json.token)).status, 410);
   // the demo account: closed; the flag tells the interface
-  for (const [m, path] of [['POST', '/api/v1/me/import/preview'], ['POST', '/api/v1/me/import/confirm'], ['DELETE', '/api/v1/me/import/staged']]) {
+  for (const [m, path] of [['GET', '/api/v1/me/import'], ['POST', '/api/v1/me/import/preview'], ['POST', '/api/v1/me/import/confirm'], ['DELETE', '/api/v1/me/import/staged']]) {
     assert.equal(verdict(m!, path!), 'blocked');
   }
-  assert.equal((await send(w, 'ann', 'GET', '/api/v1/me')).json.features.data_import, true);
+  const info = (await send(w, 'ann', 'GET', IMPORT)).json;
+  assert.deepEqual(info, { available: true, max_bytes: 32 * 1024 * 1024, max_unpacked_bytes: 48 * 1024 * 1024, formats: [1, 2] });
+  assert.equal('data_import' in (await send(w, 'ann', 'GET', '/api/v1/me')).json.features, false); // GET /me stays as the Python server has it
 });
 
 test('rows that exist on both sides under different ids meet by their natural key: Yazio entry, Health workout, barcode', async () => {

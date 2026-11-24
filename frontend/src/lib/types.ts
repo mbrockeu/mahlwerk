@@ -306,8 +306,7 @@ export interface Me {
   demo_account?: DemoAccountState;
   catalog: { products: number; updated_at: number | null; bls: { products: number; updated_at: number | null } };
   /** Integrations the admin has switched on; the profile hides the cards of switched-off ones. */
-  /** `data_import`: the server (or the app) takes an own data export back in; missing = no (the Python server has none). */
-  features?: { access_tokens: boolean; webhooks: boolean; cookidoo?: boolean; web_recipes?: boolean; data_import?: boolean };
+  features?: { access_tokens: boolean; webhooks: boolean; cookidoo?: boolean; web_recipes?: boolean };
 }
 
 /** One import run (the Yazio import in the profile); the counts are what the run created. */
@@ -910,6 +909,8 @@ export type CookidooScope = 'shared' | 'own';
 export type ImportKind = 'foods' | 'recipes' | 'recipe_groups' | 'diary' | 'templates' | 'weight' | 'water' | 'activity' | 'sleep' | 'workouts' | 'fasting'
   | 'goal' | 'goal_history' | 'settings' | 'badges' | 'webhooks';
 export type ImportMode = 'merge' | 'replace';
+/** GET /me/import: only the TS server and the app have it (the Python server answers 404: no import offered). */
+export interface ImportInfo { available: boolean; max_bytes: number; max_unpacked_bytes: number; formats: number[] }
 export interface ImportCount { new: number; changed: number; unchanged: number; skipped: number; reasons: Record<string, number> }
 export interface ImportModeView { allowed: boolean; reason: string | null; reason_text: string | null; counts: Record<ImportKind, ImportCount> | null; deleted: Record<string, number> | null }
 export interface ImportPreview {

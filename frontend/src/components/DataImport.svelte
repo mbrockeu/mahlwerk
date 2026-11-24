@@ -10,9 +10,9 @@
   import { toast } from '../lib/store.svelte';
   import type { ImportKind, ImportMode, ImportPreview, ImportResult } from '../lib/types';
 
-  let { onimported }: { onimported: () => void } = $props();
+  let { onimported, maxBytes }: { onimported: () => void; maxBytes: number } = $props();
 
-  const LIMIT_MB = 32;
+  const LIMIT_MB = $derived(Math.floor(maxBytes / 1024 / 1024));
   let preview = $state<ImportPreview | null>(null);
   let done = $state<ImportResult | null>(null);
   let mode = $state<ImportMode>('merge');

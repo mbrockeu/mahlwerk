@@ -199,7 +199,8 @@ test('what is off in the app answers like a server without it', async () => {
   const native = fresh();
   const { dispatch } = await openLocal({ bridge: native.bridge, schemaSql });
   const me = json(await dispatch('GET', '/api/v1/me', '', {}));
-  assert.deepEqual(me.features, { access_tokens: false, webhooks: false, cookidoo: true, web_recipes: false, data_import: true });
+  assert.deepEqual(me.features, { access_tokens: false, webhooks: false, cookidoo: true, web_recipes: false });
+  assert.equal(json(await dispatch('GET', '/api/v1/me/import', '', {})).available, true);
   assert.equal((await dispatch('POST', '/api/v1/me/yazio/login', '', JSON_HEADERS, new TextEncoder().encode('{"email":"a@b.de","password":"x"}'))).status, 404);
   assert.equal((await dispatch('GET', '/api/v1/vision/status', '', {})).status, 200);
   assert.equal((await dispatch('DELETE', '/api/v1/me', '', {})).status !== 500, true);

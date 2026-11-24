@@ -183,7 +183,8 @@ Editing or deleting the food later does not change past days; deleting sets `foo
 | GET | `/api/v1/me/imports` | – | ImportBatch[] | this user's import batches, newest first, see Importing from Yazio |
 | DELETE | `/api/v1/me/imports/{id}` | – | `{entries, weights, water, activity, workouts, foods:int, goal:bool}` | takes back one of the user's own batches (404 for an unknown or foreign one); the numbers are what was removed |
 | GET | `/api/v1/me/export?from=&to=&lang=` | – | ZIP (`application/zip`) | the caller's own data, see Personal data export; `from`/`to` (`YYYY-MM-DD`, inclusive) limit the day-based data, an invalid date or `from` after `to` → 422; works with a read key |
-| POST | `/api/v1/me/import/preview` | the export ZIP or its `mahlwerk-export.json` as the raw body | ImportPreview | TS server and app only (`features.data_import`), see Importing an own export; nothing is written |
+| GET | `/api/v1/me/import` | – | `{available:true, max_bytes, max_unpacked_bytes, formats:[1,2]}` | TS server and app only (the Python server answers 404: no import offered); see Importing an own export |
+| POST | `/api/v1/me/import/preview` | the export ZIP or its `mahlwerk-export.json` as the raw body | ImportPreview | TS server and app only, see Importing an own export; nothing is written |
 | POST | `/api/v1/me/import/confirm` | `{token, mode: "merge"\|"replace"}` | ImportResult | imports the waiting file in one transaction; see Importing an own export |
 | DELETE | `/api/v1/me/import/staged` | – | 204 | drops the waiting file |
 | PUT | `/api/v1/me/goal` | Goal | Goal | kcal 500–10000, macros 0–1000, water_ml 500–6000; counts from today on, earlier days keep their goal (see Goal history) |
@@ -282,8 +283,9 @@ database and no route for an admin to take other people's data: the caller is al
 
 ## Importing an own export
 
-The TS server and the app take a Mahlwerk export back in (`features.data_import: true` in `GET /me`; the Python server has no import and
-leaves the key out): to move between the server and the app, onto a new device, or to bring a backup back. Only the signed-in person, only
+The TS server and the app take a Mahlwerk export back in; `GET /me/import` says so (and the size limit), the Python server has no import
+and answers 404 there, so the interface offers it only where it exists. (Not a key of `GET /me` `features`: both servers keep that object
+identical.) Use: to move between the server and the app, onto a new device, or to bring a backup back. Only the signed-in person, only
 into their own account; an access key is refused (**403**), the demo account too.
 
 - **Preview.** `POST /me/import/preview`, body = the file itself (the ZIP of `GET /me/export`, only its `mahlwerk-export.json` is read, or
@@ -973,8 +975,7 @@ Schema version 8. Details and examples: [integrations.md](integrations.md).
 
 ### Admin role
 
-`GET /api/v1/me` also returns `is_admin` and `features: {access_tokens, webhooks, cookidoo, web_recipes}` (plus `data_import: true` where
-the own export can be imported: TS server and app, not for the demo account). In `proxy` mode the groups come from
+`GET /api/v1/me` also returns `is_admin` and `features: {access_tokens, webhooks, cookidoo, web_recipes}`. In `proxy` mode the groups come from
 the header `MAHLWERK_PROXY_GROUPS_HEADER` (default `Remote-Groups`, comma separated); a member of `MAHLWERK_ADMIN_GROUP`
 (default `admin`) is an admin. In `single` mode the one user is an admin. It is decided for every request, never stored.
 A caller who signed in with an access token is never an admin.
