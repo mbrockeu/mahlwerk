@@ -1,13 +1,16 @@
 // Own foods: create, read, change, delete, search, the piece and drink settings, recent foods (routes/foods.py).
-// Not ported yet (their own packages): GET /foods/barcode/{code} (Open Food Facts), label scans, images, combos.
+// Not ported here: label scans (OCR dropped), images, combos.
 import { z } from 'zod';
 import { fitScores, windowStart } from '../combos.ts';
 import { today } from '../dates.ts';
+import { catalogOf, foodData, OFF } from '../catalog.ts';
+import { featureOn } from '../features.ts';
 import { buildFood, ownData } from '../foodView.ts';
 import { HttpError, parse, pathInt, queryObject, route, type Req, type Route, type User } from '../http.ts';
 import { mealSchema, pyInt } from '../models/common.ts';
 import { foodDrink, foodIn, foodPiece, type Food, type RecentFood } from '../models/food.ts';
 import { validGtin, scale, r1 } from '../nutrition.ts';
+import { fetchProduct, UpstreamError } from '../off.ts';
 import { needEdit } from '../ownership.ts';
 import { mealRowsSince, recentFoods } from '../store/diary.ts';
 import {
@@ -54,7 +57,53 @@ async function pieceFood(req: Req, foodId: number): Promise<FoodRow> {
   return row;
 }
 
+/** Open Food Facts settings of the host (off.py / OffClient): the base address and how long a stored answer counts. */
+function offConfig(env: Req['ctx']['env']) {
+  const days = Number.parseInt(env.MAHLWERK_CACHE_DAYS ?? '30', 10);
+  return { base: (env.MAHLWERK_OFF_BASE ?? 'https://world.openfoodfacts.org').replace(/\/+$/, ''), cacheSeconds: (Number.isNaN(days) ? 30 : days) * 86400 };
+}
+
 export const routes: Route[] = [
+  // Local first (own entry, stored answer, the local catalogue), then Open Food Facts live.
+  route('GET', '/api/v1/foods/barcode/{code}', async (req): Promise<Food> => {
+    const code = req.params.code!;
+    needBarcode(code);
+    const { ctx } = req;
+    const user = req.user!;
+    const upstream = offConfig(ctx.env);
+    const cached = await getFoodByCode(ctx.db, code);
+    if (cached && cached.source === 'own') return buildFood(ctx, cached as any, user); // the user's own entry is never replaced by upstream data
+    // unknown barcodes are re-checked after a day: someone may have added the product upstream
+    const ttl = cached?.found ? upstream.cacheSeconds : Math.min(upstream.cacheSeconds, 86400);
+    const fresh = cached !== undefined && Date.now() / 1000 - cached.fetched_at < ttl;
+    if (fresh && cached!.found) return buildFood(ctx, cached as any, user);
+    // the local catalogue comes before the live lookup: faster, and works while Open Food Facts is down
+    const item = await catalogOf(ctx).get(OFF, code);
+    if (item) {
+      const data = foodData(item);
+      const [id, fetchedAt] = await putFood(ctx.db, code, OFF, data);
+      return buildFood(ctx, { ...(await withPiece(req, id)), id, code, source: OFF, data, fetched_at: fetchedAt }, user, { cached: false });
+    }
+    if (fresh) throw new HttpError(404, 'unknown barcode');
+    if (!(await featureOn(ctx, 'openfoodfacts_lookup.enabled'))) {
+      // the live lookup is switched off (admin area): only what is stored or in the local catalogue is known
+      if (cached?.found) return buildFood(ctx, cached as any, user, { stale: true });
+      throw new HttpError(404, 'unknown barcode');
+    }
+    let data;
+    try {
+      data = await fetchProduct(ctx, upstream.base, code);
+    } catch (e) {
+      if (!(e instanceof UpstreamError)) throw e;
+      if (cached?.found) return buildFood(ctx, cached as any, user, { stale: true });
+      console.warn('Open Food Facts lookup failed:', e.message); // the details (DNS, HTTP status) go to the log, not to the caller
+      throw new HttpError(502, 'Open Food Facts unavailable');
+    }
+    const [id, fetchedAt] = await putFood(ctx.db, code, 'openfoodfacts', data);
+    if (data === null) throw new HttpError(404, 'unknown barcode');
+    return buildFood(ctx, { ...(await withPiece(req, id)), id, code, source: 'openfoodfacts', data, fetched_at: fetchedAt }, user, { cached: false });
+  }),
+
   // An own entry for a barcode. A guest may do this only while the barcode has no entry yet (a remembered miss does not count)
   // or the entry is their own: an entry of the household (also one fetched from Open Food Facts) is never replaced by a guest.
   route('PUT', '/api/v1/foods/barcode/{code}', async (req): Promise<Food> => {

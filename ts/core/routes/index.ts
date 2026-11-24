@@ -18,8 +18,15 @@ import { routes as suggestions } from './suggestions.ts';
 import { routes as summary } from './summary.ts';
 import { routes as templates } from './templates.ts';
 import { routes as water } from './water.ts';
+import { routes as catalog } from './catalog.ts';
+import { routes as images } from './images.ts';
+import { routes as labelScans } from './labelScans.ts';
+import { routes as vision } from './vision.ts';
+import { routes as webhooks } from './webhooks.ts';
+import { routes as webRecipes } from './webRecipes.ts';
 
 export const ROUTES: Route[] = [
-  ...health, ...diary, ...combos, ...foods, ...templates, ...suggestions, ...recipes, ...recipeGroups,
+  ...health, ...catalog, ...diary, ...combos, ...foods, ...templates, ...suggestions, ...recipes, ...recipeGroups,
   ...insights, ...badges, ...water, ...fasting, ...nutrients, ...summary, ...activity, ...exportRoutes, ...body,
+  ...images, ...labelScans, ...vision, ...webhooks, ...webRecipes,
 ];
