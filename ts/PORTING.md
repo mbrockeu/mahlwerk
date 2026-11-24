@@ -44,7 +44,7 @@ Security code (auth, sessions, tokens, OIDC, vault, netguard/SSRF, upload checks
 The same interface and core run in the iOS app (WKWebView), the data in SQLite on the phone. `ts/app/localHost.ts` builds the ctx
 like `server/main.ts` for one device and answers requests in-process through `core/dispatch.ts` (the router the server uses), without
 host check, CSRF and security headers; the body limit stays. Fixed off (`APP_ENV`): tokens, webhooks, Cookidoo pictures, web recipes, Yazio
-sign-in, demo account, photo recognition / label reader, demo data, catalogue refresh; the Yazio file import routes are left out;
+sign-in, demo account, photo recognition / label reader, demo data, catalogue refresh; the Yazio file import is on;
 no picture service (501 like a server without one). Auth is `single`. Cookidoo is on (shared and own account; the
 vault key comes from the keychain, see `secretKey`).
 - Build: `cd frontend && npm run build:app` -> `web/dist-app/` (index.html + assets; entry `src/appMain.ts`, which sets
