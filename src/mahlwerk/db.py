@@ -17,7 +17,7 @@ def _json(value) -> str:
     """json.dumps that refuses NaN and infinity: such a value in a food would turn every day sum that uses it into null."""
     return json.dumps(value, allow_nan=False)
 
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
 MIN_SLEEP_MINUTES = 60  # a shorter "night" in the Health data means the watch was not worn, not that nobody slept
 
 BASE_TABLES = """
@@ -414,7 +414,57 @@ CREATE TABLE sleep_day (
 );
 """
 
-TABLES = BASE_TABLES + V4_TABLES + V5_TABLES + V6_TABLES + V7_TABLES + V8_TABLES + V9_TABLES + V10_TABLES + V11_TABLES + V12_TABLES + V13_TABLES + V14_TABLES + V15_TABLES + V16_TABLES + V17_TABLES + V18_TABLES + V19_TABLES + V20_TABLES
+# Version 21: a stable id (`uid`, 32 lower-case hex digits) for the rows the data export carries and the import matches on (see
+# export.py; the import lives in the TS server). Every existing row gets a random one; new rows get one from a trigger, whichever
+# code path inserts them (SQLite cannot add a column with an expression default). Per-user rows are unique per user, shared rows
+# (foods, recipes, groups) unique overall. The same text is ts/core/migrations/v21.sql (the app migrates its own database with it;
+# tests/test_db.py checks that both are equal).
+V21_TABLES = """
+ALTER TABLE diary_entry ADD COLUMN uid TEXT;
+ALTER TABLE workout ADD COLUMN uid TEXT;
+ALTER TABLE fast ADD COLUMN uid TEXT;
+ALTER TABLE template ADD COLUMN uid TEXT;
+ALTER TABLE recipe ADD COLUMN uid TEXT;
+ALTER TABLE recipe_group ADD COLUMN uid TEXT;
+ALTER TABLE food ADD COLUMN uid TEXT;
+UPDATE diary_entry SET uid = lower(hex(randomblob(16))) WHERE uid IS NULL;
+UPDATE workout SET uid = lower(hex(randomblob(16))) WHERE uid IS NULL;
+UPDATE fast SET uid = lower(hex(randomblob(16))) WHERE uid IS NULL;
+UPDATE template SET uid = lower(hex(randomblob(16))) WHERE uid IS NULL;
+UPDATE recipe SET uid = lower(hex(randomblob(16))) WHERE uid IS NULL;
+UPDATE recipe_group SET uid = lower(hex(randomblob(16))) WHERE uid IS NULL;
+UPDATE food SET uid = lower(hex(randomblob(16))) WHERE uid IS NULL;
+CREATE UNIQUE INDEX diary_entry_uid ON diary_entry (user_id, uid) WHERE uid IS NOT NULL;
+CREATE UNIQUE INDEX workout_uid ON workout (user_id, uid) WHERE uid IS NOT NULL;
+CREATE UNIQUE INDEX fast_uid ON fast (user_id, uid) WHERE uid IS NOT NULL;
+CREATE UNIQUE INDEX template_uid ON template (user_id, uid) WHERE uid IS NOT NULL;
+CREATE UNIQUE INDEX recipe_uid ON recipe (uid) WHERE uid IS NOT NULL;
+CREATE UNIQUE INDEX recipe_group_uid ON recipe_group (uid) WHERE uid IS NOT NULL;
+CREATE UNIQUE INDEX food_uid ON food (uid) WHERE uid IS NOT NULL;
+CREATE TRIGGER diary_entry_uid_new AFTER INSERT ON diary_entry WHEN NEW.uid IS NULL BEGIN
+    UPDATE diary_entry SET uid = lower(hex(randomblob(16))) WHERE rowid = NEW.rowid;
+END;
+CREATE TRIGGER workout_uid_new AFTER INSERT ON workout WHEN NEW.uid IS NULL BEGIN
+    UPDATE workout SET uid = lower(hex(randomblob(16))) WHERE rowid = NEW.rowid;
+END;
+CREATE TRIGGER fast_uid_new AFTER INSERT ON fast WHEN NEW.uid IS NULL BEGIN
+    UPDATE fast SET uid = lower(hex(randomblob(16))) WHERE rowid = NEW.rowid;
+END;
+CREATE TRIGGER template_uid_new AFTER INSERT ON template WHEN NEW.uid IS NULL BEGIN
+    UPDATE template SET uid = lower(hex(randomblob(16))) WHERE rowid = NEW.rowid;
+END;
+CREATE TRIGGER recipe_uid_new AFTER INSERT ON recipe WHEN NEW.uid IS NULL BEGIN
+    UPDATE recipe SET uid = lower(hex(randomblob(16))) WHERE rowid = NEW.rowid;
+END;
+CREATE TRIGGER recipe_group_uid_new AFTER INSERT ON recipe_group WHEN NEW.uid IS NULL BEGIN
+    UPDATE recipe_group SET uid = lower(hex(randomblob(16))) WHERE rowid = NEW.rowid;
+END;
+CREATE TRIGGER food_uid_new AFTER INSERT ON food WHEN NEW.uid IS NULL BEGIN
+    UPDATE food SET uid = lower(hex(randomblob(16))) WHERE rowid = NEW.rowid;
+END;
+"""
+
+TABLES = BASE_TABLES + V4_TABLES + V5_TABLES + V6_TABLES + V7_TABLES + V8_TABLES + V9_TABLES + V10_TABLES + V11_TABLES + V12_TABLES + V13_TABLES + V14_TABLES + V15_TABLES + V16_TABLES + V17_TABLES + V18_TABLES + V19_TABLES + V20_TABLES + V21_TABLES
 DEFAULT_WATER_GOAL = 2000
 MAX_WATER_ML = 10000
 MAX_SQL_PARAMS = 900  # bound parameters per statement: far below the limit of older SQLite builds (999)
@@ -481,6 +531,9 @@ INSERT INTO goal_history (user_id, valid_from, kcal, protein, carbs, fat, water_
 
 # Version 19 had no sleep; the table is new, nothing existing changes.
 MIGRATE_19_TO_20 = V20_TABLES
+
+# Version 20 had no stable row ids; the column, its values, the indexes and the triggers are new, nothing else changes.
+MIGRATE_20_TO_21 = V21_TABLES
 
 # Demo foods are ordinary `food` rows whose JSON `data` carries "demo": true (test-data mode of the own account) or
 # "demo_account": true (the built-in demo account; these are left out of the product list of everybody else).
@@ -588,7 +641,7 @@ class Store:
                 script += (MIGRATE_12_TO_13 if version < 13 else "") + (MIGRATE_13_TO_14 if version < 14 else "")
                 script += (MIGRATE_14_TO_15 if version < 15 else "") + (MIGRATE_15_TO_16 if version < 16 else "")
                 script += (MIGRATE_16_TO_17 if version < 17 else "") + (MIGRATE_17_TO_18 if version < 18 else "")
-                script += (MIGRATE_18_TO_19 if version < 19 else "") + MIGRATE_19_TO_20
+                script += (MIGRATE_18_TO_19 if version < 19 else "") + (MIGRATE_19_TO_20 if version < 20 else "") + MIGRATE_20_TO_21
             script += f"PRAGMA user_version = {SCHEMA_VERSION}; COMMIT;"
             try:
                 con.executescript(script)

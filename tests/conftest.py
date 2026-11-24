@@ -181,8 +181,11 @@ def duo(monkeypatch, tmp_path):
     return tuple(TestClient(app, client=("10.0.0.5", 1), headers={"Remote-User": name}) for name in ("ann", "ben"))
 
 
-# What version 20 added (sleep), to take a fresh database back to version 19.
-DROP_V20 = "DROP TABLE sleep_day;"
+# What version 21 added (the stable row ids), to take a fresh database back to version 20.
+DROP_V21 = "DROP TRIGGER diary_entry_uid_new; DROP INDEX diary_entry_uid; ALTER TABLE diary_entry DROP COLUMN uid; DROP TRIGGER workout_uid_new; DROP INDEX workout_uid; ALTER TABLE workout DROP COLUMN uid; DROP TRIGGER fast_uid_new; DROP INDEX fast_uid; ALTER TABLE fast DROP COLUMN uid; DROP TRIGGER template_uid_new; DROP INDEX template_uid; ALTER TABLE template DROP COLUMN uid; DROP TRIGGER recipe_uid_new; DROP INDEX recipe_uid; ALTER TABLE recipe DROP COLUMN uid; DROP TRIGGER recipe_group_uid_new; DROP INDEX recipe_group_uid; ALTER TABLE recipe_group DROP COLUMN uid; DROP TRIGGER food_uid_new; DROP INDEX food_uid; ALTER TABLE food DROP COLUMN uid;"
+
+# What version 20 added (sleep), to take a fresh database back to version 19 (includes DROP_V21).
+DROP_V20 = DROP_V21 + "DROP TABLE sleep_day;"
 
 # What version 19 added (the goal history), to take a fresh database back to version 18 (includes DROP_V20).
 DROP_V19 = DROP_V20 + "DROP TABLE goal_history;"

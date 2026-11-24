@@ -392,7 +392,7 @@ def test_account_management_is_for_admins_only(browser, admin):
 
 def test_admin_overview_in_local_mode(admin):
     body = admin.get("/api/v1/admin/overview").json()
-    assert body["auth_mode"] == "local" and body["users"] == 1 and body["schema_version"] == 20
+    assert body["auth_mode"] == "local" and body["users"] == 1 and body["schema_version"] == 21
 
 
 def test_create_user_checks(browser, admin):
@@ -593,7 +593,7 @@ def test_version_9_database_gets_accounts_without_losing_data(tmp_path):
     store = Store(path)
 
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 20
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 21
     assert "auth_session" in {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert con.execute("SELECT username, password_hash, disabled, local_admin FROM user").fetchone() == ("me", None, 0, 0)
     con.close()

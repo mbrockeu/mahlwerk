@@ -52,13 +52,15 @@ export interface LocalOptions {
   bridge: Bridge;
   /** core/schema.sql as text (the bundle imports it; core has no file system). */
   schemaSql: string;
+  /** The steps that bring an older database on the device up to date, keyed by the version they start from (`{20: core/migrations/v21.sql}`). */
+  migrations?: Record<number, string>;
   /** More MAHLWERK_* settings (e.g. MAHLWERK_SINGLE_USER, MAHLWERK_CONTACT); APP_ENV wins over them. */
   env?: Record<string, string | undefined>;
   now?: () => number;
 }
 
 export async function openLocal(opts: LocalOptions): Promise<{ ctx: Ctx; dispatch: Dispatch }> {
-  const db = await openNativeDb(opts.bridge, opts.schemaSql);
+  const db = await openNativeDb(opts.bridge, opts.schemaSql, opts.migrations);
   const foodLinks: FoodLinks = { cookidooUrl: () => null, webLink: safeLink, hostLabel };
   const ctx: Ctx = {
     db, env: { ...(opts.env ?? {}), ...APP_ENV }, now: opts.now ?? (() => Date.now() / 1000),

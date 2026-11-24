@@ -16,21 +16,37 @@ export interface Db {
   close?(): void;
 }
 
-export const SCHEMA_VERSION = 20;
+export const SCHEMA_VERSION = 21;
 
 export class SchemaMismatch extends Error {}
 
-/** A new database gets schema v20; a v20 database is used as it is. Every other version is refused: migrations stay with
- * the Python server, so that a switch back and forth never meets a schema the other side does not know. */
-export async function openSchema(db: Db, schemaSql: string): Promise<void> {
+/** A new database gets the current schema; a database of that version is used as it is. Every other version is refused: migrations
+ * stay with the Python server, so that a switch back and forth never meets a schema the other side does not know. The one exception is
+ * `migrations` (only the app passes it: the database on the phone has no Python server): the SQL that takes version N to N + 1, keyed
+ * by N; such steps run in one transaction each (core/migrations/v21.sql is the same text as db.py's V21_TABLES). */
+export async function openSchema(db: Db, schemaSql: string, migrations: Record<number, string> = {}): Promise<void> {
   await db.exec('PRAGMA foreign_keys = OFF');
-  const { user_version: version } = (await db.get<{ user_version: number }>('PRAGMA user_version'))!;
+  let { user_version: version } = (await db.get<{ user_version: number }>('PRAGMA user_version'))!;
   if (version === SCHEMA_VERSION) return;
   const tables = await db.get<{ n: number }>("SELECT count(*) AS n FROM sqlite_master WHERE type = 'table'");
-  if (version !== 0 || tables!.n > 0) {
+  if (version === 0 && tables!.n === 0) {
+    await db.exec(`BEGIN; ${schemaSql} PRAGMA user_version = ${SCHEMA_VERSION}; COMMIT;`);
+    return;
+  }
+  // only a chain of known steps that ends at the current version; anything else is refused before a single step runs
+  let at = version;
+  while (at < SCHEMA_VERSION && Object.hasOwn(migrations, at)) at++;
+  if (version === 0 || at !== SCHEMA_VERSION) {
     throw new SchemaMismatch(`database has schema version ${version}, this server only reads ${SCHEMA_VERSION}`);
   }
-  await db.exec(`BEGIN; ${schemaSql} PRAGMA user_version = ${SCHEMA_VERSION}; COMMIT;`);
+  for (; version < SCHEMA_VERSION; version++) {
+    try {
+      await db.exec(`BEGIN IMMEDIATE; ${migrations[version]} PRAGMA user_version = ${version + 1}; COMMIT;`);
+    } catch (e) {
+      await db.exec('ROLLBACK').catch(() => undefined); // a step either happens completely or not at all
+      throw e;
+    }
+  }
 }
 
 /** json.dumps(allow_nan=False) of the Python side: NaN or infinity in a stored value is an error, not null. */

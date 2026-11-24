@@ -373,7 +373,7 @@ def test_version_15_database_gets_household_and_owner_columns(tmp_path):
     con.close()
     store = Store(path)
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 20
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 21
     assert {r[1] for r in con.execute("PRAGMA table_info(food)")} >= {"created_by"}
     assert [r[0] for r in con.execute("SELECT household FROM user ORDER BY id")] == [1, 1]  # existing users stay household members
     con.close()

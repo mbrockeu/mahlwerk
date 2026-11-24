@@ -11,7 +11,7 @@ CREATE TABLE food (
     found       INTEGER NOT NULL,
     data        TEXT,
     fetched_at  INTEGER NOT NULL
-, external_id TEXT, import_id INTEGER, image_hash TEXT, image_origin TEXT, image_at INTEGER, image_url TEXT, piece_label TEXT, piece_grams REAL, created_by INTEGER REFERENCES user(id), drink INTEGER);
+, external_id TEXT, import_id INTEGER, image_hash TEXT, image_origin TEXT, image_at INTEGER, image_url TEXT, piece_label TEXT, piece_grams REAL, created_by INTEGER REFERENCES user(id), drink INTEGER, uid TEXT);
 CREATE TABLE diary_entry (
     id          INTEGER PRIMARY KEY,
     user_id     INTEGER NOT NULL REFERENCES user(id),
@@ -26,7 +26,7 @@ CREATE TABLE diary_entry (
     created_at  INTEGER NOT NULL,
     demo        INTEGER NOT NULL DEFAULT 0,
     extra       TEXT NOT NULL DEFAULT '{}'
-, external_id TEXT, import_id INTEGER);
+, external_id TEXT, import_id INTEGER, uid TEXT);
 CREATE TABLE goal (
     user_id  INTEGER PRIMARY KEY REFERENCES user(id),
     kcal     INTEGER NOT NULL,
@@ -46,7 +46,7 @@ CREATE TABLE template (
     user_id     INTEGER NOT NULL REFERENCES user(id),
     name        TEXT NOT NULL,
     created_at  INTEGER NOT NULL
-);
+, uid TEXT);
 CREATE TABLE template_item (
     id           INTEGER PRIMARY KEY,
     template_id  INTEGER NOT NULL REFERENCES template(id) ON DELETE CASCADE,
@@ -65,7 +65,7 @@ CREATE TABLE recipe (
     total_weight  REAL,
     created_by    INTEGER REFERENCES user(id),
     updated_at    INTEGER NOT NULL
-);
+, uid TEXT);
 CREATE TABLE recipe_item (
     id         INTEGER PRIMARY KEY,
     recipe_id  INTEGER NOT NULL REFERENCES recipe(id) ON DELETE CASCADE,
@@ -105,7 +105,7 @@ CREATE TABLE fast (
     started_at    INTEGER NOT NULL,
     ended_at      INTEGER,
     target_hours  REAL NOT NULL
-);
+, uid TEXT);
 CREATE TABLE import_batch (
     id          INTEGER PRIMARY KEY,
     user_id     INTEGER NOT NULL REFERENCES user(id),
@@ -177,7 +177,7 @@ CREATE TABLE workout (
     import_id    INTEGER,
     demo         INTEGER NOT NULL DEFAULT 0,
     created_at   INTEGER NOT NULL
-);
+, uid TEXT);
 CREATE TABLE auth_session (
     id          INTEGER PRIMARY KEY,
     user_id     INTEGER NOT NULL REFERENCES user(id),
@@ -210,7 +210,7 @@ CREATE TABLE recipe_group (
     source      TEXT,
     created_by  INTEGER,
     created_at  INTEGER NOT NULL
-);
+, uid TEXT);
 CREATE TABLE recipe_group_item (
     group_id  INTEGER NOT NULL,
     food_id   INTEGER NOT NULL,
@@ -259,9 +259,37 @@ CREATE INDEX auth_session_user ON auth_session (user_id);
 CREATE UNIQUE INDEX recipe_group_source ON recipe_group (source) WHERE source IS NOT NULL;
 CREATE INDEX recipe_group_item_food ON recipe_group_item (food_id);
 CREATE INDEX food_image_hash ON food (image_hash) WHERE image_hash IS NOT NULL;
+CREATE UNIQUE INDEX diary_entry_uid ON diary_entry (user_id, uid) WHERE uid IS NOT NULL;
+CREATE UNIQUE INDEX workout_uid ON workout (user_id, uid) WHERE uid IS NOT NULL;
+CREATE UNIQUE INDEX fast_uid ON fast (user_id, uid) WHERE uid IS NOT NULL;
+CREATE UNIQUE INDEX template_uid ON template (user_id, uid) WHERE uid IS NOT NULL;
+CREATE UNIQUE INDEX recipe_uid ON recipe (uid) WHERE uid IS NOT NULL;
+CREATE UNIQUE INDEX recipe_group_uid ON recipe_group (uid) WHERE uid IS NOT NULL;
+CREATE UNIQUE INDEX food_uid ON food (uid) WHERE uid IS NOT NULL;
 CREATE TRIGGER recipe_group_item_food_gone AFTER DELETE ON food BEGIN
     DELETE FROM recipe_group_item WHERE food_id = OLD.id;
 END;
 CREATE TRIGGER recipe_group_item_group_gone AFTER DELETE ON recipe_group BEGIN
     DELETE FROM recipe_group_item WHERE group_id = OLD.id;
+END;
+CREATE TRIGGER diary_entry_uid_new AFTER INSERT ON diary_entry WHEN NEW.uid IS NULL BEGIN
+    UPDATE diary_entry SET uid = lower(hex(randomblob(16))) WHERE rowid = NEW.rowid;
+END;
+CREATE TRIGGER workout_uid_new AFTER INSERT ON workout WHEN NEW.uid IS NULL BEGIN
+    UPDATE workout SET uid = lower(hex(randomblob(16))) WHERE rowid = NEW.rowid;
+END;
+CREATE TRIGGER fast_uid_new AFTER INSERT ON fast WHEN NEW.uid IS NULL BEGIN
+    UPDATE fast SET uid = lower(hex(randomblob(16))) WHERE rowid = NEW.rowid;
+END;
+CREATE TRIGGER template_uid_new AFTER INSERT ON template WHEN NEW.uid IS NULL BEGIN
+    UPDATE template SET uid = lower(hex(randomblob(16))) WHERE rowid = NEW.rowid;
+END;
+CREATE TRIGGER recipe_uid_new AFTER INSERT ON recipe WHEN NEW.uid IS NULL BEGIN
+    UPDATE recipe SET uid = lower(hex(randomblob(16))) WHERE rowid = NEW.rowid;
+END;
+CREATE TRIGGER recipe_group_uid_new AFTER INSERT ON recipe_group WHEN NEW.uid IS NULL BEGIN
+    UPDATE recipe_group SET uid = lower(hex(randomblob(16))) WHERE rowid = NEW.rowid;
+END;
+CREATE TRIGGER food_uid_new AFTER INSERT ON food WHEN NEW.uid IS NULL BEGIN
+    UPDATE food SET uid = lower(hex(randomblob(16))) WHERE rowid = NEW.rowid;
 END;

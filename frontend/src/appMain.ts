@@ -2,6 +2,7 @@
 // host (ts/app, the core of the server) with the data on the device, reached over the native bridge of the iOS app
 // (`window.webkit.messageHandlers.mahlwerkNative`, see ts/PORTING.md "App-Host"). Sets `window.mahlwerkLocal`, then starts the app.
 import schemaSql from '../../ts/core/schema.sql?raw';
+import v21Sql from '../../ts/core/migrations/v21.sql?raw';
 import { hostRequest, localFetch, openLocal } from '../../ts/app/localHost.ts';
 
 type Handler = { postMessage(msg: unknown): Promise<unknown> };
@@ -9,7 +10,7 @@ const native = (window as { webkit?: { messageHandlers?: { mahlwerkNative?: Hand
 
 try {
   if (!native) throw new Error('the native bridge (mahlwerkNative) is missing');
-  const { dispatch } = await openLocal({ bridge: (msg) => native.postMessage(msg), schemaSql });
+  const { dispatch } = await openLocal({ bridge: (msg) => native.postMessage(msg), schemaSql, migrations: { 20: v21Sql } });
   (window as { mahlwerkLocal?: unknown }).mahlwerkLocal = localFetch(dispatch);
   // for the native side: Health sync, history, summary/today, the widget's water button (ts/PORTING.md "App-Host")
   (window as { mahlwerkHost?: unknown }).mahlwerkHost = { request: hostRequest(dispatch) };
