@@ -55,6 +55,8 @@ no picture service (501 like a server without one). Auth is `single`.
   - `{op:"sql", db:"main"|"bls"|"catalog", sql, args}` -> `{rows:[{col:value}], changes, lastId}`. One statement (also PRAGMA and
     `... RETURNING`, rows for all of them). `args`: a list (positional `?`) or an object whose keys have no prefix (`{w:1}` binds
     `:w`; a name may occur several times in the SQL). Values: null, number, string, `{b64}` for a BLOB, in both directions.
+    Bind every number with sqlite3_bind_double: node:sqlite (the server) binds all JS numbers as REAL, so TEXT columns and
+    `typeof()` see the same as on the server. Read INTEGER and REAL as JSON numbers.
     `changes`/`lastId`: sqlite3_changes / sqlite3_last_insert_rowid after the statement. Errors: the sqlite3_errmsg text
     (core matches e.g. `constraint`). `bls`/`catalog` read-only; a missing file: error `missing`.
   - `{op:"exec", db:"main", sql}` -> `{}`: sqlite3_exec, several statements in one call (the schema is sent as

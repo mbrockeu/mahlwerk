@@ -111,6 +111,23 @@ test('outgoing HTTP: only the Open Food Facts lookup leaves the device, no DNS, 
   failing.close();
 });
 
+test('the barcode lookup goes to Open Food Facts over the bridge; without network it is a 502', async () => {
+  const seen: any[] = [];
+  const product = { status: 1, product: { product_name: 'Testmüsli', brands: 'Hof', nutriments: { 'energy-kcal_100g': 380, proteins_100g: 10, carbohydrates_100g: 60, fat_100g: 8 } } };
+  const native = fresh(async (m) => { seen.push(m); return { status: 200, headers: { 'content-type': 'application/json' }, bodyB64: Buffer.from(JSON.stringify(product)).toString('base64') }; });
+  const { dispatch } = await openLocal({ bridge: native.bridge, schemaSql });
+  const a = await dispatch('GET', '/api/v1/foods/barcode/4006381333931', '', {});
+  assert.equal(a.status, 200, new TextDecoder().decode(a.body!));
+  assert.equal(json(a).name, 'Testmüsli');
+  assert.equal(new URL(seen[0].url).host, 'world.openfoodfacts.org');
+  assert.equal(seen[0].bodyB64, null);
+  native.close();
+  const offline = fresh();
+  const app = await openLocal({ bridge: offline.bridge, schemaSql });
+  assert.equal((await app.dispatch('GET', '/api/v1/foods/barcode/4006381333931', '', {})).status, 502);
+  offline.close();
+});
+
 test('what is off in the app answers like a server without it', async () => {
   const native = fresh();
   const { dispatch } = await openLocal({ bridge: native.bridge, schemaSql });

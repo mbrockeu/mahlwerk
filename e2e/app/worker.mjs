@@ -50,17 +50,16 @@ async function pump() {
       const i = queue.findIndex((q) => owner === null || q.port === owner);
       if (i < 0) break;
       const { port, id, msg } = queue.splice(i, 1)[0];
-      const sql = String(msg.sql ?? '').trim().toUpperCase();
-      const main = (msg.db ?? 'main') === 'main' && msg.op === 'exec';
+      let reply;
       try {
-        const result = await handle(msg);
-        if (main && sql.startsWith('BEGIN')) owner = port;
-        if (main && (sql === 'COMMIT' || sql === 'ROLLBACK')) owner = null;
-        port.postMessage({ id, result });
+        reply = { id, result: await handle(msg) };
       } catch (e) {
-        if (main && sql === 'ROLLBACK') owner = null;
-        port.postMessage({ id, error: e instanceof Error ? e.message : String(e) });
+        reply = { id, error: e instanceof Error ? e.message : String(e) };
       }
+      // whoever leaves the connection inside a transaction owns it until it ends (also `BEGIN; …; COMMIT;` in one exec)
+      const { sqlite3, dbs } = await ready;
+      owner = sqlite3.capi.sqlite3_get_autocommit(dbs.main.pointer) ? null : port;
+      if (id) port.postMessage(reply);
     }
   } finally {
     busy = false;
