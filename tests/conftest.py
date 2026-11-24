@@ -1,6 +1,11 @@
 import os
 import socket
 
+if os.environ.get("MAHLWERK_TS"):  # run the API tests against the TypeScript server (ts/, tests/ts_bridge.py)
+    import ts_bridge
+
+    ts_bridge.install()
+
 import httpx
 import pytest
 from fastapi.testclient import TestClient

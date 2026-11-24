@@ -1,0 +1,15 @@
+{
+  "name": "mahlwerk-ts",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Mahlwerk backend in TypeScript: core (no node imports, shared with a later app) and the Node server.",
+  "engines": { "node": ">=22.5" },
+  "scripts": {
+    "start": "node --experimental-strip-types --disable-warning=ExperimentalWarning server/main.ts",
+    "testhost": "node --experimental-strip-types --disable-warning=ExperimentalWarning server/testhost.ts",
+    "check": "tsc --noEmit -p ."
+  },
+  "dependencies": { "zod": "^4.1.0" },
+  "devDependencies": { "typescript": "^5.9.0", "@types/node": "^22.0.0" }
+}
