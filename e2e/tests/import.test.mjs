@@ -34,7 +34,7 @@ test('import: export, lose an entry, import the file again (merge), then replace
     const card = page.getByTestId('data-import');
     await card.locator('input[type=file]').setInputFiles({ name: 'mahlwerk-export.zip', mimeType: 'application/zip', buffer: await import('node:fs').then((fs) => fs.readFileSync(file)) });
     const preview = page.getByTestId('import-preview');
-    await preview.getByText('Where a row with the same id is here already, the file wins.').waitFor();
+    await preview.getByText(/Where a row with the same id is here already, the file wins/).waitFor();
     const diaryRow = preview.getByRole('row', { name: /Diary entries/ });
     assert.deepEqual(await diaryRow.getByRole('cell').allTextContents(), ['1', '0', '0', '0']);
     assert.deepEqual(await preview.getByRole('row', { name: /Weights/ }).getByRole('cell').allTextContents(), ['0', '1', '0', '0']);

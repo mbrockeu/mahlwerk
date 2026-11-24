@@ -276,7 +276,7 @@ database and no route for an admin to take other people's data: the caller is al
   same after an import). A recipe carries `uid` and `food_uid` (its calculated food). `recipe_groups`: the groups the user made
   (`uid`, `name`, `position`, `source`, `created_at`, `members` = food uids). `foods`: the products the user made plus those their diary
   (in the range), templates, own recipes and own groups use, as `{uid, code, source, external_id, data, piece_label, piece_grams, drink,
-  own}` (`own`: made by this user); never a recipe's calculated food (that is the recipe), a remembered miss, a sample food or a picture.
+  own, fetched_at}` (`own`: made by this user; `fetched_at`: last change, ISO); never a recipe's calculated food (that is the recipe), a remembered miss, a sample food or a picture.
 - **Never included.** Password hash, sign-in sessions, access keys, webhook secrets and addresses beyond the host, stored connector
   secrets, the identity at a sign-in provider, other users' data. Demo rows (test data of the own account) are left out; the demo account
   itself exports its sample data.
@@ -288,6 +288,9 @@ and answers 404 there, so the interface offers it only where it exists. (Not a k
 identical.) Use: to move between the server and the app, onto a new device, or to bring a backup back. Only the signed-in person, only
 into their own account; an access key is refused (**403**), the demo account too.
 
+- **Reading.** Further nutrients that are not numbers (or unknown) are dropped like on every write, a value per 100 g that is no number
+  reads as unknown; names and brands may be as long as the stores keep them (up to 10,000 characters). A 422 names the row
+  (`diary[12].amount`).
 - **Preview.** `POST /me/import/preview`, body = the file itself (the ZIP of `GET /me/export`, only its `mahlwerk-export.json` is read, or
   that JSON; send it as `application/octet-stream`). At most 32 MB as sent (**413**); 48 MB unpacked, a packed-to-unpacked ratio above 100,
   more than 400,000 objects/lists or 4 million elements, ZIP64 and unsafe paths are refused before anything is parsed (**413**/**422**). Every
@@ -302,9 +305,15 @@ into their own account; an access key is refused (**403**), the demo account too
   when nothing waits (expired, discarded, imported), **409** for another token or a mode that is not allowed for this file (`reason_text`).
 - **Merge** deletes nothing. Matching: diary entries and workouts by uid, then `external_id`; fasts and templates by uid; weight, water,
   activity and sleep by day; goal history by `valid_from`; badges by code (missing ones are added, seen). The same row with other content: the
-  file wins. Shared rows: products by barcode, then `external_id`, then uid; recipes by uid; groups by Cookidoo link (`source`), then name
-  (case-insensitive), then uid. They change only where the caller may change them under the normal rules (Guests and the household);
-  otherwise they stay and count as skipped (`not_editable`). A group is never emptied: members the file names are added. New products and
+  file wins (also over a food link: no link in the file clears it). Shared rows: products by barcode, then `external_id`, then uid; recipes
+  by uid; groups by Cookidoo link (`source`), then name (case-insensitive), then uid. They change only where the caller may change them
+  under the normal rules (Guests and the household), otherwise they count as skipped (`not_editable`), and only when the file's version is
+  not older than the one here (product `fetched_at`, recipe `updated_at`; else `newer_here`). A group is never emptied and keeps its name
+  (it has no time of change; `name_kept`): members the file names are added. Sample data is never touched or made: a row here with the demo
+  mark, a sample product here, a product of the file with `demo`/`demo_account` in its data and activity, sleep or workouts with source
+  `demo` are skipped (`demo`); entries that link a skipped sample product keep their values. An external id (Yazio, Health) that another
+  row here already has is skipped (`external_id_taken`). Values are compared after the cleaning a write applies (further nutrients, the
+  settings schema with its defaults), so importing an own export again changes nothing; unchanged rows are not written at all. New products and
   recipes belong to the importing user (a product that was not `own` in the file belongs to the household). Links of entries and items go to
   the local food with that uid or barcode, else stay null (the entry keeps its values; warning `links_unknown`). The goal is the file's;
   when a change here is newer than the file's newest, the file's goal is recorded as a change from today on, like `PUT /me/goal` (warning
