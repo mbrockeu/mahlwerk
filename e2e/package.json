@@ -1,0 +1,7 @@
+{
+  "name": "mahlwerk-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test --test-concurrency=1 tests/*.test.mjs" },
+  "devDependencies": { "playwright-core": "^1.49.0" }
+}
