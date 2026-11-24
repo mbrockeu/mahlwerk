@@ -9,6 +9,7 @@ The frontend and the iOS app must not notice the switch. Python stays the refere
   - `core/store/<area>.ts` – the SQL of `db.py` for that area, as plain functions taking `ctx` (or `db`). No classes, no ORM.
   - `core/<module>.ts` – the pure logic of `src/mahlwerk/<module>.py`.
 - `server/` – Node only: HTTP, node:sqlite adapter, later images (sharp), outgoing HTTP.
+- `app/` – the app host (no `node:*` either): core for one device inside the iOS app's web view, see "App-Host" below.
 - `core/schema.sql` is generated from a fresh Python database. Never edit it, never migrate: TS refuses other versions.
 
 ## The ladder (Ponytail) – before writing any code, take the first option that fully works
@@ -38,6 +39,31 @@ Security code (auth, sessions, tokens, OIDC, vault, netguard/SSRF, upload checks
 - Never change a Python test to make TS pass. If a test checks Python internals it is not in the list; that is fine.
 - Typecheck: `cd ts && PATH=/opt/node22/bin:$PATH npx tsc --noEmit -p .` must stay clean.
 - Heavy runs are throttled already by the script; never start a second suite or a browser in parallel.
+
+## App-Host
+The same interface and core run in the iOS app (WKWebView), the data in SQLite on the phone. `ts/app/localHost.ts` builds the ctx
+like `server/main.ts` for one device and answers requests in-process through `core/dispatch.ts` (the router the server uses), without
+host check, CSRF and security headers; the body limit stays. Fixed off (`APP_ENV`): tokens, webhooks, Cookidoo, web recipes, Yazio
+sign-in, demo account, photo recognition / label reader, demo data, catalogue refresh; the Yazio file import routes are left out;
+no picture service (501 like a server without one). Auth is `single`.
+- Build: `cd frontend && npm run build:app` -> `web/dist-app/` (index.html + assets; entry `src/appMain.ts`, which sets
+  `window.mahlwerkLocal`; `src/lib/local.ts` routes `request()`, pictures and the export through it). `npm run build` is unchanged.
+- Tests: `ts/tests/appHost.test.ts` (node:sqlite stand-in of the native side, `tests/appBridge.ts`); `e2e/run.sh app` runs the
+  browser flows against `web/dist-app` with SQLite WASM in a SharedWorker as the native side (`e2e/app/`).
+- Bridge (JS calls `await window.webkit.messageHandlers.mahlwerkNative.postMessage({op, ...})`, a handler with reply; a failure
+  is a rejection whose message is the native error text). The native side handles the ops strictly one after another, in arrival order.
+  - `{op:"sql", db:"main"|"bls"|"catalog", sql, args}` -> `{rows:[{col:value}], changes, lastId}`. One statement (also PRAGMA and
+    `... RETURNING`, rows for all of them). `args`: a list (positional `?`) or an object whose keys have no prefix (`{w:1}` binds
+    `:w`; a name may occur several times in the SQL). Values: null, number, string, `{b64}` for a BLOB, in both directions.
+    `changes`/`lastId`: sqlite3_changes / sqlite3_last_insert_rowid after the statement. Errors: the sqlite3_errmsg text
+    (core matches e.g. `constraint`). `bls`/`catalog` read-only; a missing file: error `missing`.
+  - `{op:"exec", db:"main", sql}` -> `{}`: sqlite3_exec, several statements in one call (the schema is sent as
+    `BEGIN; …; PRAGMA user_version = 20; COMMIT;`), BEGIN IMMEDIATE / COMMIT / ROLLBACK. The JS side holds the transaction lock.
+  - `{op:"http", method, url, headers, bodyB64|null, timeoutMs, connectTimeoutMs, maxBytes}` -> `{status, headers, bodyB64}`:
+    no redirects followed, no cookies stored. Errors start with `timeout`, `too_large` or `connect` (anything else counts as other).
+    Only the Open Food Facts lookup uses it; there is no DNS op, so every netguard-checked target is refused.
+  - When the web view loads a page (reload, crash), an open transaction must be rolled back; the JS side also sends a
+    `ROLLBACK` (error ignored) before it opens the database.
 
 ## Report (end of every package)
 1. Routes ported (list) and test result of your files (passed/total).
