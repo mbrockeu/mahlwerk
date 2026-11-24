@@ -134,7 +134,6 @@ test('what is off in the app answers like a server without it', async () => {
   const me = json(await dispatch('GET', '/api/v1/me', '', {}));
   assert.deepEqual(me.features, { access_tokens: false, webhooks: false, cookidoo: true, web_recipes: false });
   assert.equal((await dispatch('POST', '/api/v1/me/yazio/login', '', JSON_HEADERS, new TextEncoder().encode('{"email":"a@b.de","password":"x"}'))).status, 404);
-  assert.equal((await dispatch('POST', '/api/v1/admin/catalog/refresh', '', JSON_HEADERS)).status, 501);
   assert.equal((await dispatch('GET', '/api/v1/vision/status', '', {})).status, 200);
   assert.equal((await dispatch('DELETE', '/api/v1/me', '', {})).status !== 500, true);
   assert.equal((await dispatch('PUT', '/api/v1/nothing', '', {})).status, 404);
@@ -246,5 +245,51 @@ test('the native side reaches core through mahlwerkHost.request: Health sync, su
   const history = await request({ method: 'GET', path: '/api/v1/history', query: { days: 30 } });
   assert.equal(history.status, 200, history.body ?? '');
   assert.equal((await request({ method: 'GET', path: '/elsewhere' })).status, 400);
+  native.close();
+});
+
+test('"refresh" in the app loads the published catalogue: manifest over http (redirect followed), then the download op', async () => {
+  const manifest = { version: 1, url: 'https://github.com/mbrockeu/mahlwerk/releases/download/catalog/catalog-de-2026-11-24.db.gz',
+    sha256: 'ab'.repeat(32), bytes: 40153729, db_bytes: 109215744, products: 243838 };
+  const asked: string[] = [];
+  const native = fresh(async (m) => {
+    asked.push(m.url);
+    if (new URL(m.url).host === 'github.com') return { status: 302, headers: { Location: 'https://release-assets.githubusercontent.com/x/catalog.json' }, bodyB64: null };
+    return { status: 200, headers: { 'content-type': 'application/octet-stream' }, bodyB64: Buffer.from(JSON.stringify(manifest)).toString('base64') };
+  });
+  let download: any = null;
+  let state: any = { state: 'idle', bytes: 0, total: 0 };
+  const bridge = async (m: any) => {
+    if (m.op === 'download') { download = m; state = { state: 'running', bytes: 5 * 1024 * 1024, total: manifest.bytes }; return {}; }
+    if (m.op === 'downloadStatus') return state;
+    return native.bridge(m);
+  };
+  const { dispatch } = await openLocal({ bridge, schemaSql });
+  assert.equal(json(await dispatch('GET', '/api/v1/admin/catalog/refresh', '', {})).state, 'idle');
+  const started = await dispatch('POST', '/api/v1/admin/catalog/refresh', '', JSON_HEADERS);
+  assert.equal(started.status, 202, new TextDecoder().decode(started.body!));
+  assert.deepEqual(asked, ['https://github.com/mbrockeu/mahlwerk/releases/download/catalog/catalog.json', 'https://release-assets.githubusercontent.com/x/catalog.json']);
+  assert.deepEqual({ ...download, op: undefined }, { op: undefined, target: 'catalog', url: manifest.url, sha256: manifest.sha256, bytes: manifest.bytes, db_bytes: manifest.db_bytes });
+  const running = json(started);
+  assert.equal(running.state, 'running');
+  assert.equal(running.progress, '5.0 / 38 MB');
+  assert.equal((await dispatch('POST', '/api/v1/admin/catalog/refresh', '', JSON_HEADERS)).status, 409);
+  state = { state: 'failed', error: 'checksum' };
+  assert.deepEqual([json(await dispatch('GET', '/api/v1/admin/catalog/refresh', '', {})).state, json(await dispatch('GET', '/api/v1/admin/catalog/refresh', '', {})).error], ['error', 'checksum']);
+  state = { state: 'done', bytes: manifest.bytes, total: manifest.bytes };
+  const done = json(await dispatch('GET', '/api/v1/admin/catalog/refresh', '', {}));
+  assert.equal(done.state, 'done');
+  native.close();
+});
+
+test('a manifest that names a file elsewhere is refused before anything is downloaded', async () => {
+  const bad = { version: 1, url: 'https://evil.example/catalog.db.gz', sha256: 'ab'.repeat(32), bytes: 10, db_bytes: 20 };
+  const native = fresh(async () => ({ status: 200, headers: {}, bodyB64: Buffer.from(JSON.stringify(bad)).toString('base64') }));
+  let downloads = 0;
+  const bridge = async (m: any) => { if (m.op === 'download') { downloads++; return {}; } if (m.op === 'downloadStatus') return { state: 'idle' }; return native.bridge(m); };
+  const { dispatch } = await openLocal({ bridge, schemaSql });
+  await dispatch('POST', '/api/v1/admin/catalog/refresh', '', JSON_HEADERS);
+  const s = json(await dispatch('GET', '/api/v1/admin/catalog/refresh', '', {}));
+  assert.deepEqual([s.state, s.error, downloads], ['error', 'unexpected file address', 0]);
   native.close();
 });

@@ -44,7 +44,8 @@ Security code (auth, sessions, tokens, OIDC, vault, netguard/SSRF, upload checks
 The same interface and core run in the iOS app (WKWebView), the data in SQLite on the phone. `ts/app/localHost.ts` builds the ctx
 like `server/main.ts` for one device and answers requests in-process through `core/dispatch.ts` (the router the server uses), without
 host check, CSRF and security headers; the body limit stays. Fixed off (`APP_ENV`): tokens, webhooks, Cookidoo pictures, web recipes, Yazio
-sign-in, demo account, photo recognition / label reader, demo data, catalogue refresh; the Yazio file import is on;
+sign-in, demo account, photo recognition / label reader, demo data; the catalogue refresh loads the file the workflow
+`.github/workflows/catalog.yml` publishes (`ts/app/catalogDownload.ts`: manifest over `http`, then `download`); the Yazio file import is on;
 no picture service (501 like a server without one). Auth is `single`. Cookidoo is on (shared and own account; the
 vault key comes from the keychain, see `secretKey`).
 - Build: `cd frontend && npm run build:app` -> `web/dist-app/` (index.html + assets; entry `src/appMain.ts`, which sets
@@ -69,6 +70,9 @@ vault key comes from the keychain, see `secretKey`).
     there is no DNS op, so every netguard-checked target is refused.
   - `{op:"secretKey"}` -> `{keyB64}`: 32 random bytes, made once and kept in this device's keychain (not in the database, not in
     the export): the key of the stored secrets (Cookidoo accounts). Anything but 32 bytes, or an error: storing is refused (503).
+  - `{op:"download", target:"catalog", url, sha256, bytes, db_bytes}` -> `{}` at once (error `busy` while one runs): loads in the
+    background (https redirects followed), checks the sha256 of the .gz, unpacks, `PRAGMA quick_check`, swaps the catalogue file
+    atomically and reopens it read-only. `{op:"downloadStatus"}` -> `{state:"idle"|"running"|"done"|"failed", bytes, total, error}`.
   - The other way round (native -> core): `await window.mahlwerkHost.request({method, path, query, body})` -> `{status, body}`, set
     once the page has opened the database (`localHost.ts` `hostRequest`). `path` starts with `/api/`, `query` an object, `body` JSON
     text, an object or null; the answer's `body` is JSON text or null. For the Health sync, the history, summary/today and the

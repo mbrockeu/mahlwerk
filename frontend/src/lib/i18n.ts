@@ -402,7 +402,7 @@ const en = {
   admProducts: '{n} products', admBatches: '{n} import batches', admActiveKeys: '{n} active keys', admHooksN: '{n} webhooks', 
   admCountries: 'Countries', admCountriesHint: 'Add a country from the list; the catalogue then holds its products.', admHosts: 'Allowed target hosts',
   admHostsHint: 'Empty: any host with a public address is allowed; internal addresses (localhost, LAN) are always refused. A host listed here is the only kind allowed, and it may be internal (for example Home Assistant in your network): list it on purpose.', admAdd: 'Add', admRemoveItem: 'Remove {name}', admListBad: 'That is not a valid entry.',
-  admRefresh: 'Refresh now', admRefreshing: 'Refreshing …', admRefreshHint: 'Downloads the Open Food Facts export (several hundred MB). Search keeps working meanwhile; the catalogue is replaced only when the download is complete.',
+  admRefreshHintApp: 'Loads the catalogue of products sold in Germany (about 40 MB, from Open Food Facts, rebuilt monthly). The search keeps working meanwhile; the catalogue is replaced only when the file is complete and checked.', admRefresh: 'Refresh now', admRefreshing: 'Refreshing …', admRefreshHint: 'Downloads the Open Food Facts export (several hundred MB). Search keeps working meanwhile; the catalogue is replaced only when the download is complete.',
   admRefreshRunning: 'Running since {time}', admRefreshDone: 'Done: {n} products in {s} s', admRefreshFailed: 'Failed: {reason}',
   admRefreshStarted: 'Refresh started', admRefreshBusy: 'A refresh is already running.', 
 
@@ -1146,7 +1146,7 @@ const de: Record<Key, string> = {
   admProducts: '{n} Produkte', admBatches: '{n} Importläufe', admActiveKeys: '{n} aktive Schlüssel', admHooksN: '{n} Webhooks', 
   admCountries: 'Länder', admCountriesHint: 'Länder aus der Liste hinzufügen; der Katalog enthält dann deren Produkte.', admHosts: 'Erlaubte Ziel-Hosts',
   admHostsHint: 'Leer: jeder Host mit öffentlicher Adresse ist erlaubt, interne Adressen (localhost, LAN) werden immer abgelehnt. Nur eingetragene Hosts sind erlaubt, und sie dürfen intern sein (z. B. Home Assistant im eigenen Netz): trage sie bewusst ein.', admAdd: 'Hinzufügen', admRemoveItem: '{name} entfernen', admListBad: 'Das ist kein gültiger Eintrag.',
-  admRefresh: 'Jetzt auffrischen', admRefreshing: 'Frische auf …', admRefreshHint: 'Lädt den Open-Food-Facts-Export (einige hundert MB). Die Suche läuft währenddessen weiter; der Katalog wird erst ersetzt, wenn alles geladen ist.',
+  admRefreshHintApp: 'Lädt den Katalog der in Deutschland verkauften Produkte (etwa 40 MB, aus Open Food Facts, monatlich neu gebaut). Die Suche läuft währenddessen weiter; der Katalog wird erst ersetzt, wenn die Datei vollständig und geprüft ist.', admRefresh: 'Jetzt auffrischen', admRefreshing: 'Frische auf …', admRefreshHint: 'Lädt den Open-Food-Facts-Export (einige hundert MB). Die Suche läuft währenddessen weiter; der Katalog wird erst ersetzt, wenn alles geladen ist.',
   admRefreshRunning: 'Läuft seit {time}', admRefreshDone: 'Fertig: {n} Produkte in {s} s', admRefreshFailed: 'Fehlgeschlagen: {reason}',
   admRefreshStarted: 'Auffrischen gestartet', admRefreshBusy: 'Es läuft schon ein Durchlauf.', 
 

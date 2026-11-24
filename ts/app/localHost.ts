@@ -16,7 +16,7 @@
 // Cookidoo (its client follows redirects by hand and keeps its own cookies, so the plain `http` op is enough; the account is
 // stored in the vault, whose key comes from the keychain, see vaultKey.ts; its pictures stay links, as there is no picture service);
 // - recipe pictures: no picture service (no sharp): the picture routes answer 501 like a server without one;
-// - the catalogue refresh: no refresh service (501, like a server without one); the catalogue files come with the app;
+// - the catalogue refresh: loads the published file instead of rebuilding it (catalogDownload.ts); the BLS comes with the app;
 // - demo data (MAHLWERK_DEMO_DATA unset).
 import { initAuth } from '../core/auth.ts';
 import { installCookidoo } from '../core/cookidooService.ts';
@@ -29,6 +29,9 @@ import { WRITE_METHODS, limitFor } from '../core/security.ts';
 import { hostLabel, safeLink } from '../core/webrecipes.ts';
 import type { Bridge } from './bridge.ts';
 import { bridgeCatalog } from './catalog.ts';
+import { AppCatalogRefresh } from './catalogDownload.ts';
+import type { Catalog } from '../core/catalog.ts';
+import type { Outgoing } from '../core/outgoing.ts';
 import { openNativeDb } from './nativeDb.ts';
 import { bridgeOutgoing } from './outgoing.ts';
 import { bridgeKeyFile } from './vaultKey.ts';
@@ -59,8 +62,10 @@ export async function openLocal(opts: LocalOptions): Promise<{ ctx: Ctx; dispatc
   const foodLinks: FoodLinks = { cookidooUrl: () => null, webLink: safeLink, hostLabel };
   const ctx: Ctx = {
     db, env: { ...(opts.env ?? {}), ...APP_ENV }, now: opts.now ?? (() => Date.now() / 1000),
-    services: { out: bridgeOutgoing(opts.bridge, ['off', 'cookidoo']), catalog: bridgeCatalog(opts.bridge), foodLinks, keyFile: bridgeKeyFile(opts.bridge) },
+    services: { out: bridgeOutgoing(opts.bridge, ['off', 'cookidoo', 'catalog']), catalog: bridgeCatalog(opts.bridge), foodLinks, keyFile: bridgeKeyFile(opts.bridge) },
   };
+  ctx.services.refresh = new AppCatalogRefresh({ bridge: opts.bridge, out: ctx.services.out as Outgoing, catalog: ctx.services.catalog as Catalog,
+    manifestUrl: ctx.env.MAHLWERK_CATALOG_MANIFEST, now: ctx.now }); // "refresh" in the admin area: the published file, see catalogDownload.ts
   initAuth(ctx);
   yazioOf(ctx); // the staging area of the Yazio import
   installCookidoo(ctx); // no picture service: the Cookidoo pictures stay links (MAHLWERK_COOKIDOO_IMAGES off)

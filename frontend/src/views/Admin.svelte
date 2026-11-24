@@ -205,10 +205,12 @@
     lockedBy={switchLocked(c) ? (ENV_OF[`${c.key}.enabled`] ?? '') : ''} fact={fact(c)} expandable={expandable(c)} open={isOpen(c)} ontoggle={() => flip(c)}
     tech={tech(c)} techOpen={c.status === 'not_installed'}>
     {#if c.key === 'openfoodfacts_catalog'}
+      {#if !inApp}
       <div class="sub">
         <CountryPicker items={c.config.countries ?? []} hint={locked(c, 'config.countries') ? t('admLocked') : t('admCountriesHint')}
           disabled={busy === c.key || locked(c, 'config.countries')} onchange={(next) => patch(c, { config: { countries: next } })} />
       </div>
+      {/if}
       <div class="sub">
         <h5 class="micro quiet">{t('admRefreshTitle')}</h5>
         <div class="refresh">
@@ -226,7 +228,7 @@
             {/if}
           </div>
         </div>
-        <p class="note">{t('admRefreshHint')}</p>
+        <p class="note">{inApp ? t('admRefreshHintApp') : t('admRefreshHint')}</p>
       </div>
     {/if}
 
