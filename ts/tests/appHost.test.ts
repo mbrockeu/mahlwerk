@@ -12,6 +12,8 @@ import { pickAddress, TargetNotAllowed } from '../core/netguard.ts';
 import { APP_ROUTES, hostRequest, localFetch, openLocal } from '../app/localHost.ts';
 import { nativeDb } from '../app/nativeDb.ts';
 import { buildBlsFixture, nodeBridge } from './appBridge.ts';
+import { fillSynthetic } from './synthetic.ts';
+import { unzip } from '../core/yazioStage.ts';
 
 const schemaSql = readFileSync(new URL('../core/schema.sql', import.meta.url), 'utf8');
 const dir = mkdtempSync(join(tmpdir(), 'mw-app-'));
@@ -197,7 +199,7 @@ test('what is off in the app answers like a server without it', async () => {
   const native = fresh();
   const { dispatch } = await openLocal({ bridge: native.bridge, schemaSql });
   const me = json(await dispatch('GET', '/api/v1/me', '', {}));
-  assert.deepEqual(me.features, { access_tokens: false, webhooks: false, cookidoo: true, web_recipes: false });
+  assert.deepEqual(me.features, { access_tokens: false, webhooks: false, cookidoo: true, web_recipes: false, data_import: true });
   assert.equal((await dispatch('POST', '/api/v1/me/yazio/login', '', JSON_HEADERS, new TextEncoder().encode('{"email":"a@b.de","password":"x"}'))).status, 404);
   assert.equal((await dispatch('GET', '/api/v1/vision/status', '', {})).status, 200);
   assert.equal((await dispatch('DELETE', '/api/v1/me', '', {})).status !== 500, true);
@@ -357,4 +359,62 @@ test('a manifest that names a file elsewhere is refused before anything is downl
   const s = json(await dispatch('GET', '/api/v1/admin/catalog/refresh', '', {}));
   assert.deepEqual([s.state, s.error, downloads], ['error', 'unexpected file address', 0]);
   native.close();
+});
+
+const exportJson = async (zip: Uint8Array) => JSON.parse(new TextDecoder().decode((await unzip(zip, ['mahlwerk-export.json']))['mahlwerk-export.json']));
+const RAW = { 'content-type': 'application/octet-stream', 'x-mahlwerk-request': '1' };
+
+test('data import in the app: a server export comes onto the phone and back, a second import changes nothing', async () => {
+  const phone = fresh();
+  const { dispatch } = await openLocal({ bridge: phone.bridge, schemaSql, migrations });
+  const post = (path: string, body: unknown) => dispatch('POST', path, '', JSON_HEADERS, new TextEncoder().encode(JSON.stringify(body)));
+  const food = json(await post('/api/v1/foods', { name: 'Brot', per_100: { kcal: 250, protein: 9, carbs: 48, fat: 1 } }));
+  await post('/api/v1/diary/2026-03-10/entries', { food_id: food.id, meal: 'lunch', amount: 80 });
+  const zip = (await dispatch('GET', '/api/v1/me/export', '', {})).body!;
+  // a second phone (a new device)
+  const other = fresh();
+  const app2 = await openLocal({ bridge: other.bridge, schemaSql, migrations });
+  const p = await app2.dispatch('POST', '/api/v1/me/import/preview', '', RAW, zip);
+  assert.equal(p.status, 200, new TextDecoder().decode(p.body!));
+  const c = await app2.dispatch('POST', '/api/v1/me/import/confirm', '', JSON_HEADERS, new TextEncoder().encode(JSON.stringify({ token: json(p).token, mode: 'merge' })));
+  assert.equal(c.status, 200, new TextDecoder().decode(c.body!));
+  const back = (await app2.dispatch('GET', '/api/v1/me/export', '', {})).body!;
+  const strip = (d: any) => { const { exported_at: _e, app_version: _v, ...rest } = d; return rest; };
+  assert.deepEqual(strip(await exportJson(back)), strip(await exportJson(zip)));
+  const again = json(await app2.dispatch('POST', '/api/v1/me/import/preview', '', RAW, zip));
+  for (const k of Object.values(again.modes.merge.counts) as any[]) assert.equal(k.new + k.changed, 0);
+  phone.close();
+  other.close();
+});
+
+test('data import in the app: 15,000 diary entries (about 3 years) over the bridge, measured', async () => {
+  const source = fresh();
+  const a = await openLocal({ bridge: source.bridge, schemaSql, migrations });
+  await a.dispatch('GET', '/api/v1/me', '', {}); // makes the one user of the app
+  const userId = (await a.ctx.db.get<any>('SELECT id FROM user'))!.id;
+  await fillSynthetic(a.ctx.db, userId, 15000);
+  const zip = (await a.dispatch('GET', '/api/v1/me/export', '', {})).body!;
+  source.close();
+  const target = fresh();
+  const b = await openLocal({ bridge: target.bridge, schemaSql, migrations });
+  const t0 = performance.now();
+  const p = await b.dispatch('POST', '/api/v1/me/import/preview', '', RAW, zip);
+  const t1 = performance.now();
+  assert.equal(p.status, 200, new TextDecoder().decode(p.body!));
+  assert.equal(json(p).modes.merge.counts.diary.new, 15000);
+  const ops = target.log.length;
+  const c = await b.dispatch('POST', '/api/v1/me/import/confirm', '', JSON_HEADERS, new TextEncoder().encode(JSON.stringify({ token: json(p).token, mode: 'merge' })));
+  const t2 = performance.now();
+  assert.equal(c.status, 200, new TextDecoder().decode(c.body!));
+  const confirmOps = target.log.length - ops;
+  assert.equal((await b.ctx.db.get<any>('SELECT count(*) AS n, count(DISTINCT uid) AS u FROM diary_entry'))!.n, 15000);
+  // the same file once more: everything is matched, nothing written
+  const p2 = await b.dispatch('POST', '/api/v1/me/import/preview', '', RAW, zip);
+  const t3 = performance.now();
+  assert.equal(json(p2).modes.merge.counts.diary.unchanged, 15000);
+  console.log(`import of 15,000 entries (zip ${zip.length} bytes): preview ${Math.round(t1 - t0)} ms, confirm ${Math.round(t2 - t1)} ms with ${confirmOps} bridge ops, `
+    + `second preview ${Math.round(t3 - t2)} ms`);
+  // one statement per product (300 here), the long tables in batches: far fewer ops than rows
+  assert.ok(confirmOps < 1000, `${confirmOps} bridge ops`);
+  target.close();
 });

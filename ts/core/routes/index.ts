@@ -9,6 +9,7 @@ import { routes as body } from './body.ts';
 import { routes as catalog } from './catalog.ts';
 import { routes as combos } from './combos.ts';
 import { routes as cookidoo } from './cookidoo.ts';
+import { routes as dataImport } from './dataImport.ts';
 import { routes as demoView } from './demoView.ts';
 import { routes as diary } from './diary.ts';
 import { routes as exportRoutes } from './export.ts';
@@ -36,6 +37,6 @@ import { routes as yazio } from './yazio.ts';
 export const ROUTES: Route[] = [
   ...health, ...auth, ...oidc, ...demoView, ...profile, ...tokens, ...admin,
   ...catalog, ...diary, ...combos, ...foods, ...templates, ...suggestions, ...recipes, ...recipeGroups,
-  ...insights, ...badges, ...water, ...fasting, ...nutrients, ...summary, ...activity, ...exportRoutes, ...body,
+  ...insights, ...badges, ...water, ...fasting, ...nutrients, ...summary, ...activity, ...exportRoutes, ...dataImport, ...body,
   ...images, ...labelScans, ...vision, ...webhooks, ...webRecipes, ...yazio, ...cookidoo,
 ];

@@ -18,6 +18,10 @@ const LIMITS: Record<string, number> = {
 // large files with gzip first). Its decompressed size is limited again in yazio_stage.
 const LIMIT_YAZIO = 24 * 1024 * 1024;
 const LIMIT_PREFIXES: [string, number][] = [['/api/v1/me/yazio/files/', LIMIT_YAZIO]];
+// The own data export to import (dataImport.ts): normally its ZIP (15,000 diary entries pack to about 3 MB), or the JSON in it (about
+// 20 MB for the same diary). Unpacked it is limited again (48 MB).
+const LIMIT_IMPORT = 32 * 1024 * 1024;
+LIMITS['/api/v1/me/import/preview'] = LIMIT_IMPORT;
 const PICTURE_PATH = /^\/api\/v1\/foods\/\d{1,12}\/image$/; // an own photo for a recipe (the interface shrinks it first)
 
 export function limitFor(path: string): number {

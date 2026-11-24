@@ -42,7 +42,9 @@ const settings = z.object({
   water_drinks: pyBool().default(true),
 });
 export type Settings = z.output<typeof settings>;
-const SETTING_KEYS = Object.keys(settings.shape);
+export const SETTING_KEYS = Object.keys(settings.shape);
+/** The settings schema, for the data import (dataImport.ts checks every value like this route does). */
+export const SETTINGS = settings;
 
 const settingsPatch = z.object({
   playful: nullish(pyBool()),
@@ -106,7 +108,8 @@ async function me(req: Req, user: User) {
     demo: { available: Boolean(ctx.services.demoDataOn) && !isDemo, ...(await demoCounts(ctx.db, user.id)) },
     demo_account: { can_switch: canSwitch, viewing: isDemo, real_username: real?.username ?? null, real_display_name: real?.display_name ?? null },
     catalog: catalog ? await catalog.info() : { products: 0, updated_at: null, bls: { products: 0, updated_at: null } },
-    features: { access_tokens: tokens && !isDemo, webhooks: webhooks && !isDemo, cookidoo: cookidoo && !isDemo, web_recipes: webRecipes && !isDemo },
+    // `data_import` only where there is one (this server and the app; the Python server has none and leaves the key out)
+    features: { access_tokens: tokens && !isDemo, webhooks: webhooks && !isDemo, cookidoo: cookidoo && !isDemo, web_recipes: webRecipes && !isDemo, ...(isDemo ? {} : { data_import: true }) },
   };
 }
 
