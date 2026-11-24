@@ -133,7 +133,7 @@ test('what is off in the app answers like a server without it', async () => {
   const { dispatch } = await openLocal({ bridge: native.bridge, schemaSql });
   const me = json(await dispatch('GET', '/api/v1/me', '', {}));
   assert.deepEqual(me.features, { access_tokens: false, webhooks: false, cookidoo: true, web_recipes: false });
-  assert.equal((await dispatch('GET', '/api/v1/me/yazio', '', {})).status, 404);
+  assert.equal((await dispatch('POST', '/api/v1/me/yazio/login', '', JSON_HEADERS, new TextEncoder().encode('{"email":"a@b.de","password":"x"}'))).status, 404);
   assert.equal((await dispatch('POST', '/api/v1/admin/catalog/refresh', '', JSON_HEADERS)).status, 501);
   assert.equal((await dispatch('GET', '/api/v1/vision/status', '', {})).status, 200);
   assert.equal((await dispatch('DELETE', '/api/v1/me', '', {})).status !== 500, true);
@@ -209,5 +209,24 @@ test('without a keychain key the app refuses to store an account instead of maki
   const { dispatch } = await openLocal({ bridge, schemaSql });
   const body = new TextEncoder().encode(JSON.stringify({ email: 'koch@example.org', password: 'geheim-123', country: 'de', language: 'de-DE' }));
   assert.equal((await dispatch('PUT', '/api/v1/me/cookidoo-account', '', JSON_HEADERS, body)).status, 503);
+  native.close();
+});
+
+test('the Yazio file import works in the app: a gzip-packed file is unpacked, previewed and imported', async () => {
+  const native = fresh();
+  const { dispatch } = await openLocal({ bridge: native.bridge, schemaSql });
+  const status = json(await dispatch('GET', '/api/v1/me/yazio', '', {}));
+  assert.equal(status.login.available, false);
+  const packed = new Uint8Array(await new Response(new Blob([JSON.stringify({ '2026-01-10': 80.4, '2026-01-11': 80.1 })]).stream()
+    .pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+  const put = await dispatch('PUT', '/api/v1/me/yazio/files/weight.json', '', { 'content-type': 'application/octet-stream', 'x-mahlwerk-request': '1' }, packed);
+  assert.equal(put.status, 200, new TextDecoder().decode(put.body!));
+  const preview = await dispatch('POST', '/api/v1/me/yazio/preview', '', JSON_HEADERS, new TextEncoder().encode('{}'));
+  assert.equal(preview.status, 200, new TextDecoder().decode(preview.body!));
+  const shown = json(preview);
+  const done = await dispatch('POST', '/api/v1/me/yazio/confirm', '', JSON_HEADERS, new TextEncoder().encode(JSON.stringify({ token: shown.token })));
+  assert.equal(done.status, 200, new TextDecoder().decode(done.body!));
+  const weights = (await native.bridge({ op: 'sql', db: 'main', sql: 'SELECT count(*) AS n FROM weight', args: [] })).rows[0].n;
+  assert.equal(weights, 2);
   native.close();
 });

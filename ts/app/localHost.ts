@@ -11,9 +11,10 @@
 // - access tokens, webhooks: nothing outside the device can reach it (switches fixed off, the profile hides their cards);
 // - web recipes, Yazio sign-in, photo recognition and the label reader: switches fixed off; web recipes would need DNS and a pinned
 //   address on the bridge (see outgoing.ts), the photo parts the parked vision ops;
-// On: Cookidoo (its client follows redirects by hand and keeps its own cookies, so the plain `http` op is enough; the account is
+// On: the Yazio file import (export ZIP or JSON files, unpacked in memory with DecompressionStream, like on the server; the direct
+// sign-in stays off: it needs the Yazio app's client id and secret, which an app bundle must not carry);
+// Cookidoo (its client follows redirects by hand and keeps its own cookies, so the plain `http` op is enough; the account is
 // stored in the vault, whose key comes from the keychain, see vaultKey.ts; its pictures stay links, as there is no picture service);
-// - the Yazio file import: it has no switch, so its routes are not registered (404);
 // - recipe pictures: no picture service (no sharp): the picture routes answer 501 like a server without one;
 // - the catalogue refresh: no refresh service (501, like a server without one); the catalogue files come with the app;
 // - demo data (MAHLWERK_DEMO_DATA unset).
@@ -23,6 +24,7 @@ import { bodyOf, decodePath, errorRes, makeRouter } from '../core/dispatch.ts';
 import type { FoodLinks } from '../core/foodView.ts';
 import { HttpError, type Ctx, type Res, type Route } from '../core/http.ts';
 import { ROUTES } from '../core/routes/index.ts';
+import { yazioOf } from '../core/routes/yazio.ts';
 import { WRITE_METHODS, limitFor } from '../core/security.ts';
 import { hostLabel, safeLink } from '../core/webrecipes.ts';
 import type { Bridge } from './bridge.ts';
@@ -33,12 +35,12 @@ import { bridgeKeyFile } from './vaultKey.ts';
 
 /** Fixed: the app's own environment cannot switch these back on. */
 export const APP_ENV: Record<string, string> = {
-  MAHLWERK_AUTH: 'single', MAHLWERK_TOKENS: 'off', MAHLWERK_WEBHOOKS: 'off', MAHLWERK_COOKIDOO: 'on', MAHLWERK_COOKIDOO_IMAGES: 'off', MAHLWERK_WEB_RECIPES: 'off',
+  MAHLWERK_AUTH: 'single', MAHLWERK_TOKENS: 'off', MAHLWERK_WEBHOOKS: 'off', MAHLWERK_COOKIDOO: 'on', MAHLWERK_COOKIDOO_IMAGES: 'off', MAHLWERK_COOKIDOO_PERSONAL: 'on', MAHLWERK_WEB_RECIPES: 'off',
   MAHLWERK_YAZIO_LOGIN: 'off', MAHLWERK_DEMO_ACCOUNT: 'off', MAHLWERK_VISION: 'off', MAHLWERK_CATALOG_REFRESH: 'off', MAHLWERK_DEMO_DATA: '',
 };
 
-/** The routes of the app: all of core except those of a feature that has no switch and cannot work here. */
-export const APP_ROUTES: Route[] = ROUTES.filter((r) => !r.path.startsWith('/api/v1/me/yazio'));
+/** The routes of the app: all of core (the direct Yazio sign-in answers "switched off" like a server without it). */
+export const APP_ROUTES: Route[] = ROUTES;
 
 export interface LocalAnswer { status: number; headers: Record<string, string>; body: Uint8Array | null }
 export type Dispatch = (method: string, path: string, query: string, headers: Record<string, string>, body?: Uint8Array | null) => Promise<LocalAnswer>;
@@ -60,6 +62,7 @@ export async function openLocal(opts: LocalOptions): Promise<{ ctx: Ctx; dispatc
     services: { out: bridgeOutgoing(opts.bridge, ['off', 'cookidoo']), catalog: bridgeCatalog(opts.bridge), foodLinks, keyFile: bridgeKeyFile(opts.bridge) },
   };
   initAuth(ctx);
+  yazioOf(ctx); // the staging area of the Yazio import
   installCookidoo(ctx); // no picture service: the Cookidoo pictures stay links (MAHLWERK_COOKIDOO_IMAGES off)
   const routeRequest = makeRouter(APP_ROUTES);
 
