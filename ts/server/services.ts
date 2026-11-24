@@ -3,6 +3,7 @@
 import type { Ctx } from '../core/http.ts';
 import type { Outgoing } from '../core/outgoing.ts';
 import type { FoodLinks } from '../core/foodView.ts';
+import { yazioOf } from '../core/routes/yazio.ts';
 import { RecipeImages } from '../core/recipeImages.ts';
 import { hostLabel, safeLink } from '../core/webrecipes.ts';
 import { nodeCatalog } from './catalogFiles.ts';
@@ -26,4 +27,5 @@ export function addServices(ctx: Ctx, dbPath: string, out: Outgoing): void {
     imageRunner: runner,
     images: new RecipeImages(ctx, nodeImageStore(imageFolder(dbPath), maxBytesFromEnv(ctx.env), clock), runner),
   });
+  yazioOf(ctx); // the staging area and the runs of the Yazio import; registers what ends with a session or a switch
 }

@@ -36,6 +36,8 @@ export interface Req {
   query: URLSearchParams;
   headers: Record<string, string>; // lower-case names
   body: unknown; // parsed JSON, or a Uint8Array for binary uploads, or undefined
+  /** The body as it arrived, whatever its content type (an upload that must not be parsed as JSON: the Yazio files). */
+  raw?: Uint8Array;
   peer: string;
   /** `http` or `https`: how the request reached the server (the test host passes what the test client used). */
   scheme?: string;

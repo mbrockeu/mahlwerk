@@ -3,9 +3,10 @@
 import { z } from 'zod';
 import { today } from '../dates.ts';
 import { featureOn } from '../features.ts';
-import { HttpError, parse, route, type Req, type Route, type User } from '../http.ts';
+import { HttpError, parse, pathInt, route, type Req, type Route, type User } from '../http.ts';
 import { nullish, pyBool, pyFloat, pyInt } from '../models/common.ts';
 import { demoAccountReady, demoCounts } from '../store/demo.ts';
+import { listImports, removeImport } from '../store/imports.ts';
 import { getGoal } from '../store/goals.ts';
 import { getSettings, setSetting } from '../store/settings.ts';
 import { setOwnName } from '../store/users.ts';
@@ -119,6 +120,18 @@ export const routes: Route[] = [
     await setOwnName(req.ctx.db, user.id, body.display_name);
     const own = body.display_name;
     return me(req, { ...user, display_name: own || user.provider_name || user.username, name_custom: own !== null });
+  }),
+
+  // This user's import batches (the Yazio import), newest first.
+  route('GET', '/api/v1/me/imports', async (req) => listImports(req.ctx.db, req.user!.id)),
+
+  // Remove what one batch created and the user has not changed since; the other data stays.
+  route('DELETE', '/api/v1/me/imports/{import_id}', async (req) => {
+    const id = pathInt(req, 'import_id');
+    const removed = await removeImport(req.ctx.db, id, req.user!.id);
+    if (removed === null) throw new HttpError(404, 'unknown import');
+    await (req.ctx.services.images as { sweep(): Promise<void> } | undefined)?.sweep(); // foods are gone: tidy the files nothing refers to
+    return removed;
   }),
 
   route('PATCH', '/api/v1/me/settings', async (req) => {
