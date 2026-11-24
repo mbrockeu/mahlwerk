@@ -93,6 +93,9 @@ export function nativeDb(bridge: Bridge): Db {
 /** The main database, with schema v20 applied when it is empty; any other version is refused (SchemaMismatch), like the server. */
 export async function openNativeDb(bridge: Bridge, schemaSql: string): Promise<Db> {
   const db = nativeDb(bridge);
+  // a page that went away in the middle of a transaction (a reload) may have left it open on the native side: nothing of this page
+  // can be in one yet, so it is rolled back (an error just means there was none)
+  await bridge({ op: 'exec', db: 'main', sql: 'ROLLBACK' }).catch(() => undefined);
   await openSchema(db, schemaSql);
   return db;
 }
