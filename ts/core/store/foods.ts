@@ -133,3 +133,41 @@ export async function deleteFood(db: Db, foodId: number): Promise<boolean> {
     return (await tx.run('DELETE FROM food WHERE id = ?', [foodId])).changes > 0;
   });
 }
+
+/** Those of `codes` that exist as a known food (not merely as a remembered miss). */
+export async function knownCodes(db: Db, codes: string[]): Promise<Set<string>> {
+  const found = new Set<string>();
+  for (let i = 0; i < codes.length; i += MAX_SQL_PARAMS) {
+    const chunk = codes.slice(i, i + MAX_SQL_PARAMS);
+    for (const r of await db.all(`SELECT code FROM food WHERE found = 1 AND code IN (${chunk.map(() => '?').join(', ')})`, chunk)) found.add(r.code);
+  }
+  return found;
+}
+
+/** The "source/code" of those catalogue `hits` that exist as a food already: by barcode for packaged products, by `external_id`
+ * (`bls:<code>`) for basic foods. */
+export async function knownCatalog(db: Db, hits: { source: string; code: string }[]): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (const c of await knownCodes(db, hits.filter((h) => h.source !== 'bls').map((h) => h.code))) out.add(`openfoodfacts/${c}`);
+  const keys = hits.filter((h) => h.source === 'bls').map((h) => `bls:${h.code}`);
+  for (let i = 0; i < keys.length; i += MAX_SQL_PARAMS) {
+    const chunk = keys.slice(i, i + MAX_SQL_PARAMS);
+    for (const r of await db.all(`SELECT external_id FROM food WHERE found = 1 AND external_id IN (${chunk.map(() => '?').join(', ')})`, chunk)) {
+      out.add(`bls/${String(r.external_id).slice(4)}`);
+    }
+  }
+  return out;
+}
+
+export async function getFoodByExternalId(db: Db, externalId: string): Promise<FoodRow | undefined> {
+  const row = await db.get(`${FOOD_SELECT} WHERE food.external_id = ?`, [externalId]);
+  return row ? foodRow(row) : undefined;
+}
+
+/** Insert a food without barcode that is recognised by `external_id`. Returns [id, fetched_at]. */
+export async function putExternalFood(db: Db, externalId: string, source: string, data: FoodData, createdBy: number | null = null): Promise<[number, number]> {
+  const now = Math.floor(Date.now() / 1000);
+  const r = await db.run('INSERT INTO food (code, source, found, data, fetched_at, external_id, created_by) VALUES (NULL, ?, 1, ?, ?, ?, ?)',
+    [source, toJson(data), now, externalId, createdBy]);
+  return [r.lastId, now];
+}

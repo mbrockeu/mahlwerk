@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { openSchema } from '../core/db.ts';
 import { makeApp } from './app.ts';
 import { OutError, type Outgoing } from '../core/outgoing.ts';
+import { makeServices } from './services.ts';
 import { openSqlite } from './sqlite.ts';
 
 const schema = readFileSync(new URL('../core/schema.sql', import.meta.url), 'utf8');
@@ -57,7 +58,7 @@ const server = createServer(async (req, res) => {
       await openSchema(db, schema);
       const clock = { now: null as number | null };
       const id = String(next++);
-      const services: Record<string, unknown> = bridge ? { out: bridgeOutgoing(bridge, id) } : {};
+      const services = makeServices(env, path, bridgeOutgoing(bridge, id));
       apps.set(id, { handle: makeApp({ db, env, now: () => clock.now ?? Date.now() / 1000, services }), clock, db });
       for (const [old, a] of apps) {
         if (apps.size <= KEEP) break;

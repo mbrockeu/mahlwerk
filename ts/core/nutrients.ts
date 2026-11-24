@@ -1,6 +1,6 @@
 // Directory of the additional nutrients (nutrients.py): the part the diary and the food routes need. The importers
 // (Open Food Facts, BLS, Yazio conversions) come with the packages that use them.
-import { pySum } from './num.ts';
+import { pySum, roundHalfEven } from './num.ts';
 
 export interface Nutrient { key: string; group: string; unit: string; nrv: number | null; off: string | null; yazio: string | null; max: number }
 
@@ -84,4 +84,47 @@ export function aggregate(parts: [number, Extra][]): Record<string, { amount: nu
   return Object.fromEntries(Object.keys(sums).sort((a, b) => KEYS.indexOf(a) - KEYS.indexOf(b)).map((key) => [
     key, { amount: sums[key], coverage: whole ? Math.min(1, known[key] / whole) : 0 },
   ]));
+}
+
+// --- Open Food Facts values (the importers of Yazio and BLS come with their packages) ---
+
+const UNIT_FACTOR: Record<string, number> = { g: 1, mg: 1e3, 'µg': 1e6 }; // grams -> unit
+const PARTS_OF_FAT = ['monounsaturated_fat', 'polyunsaturated_fat', 'trans_fat', 'omega_3'];
+const PARTS_OF_CARBS = ['added_sugars', 'starch'];
+const TOLERANCE = 1.0;
+const FLOAT_TEXT = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
+
+/** A finite float from text or a number, otherwise null. No rounding. */
+export function parseNumber(value: unknown): number | null {
+  let n: number;
+  if (typeof value === 'string') {
+    const s = value.trim();
+    if (!FLOAT_TEXT.test(s)) return null;
+    n = Number(s);
+  } else if (typeof value === 'number') n = value;
+  else if (typeof value === 'boolean') n = Number(value);
+  else return null;
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Open Food Facts gives grams per 100 g; the value in the nutrient's unit, or null when missing, negative or implausibly large. */
+export function fromOff(key: string, grams: number | null): number | null {
+  const nutrient = BY_KEY.get(key);
+  if (grams === null || !nutrient || grams < 0) return null;
+  const value = roundHalfEven(grams * UNIT_FACTOR[nutrient.unit]!, 4);
+  return value <= nutrient.max ? value : null;
+}
+
+/** Additional nutrients of one Open Food Facts product; `lookup(column)` gives the grams of an OFF column. */
+export function extraFromOff(lookup: (column: string) => number | null, fat: number | null = null, carbs: number | null = null): Extra {
+  const result: Extra = {};
+  for (const x of NUTRIENTS) {
+    if (!x.off) continue;
+    const value = fromOff(x.key, lookup(x.off));
+    if (value === null) continue;
+    if (fat !== null && PARTS_OF_FAT.includes(x.key) && value > fat + TOLERANCE) continue;
+    if (carbs !== null && PARTS_OF_CARBS.includes(x.key) && value > carbs + TOLERANCE) continue;
+    result[x.key] = value;
+  }
+  return result;
 }
