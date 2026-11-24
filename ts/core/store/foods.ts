@@ -171,3 +171,21 @@ export async function putExternalFood(db: Db, externalId: string, source: string
     [source, toJson(data), now, externalId, createdBy]);
   return [r.lastId, now];
 }
+
+/** Link a picture to a food. Returns the hash it had before (null: none), or false for an unknown food. */
+export async function setFoodImage(db: Db, foodId: number, digest: string, origin: string, url: string | null): Promise<string | null | false> {
+  return db.tx(async (tx) => {
+    const row = await tx.get('SELECT image_hash FROM food WHERE id = ?', [foodId]);
+    if (!row) return false;
+    await tx.run('UPDATE food SET image_hash = ?, image_origin = ?, image_at = ?, image_url = ? WHERE id = ?', [digest, origin, Math.floor(Date.now() / 1000), url, foodId]);
+    return row.image_hash;
+  });
+}
+
+export async function imageRefs(db: Db, digest: string): Promise<number> {
+  return (await db.get('SELECT count(*) AS n FROM food WHERE image_hash = ?', [digest]))!.n;
+}
+
+export async function imageHashes(db: Db): Promise<Set<string>> {
+  return new Set((await db.all('SELECT DISTINCT image_hash FROM food WHERE image_hash IS NOT NULL')).map((r) => r.image_hash));
+}

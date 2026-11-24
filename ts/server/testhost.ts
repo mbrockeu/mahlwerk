@@ -7,11 +7,12 @@ import { readFileSync } from 'node:fs';
 import { openSchema } from '../core/db.ts';
 import { makeApp } from './app.ts';
 import { OutError, type Outgoing } from '../core/outgoing.ts';
-import { makeServices } from './services.ts';
+import type { Ctx } from '../core/http.ts';
+import { addServices } from './services.ts';
 import { openSqlite } from './sqlite.ts';
 
 const schema = readFileSync(new URL('../core/schema.sql', import.meta.url), 'utf8');
-const apps = new Map<string, { handle: ReturnType<typeof makeApp>; clock: { now: number | null }; db: { close?(): void } }>();
+const apps = new Map<string, { handle: ReturnType<typeof makeApp>; clock: { now: number | null }; db: { close?(): void }; env: Record<string, string | undefined> }>();
 const KEEP = 40; // a test uses at most a few apps; older ones are closed (file handles)
 let next = 1;
 
@@ -58,8 +59,9 @@ const server = createServer(async (req, res) => {
       await openSchema(db, schema);
       const clock = { now: null as number | null };
       const id = String(next++);
-      const services = makeServices(env, path, bridgeOutgoing(bridge, id));
-      apps.set(id, { handle: makeApp({ db, env, now: () => clock.now ?? Date.now() / 1000, services }), clock, db });
+      const ctx: Ctx = { db, env, now: () => clock.now ?? Date.now() / 1000, services: {} };
+      addServices(ctx, path, bridgeOutgoing(bridge, id));
+      apps.set(id, { handle: makeApp(ctx), clock, db, env });
       for (const [old, a] of apps) {
         if (apps.size <= KEEP) break;
         a.db.close?.();
@@ -78,6 +80,11 @@ const server = createServer(async (req, res) => {
     }
     const app = apps.get(String(req.headers['x-test-app'] ?? ''));
     if (!app) return json(res, 400, { detail: 'unknown x-test-app' });
+    const newEnv = req.headers['x-test-env']; // the environment of the test process as it is now (it changes after the app was made)
+    if (typeof newEnv === 'string') {
+      for (const k of Object.keys(app.env)) delete app.env[k];
+      Object.assign(app.env, JSON.parse(newEnv));
+    }
     await app.handle(req, res, String(req.headers['x-test-peer'] ?? '127.0.0.1'));
   } catch (e) {
     console.error(e);

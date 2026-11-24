@@ -133,6 +133,7 @@ class RemoteApp:
         self.id = r.json()["id"]
         self.transport, self.oidc_transport, self.yazio_transport = transport, oidc_transport, yazio_transport
         self.web_transport, self.vision_transport, self.webhook_transport = web_transport, vision_transport, webhook_transport
+        self.last_env = json.dumps(env, sort_keys=True)
         _apps[self.id] = self
         self.clock = clock
         self.state = _State()
@@ -147,6 +148,12 @@ class _ToHost(httpx.HTTPTransport):
         self.app = app
 
     def handle_request(self, request):
+        # Python reads os.environ at the moment it needs a value, and tests change it after the app was made (monkeypatch):
+        # the TS app gets the current MAHLWERK_* environment with every request that differs from the last one it saw.
+        env = json.dumps({k: v for k, v in os.environ.items() if k.startswith("MAHLWERK_")}, sort_keys=True)
+        if env != self.app.last_env:
+            self.app.last_env = env
+            request.headers["x-test-env"] = env
         if self.app.clock is not None:
             httpx.post(f"{_base()}/__test/clock/{self.app.id}/{self.app.clock()}", timeout=10)
         target = httpx.URL(_base())
