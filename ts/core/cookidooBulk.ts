@@ -413,8 +413,11 @@ export class BulkRuns {
           run.done += 1;
           continue;
         }
-        if (known !== undefined) {
-          await updateFood(db, known.id, SOURCE, data as never);
+        // looked at again: while the detail call was on its way another run (of another account) may have taken the same recipe over
+        const exists = known ?? (await getFoodByExternalId(db, external));
+        if (exists !== undefined) {
+          await updateFood(db, exists.id, SOURCE, data as never);
+          foodId = exists.id;
           run.counts.updated += 1;
         } else {
           [foodId] = await putExternalFood(db, external, SOURCE, data as never);
