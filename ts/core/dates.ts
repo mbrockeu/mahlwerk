@@ -28,8 +28,12 @@ export const weekday = (day: string): number => (dayToDate(day)!.getUTCDay() + 6
 /** date.toordinal(): 0001-01-01 is 1. */
 export const toOrdinal = (day: string): number => Math.round(dayToDate(day)!.getTime() / DAY_MS) + 719163;
 
+/** Test host only: the day the Python tests set by patching `today` in the route modules (tests/ts_bridge.py). */
+export const testToday: { day: string | null } = { day: null };
+
 /** date.today() of the server: the local calendar day of the machine. */
 export function today(): string {
+  if (testToday.day) return testToday.day;
   const n = new Date();
   return `${String(n.getFullYear()).padStart(4, '0')}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
 }

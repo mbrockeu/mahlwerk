@@ -5,6 +5,7 @@
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { openSchema } from '../core/db.ts';
+import { testToday } from '../core/dates.ts';
 import { makeApp } from './app.ts';
 import { OutError, type Outgoing } from '../core/outgoing.ts';
 import type { Ctx } from '../core/http.ts';
@@ -86,6 +87,7 @@ const server = createServer(async (req, res) => {
       for (const k of Object.keys(app.env)) delete app.env[k];
       Object.assign(app.env, JSON.parse(newEnv));
     }
+    testToday.day = typeof req.headers['x-test-today'] === 'string' ? req.headers['x-test-today'] : null; // tests run one request at a time
     await app.handle(req, res, String(req.headers['x-test-peer'] ?? '127.0.0.1'));
   } catch (e) {
     console.error(e);

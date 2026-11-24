@@ -150,6 +150,24 @@ class RemoteApp:
         self.state = _State()
 
 
+_TODAY_MODULES = ("diary", "activity", "admin", "insights", "profile", "demo_view", "export", "suggestions", "summary")
+
+
+def _patched_today():
+    """The day a test set by patching `today` in a route module (monkeypatch), as an ISO string; None when nothing is patched."""
+    import importlib
+
+    from mahlwerk.routes import diary
+
+    original = diary._ts_original_today  # taken in install(), before any test could patch it
+    days = set()
+    for name in _TODAY_MODULES:
+        fn = getattr(importlib.import_module(f"mahlwerk.routes.{name}"), "today", original)
+        if fn is not original:
+            days.add(fn().isoformat())
+    return days.pop() if len(days) == 1 else None
+
+
 class _ToHost(httpx.HTTPTransport):
     """Delivers to the test host but leaves the request as the client built it (cookies and redirects stay with
     "testserver"); the Host header keeps the name the app should see."""
@@ -165,6 +183,8 @@ class _ToHost(httpx.HTTPTransport):
         if env != self.app.last_env:
             self.app.last_env = env
             request.headers["x-test-env"] = env
+        if (day := _patched_today()) is not None:
+            request.headers["x-test-today"] = day
         if self.app.clock is not None:
             httpx.post(f"{_base()}/__test/clock/{self.app.id}/{self.app.clock()}", timeout=10)
         target = httpx.URL(_base())
@@ -192,5 +212,8 @@ def install() -> None:
     import fastapi.testclient
     import mahlwerk.main
 
+    from mahlwerk.routes import diary
+
+    diary._ts_original_today = diary.today
     mahlwerk.main.create_app = RemoteApp
     fastapi.testclient.TestClient = RemoteClient
