@@ -258,6 +258,8 @@ tests/test_export.py::test_an_empty_account_still_gives_the_archive
 tests/test_export.py::test_a_read_access_key_may_export
 tests/test_export.py::test_the_export_holds_nothing_of_other_users
 tests/test_export.py::test_demo_rows_of_the_own_account_are_left_out
+tests/test_export.py::test_format_2_carries_stable_ids_food_links_the_used_products_and_the_groups
+tests/test_export.py::test_the_products_of_other_people_come_only_when_used
 tests/test_fasting.py::test_nothing_running_at_first
 tests/test_fasting.py::test_start_stop_and_history
 tests/test_fasting.py::test_start_without_body_uses_now_and_the_setting

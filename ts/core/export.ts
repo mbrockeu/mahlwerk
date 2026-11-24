@@ -7,13 +7,13 @@ import type { Db } from './db.ts';
 import * as nutrients from './nutrients.ts';
 import { PER_100_KEYS, scale } from './nutrition.ts';
 import { roundHalfEven } from './num.ts';
-import { exportAccount, exportActivity, exportBadges, exportDiary, exportFasts, exportRecipes, exportSleep, exportTemplates, exportWater, exportWebhooks, exportWeights, exportWorkouts } from './store/export.ts';
+import { exportAccount, exportActivity, exportBadges, exportDiary, exportFasts, exportFoods, exportRecipeGroups, exportRecipes, exportSleep, exportTemplates, exportWater, exportWebhooks, exportWeights, exportWorkouts } from './store/export.ts';
 import { goalHistory, getGoal } from './store/goals.ts';
 import { getSettings } from './store/settings.ts';
 import { VERSION } from './version.ts';
 import { buildZip } from './zip.ts';
 
-const FORMAT_VERSION = 1;
+export const FORMAT_VERSION = 2;
 const FIRST_DAY = '0000-01-01', LAST_DAY = '9999-12-31'; // an open end of the range
 
 // CSV columns: [key, English header, German header]
@@ -55,12 +55,13 @@ async function diary(db: Db, userId: number, first: string, last: string, demo: 
     const values = scale(e.per_100, e.amount);
     const extra = nutrients.clean(e.extra);
     return {
-      day: e.day, meal: e.meal, name: e.name, brand: e.brand, amount: e.amount, unit: e.unit, logged_at: isoLocal(e.created_at),
+      uid: e.uid, day: e.day, meal: e.meal, name: e.name, brand: e.brand, amount: e.amount, unit: e.unit, logged_at: isoLocal(e.created_at),
       per_100: e.per_100, extra_per_100: extra,
       nutrients: {
         ...Object.fromEntries(Object.entries(values).map(([k, v]) => [k, round(v)])),
         ...Object.fromEntries(Object.entries(nutrients.scaleExtra(extra, e.amount)).map(([k, v]) => [k, round(v, 3)])),
       },
+      external_id: e.external_id, food_uid: e.food_uid, food_code: e.food_code,
     };
   });
 }
@@ -141,7 +142,7 @@ export async function buildExport(db: Db, user: { id: number; username: string; 
   const workouts = (await exportWorkouts(db, uid, a, b, demo)).map((w) => ({ ...w, started_at: isoLocal(w.started_at) }));
   const diaryData = await diary(db, uid, a, b, demo);
   const fasting = (await exportFasts(db, uid, a, b)).map((f) => ({
-    started_at: isoLocal(f.started_at), ended_at: isoLocal(f.ended_at), target_hours: f.target_hours,
+    uid: f.uid, started_at: isoLocal(f.started_at), ended_at: isoLocal(f.ended_at), target_hours: f.target_hours,
     hours: f.ended_at === null ? null : roundHalfEven((f.ended_at - f.started_at) / 3600, 2),
   }));
   const data: Json = {
@@ -162,6 +163,8 @@ export async function buildExport(db: Db, user: { id: number; username: string; 
     fasting,
     templates: withDates(await exportTemplates(db, uid), 'created_at'),
     recipes: withDates(await exportRecipes(db, uid, demo), 'updated_at'),
+    recipe_groups: withDates(await exportRecipeGroups(db, uid), 'created_at'),
+    foods: await exportFoods(db, uid, a, b, demo),
     badges: withDates(await exportBadges(db, uid, demo), 'earned_at'),
     webhooks: await webhooks(db, uid),
   };
