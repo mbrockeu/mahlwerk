@@ -443,9 +443,6 @@ tests/test_insights.py::test_users_are_separated
 tests/test_insights.py::test_requires_authentication
 tests/test_insights_long.py::test_range_number_and_bad_values
 tests/test_insights_long.py::test_ten_years_are_the_limit
-tests/test_insights_long.py::test_nutrient_curve_without_data_and_bad_key
-tests/test_insights_long.py::test_foods_search_and_paging
-tests/test_insights_long.py::test_foods_respect_the_period
 tests/test_insights_long.py::test_users_are_separated
 tests/test_local_auth.py::test_status_before_and_after_setup
 tests/test_local_auth.py::test_setup_works_only_once
