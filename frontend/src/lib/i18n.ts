@@ -212,7 +212,7 @@ const en = {
   weightBad: 'Enter a weight between 20 and 400 kg.', bodyFat: 'Body fat', leanMass: 'Lean mass', bodyOptional: 'optional',
   bodyBad: 'Body fat must be between 2 and 75 %, lean mass between 20 and 300 kg.', wtBodyFat: 'Body fat, right axis',
   wtBodyAria: 'Body fat {first} to {last} percent', weightDelete: 'Delete today\'s value', weightEmpty: 'No weight values yet.',
-  weightChange: 'since {day}', weightChart: 'Weight, last 90 days', weightLatest: 'Latest', weightDeleted: 'Value deleted',
+  weightChange: 'since {day}', weightChart: 'Weight, last {n} days', weightChartAll: 'Weight, all values', weightLatest: 'Latest', weightDeleted: 'Value deleted',
 
   // profile
   goalHint: 'Your own diary and goal stay private to you.',
@@ -936,7 +936,7 @@ const de: Record<Key, string> = {
   weightBad: 'Bitte ein Gewicht zwischen 20 und 400 kg eingeben.', bodyFat: 'Körperfett', leanMass: 'Magermasse', bodyOptional: 'optional',
   bodyBad: 'Körperfett muss zwischen 2 und 75 % liegen, Magermasse zwischen 20 und 300 kg.', wtBodyFat: 'Körperfett, rechte Achse',
   wtBodyAria: 'Körperfett {first} bis {last} Prozent', weightDelete: 'Heutigen Wert löschen', weightEmpty: 'Noch keine Gewichtswerte.',
-  weightChange: 'seit {day}', weightChart: 'Gewicht, letzte 90 Tage', weightLatest: 'Zuletzt', weightDeleted: 'Wert gelöscht',
+  weightChange: 'seit {day}', weightChart: 'Gewicht, letzte {n} Tage', weightChartAll: 'Gewicht, alle Werte', weightLatest: 'Zuletzt', weightDeleted: 'Wert gelöscht',
 
   goalHint: 'Tagebuch und Ziel sind nur für dich sichtbar.',
   goalSaved: 'Ziel gespeichert',

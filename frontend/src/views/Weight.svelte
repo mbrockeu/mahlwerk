@@ -8,6 +8,16 @@
   import { checkBadges, toast, ui } from '../lib/store.svelte';
   import type { WeightPoint } from '../lib/types';
 
+  // the chart's period, remembered per browser; the change tiles always look back up to 90 days, so at least that is loaded
+  const RANGES = [30, 90, 365, 0] as const; // 0 = everything
+  const RANGE_KEY = 'mahlwerk.weightDays';
+  const readRange = () => { try { const raw = localStorage.getItem(RANGE_KEY); return raw != null && (RANGES as readonly number[]).includes(Number(raw)) ? Number(raw) : 90; } catch { return 90; } };
+  let range = $state<number>(readRange());
+  function chooseRange(v: number) {
+    range = v;
+    try { localStorage.setItem(RANGE_KEY, String(v)); } catch { /* private mode: not remembered */ }
+    void load();
+  }
   const DAYS = 90;
   let points = $state<WeightPoint[] | null>(null);
   let text = $state('');
@@ -19,7 +29,7 @@
 
   async function load() {
     try {
-      points = await api.weights(DAYS);
+      points = await api.weights(range === 0 ? 3660 : Math.max(range, DAYS));
       if (!primed) {
         primed = true;
         const todayValue = points.find((p) => p.day === ui.today);
@@ -69,7 +79,10 @@
 
   const hasToday = $derived(!!points?.some((p) => p.day === ui.today));
   const latest = $derived(points && points.length ? points[points.length - 1] : null);
-  const first = $derived(points && points.length ? points[0] : null);
+  // the values in the chosen period (points may reach further back for the change tiles)
+  const start = $derived(range ? shiftDay(ui.today, -(range - 1)) : points?.[0]?.day ?? ui.today);
+  const shown = $derived(points ? points.filter((p) => p.day >= start) : null);
+  const first = $derived(shown && shown.length ? shown[0] : null);
   const delta = $derived(latest && first && latest !== first ? latest.kg - first.kg : null);
 
   // chart geometry
@@ -77,20 +90,20 @@
   const W = $derived(wide.on ? 720 : 340), H = $derived(wide.on ? 330 : 190);
   const PL = 38, PR = 12, PT = 14, PB = 24;
   const chart = $derived.by(() => {
-    if (!points || points.length === 0) return null;
-    const start = shiftDay(ui.today, -(DAYS - 1));
-    const kgs = points.map((p) => p.kg);
+    if (!shown || shown.length === 0) return null;
+    const span = Math.max(1, daysBetween(start, ui.today));
+    const kgs = shown.map((p) => p.kg);
     let lo = Math.floor(Math.min(...kgs) - 0.5);
     let hi = Math.ceil(Math.max(...kgs) + 0.5);
     if (hi - lo < 2) { lo -= 1; hi += 1; }
-    const x = (day: string) => PL + (daysBetween(start, day) / (DAYS - 1)) * (W - PL - PR);
+    const x = (day: string) => PL + (daysBetween(start, day) / span) * (W - PL - PR);
     const y = (kg: number) => PT + (1 - (kg - lo) / (hi - lo)) * (H - PT - PB);
-    const pts = points.map((p) => ({ x: x(p.day), y: y(p.kg), p }));
+    const pts = shown.map((p) => ({ x: x(p.day), y: y(p.kg), p }));
     const grid = [0, 1, 2, 3].map((i) => {
       const v = lo + ((hi - lo) * i) / 3;
       return { y: y(v), label: fmt(Math.round(v * 10) / 10, 1) };
     });
-    const ticks = [0, 30, 60, 89].map((d) => ({ x: x(shiftDay(start, d)), day: shiftDay(start, d) }));
+    const ticks = [0, 1, 2, 3].map((i) => shiftDay(start, Math.round((span * i) / 3))).map((day) => ({ x: x(day), day }));
     return { pts, grid, ticks, end: pts[pts.length - 1], line: pts.map((q, i) => `${i ? 'L' : 'M'}${q.x.toFixed(1)} ${q.y.toFixed(1)}`).join('') };
   });
   // key figures, all from the stored values: the change since the latest value that is at least n days older
@@ -117,8 +130,8 @@
     value: bodyLatest[m.key],
     changes: [7, 30, DAYS - 1].map((n) => ({ n: n === DAYS - 1 ? DAYS : n, v: bodyChange(body, m.key, shiftDay(bodyLatest.day, -n)) })),
   })) : []);
-  const lowest = $derived(points && points.length ? Math.min(...points.map((p) => p.kg)) : null);
-  const highest = $derived(points && points.length ? Math.max(...points.map((p) => p.kg)) : null);
+  const lowest = $derived(shown && shown.length ? Math.min(...shown.map((p) => p.kg)) : null);
+  const highest = $derived(shown && shown.length ? Math.max(...shown.map((p) => p.kg)) : null);
   const recent = $derived(
     points ? [...points].reverse().slice(0, 14).map((p, i, all) => {
       const before = all[i + 1];
@@ -127,6 +140,8 @@
   );
   const signed = (v: number) => `${v > 0 ? '+' : ''}${fmt1(v)}`;
   const shortLabel = (day: string) => shortDate(day).split(' ')[1];
+  const rangeLabel = (v: number) => (v === 0 ? t('rangeAll') : v === 365 ? t('range365') : t('wDays', { n: v }));
+  const chartLabel = $derived(range === 0 ? t('weightChartAll') : t('weightChart', { n: range }));
 </script>
 
 <div class="page split">
@@ -162,8 +177,13 @@
         {#if delta != null && first}<div class="chg"><span class="mono">{delta > 0 ? '+' : ''}{fmt1(Math.round(delta * 10) / 10)} {t('kg')}</span><span class="micro lab">{t('weightChange', { day: shortDate(first.day).split(' ')[1] })}</span></div>{/if}
       </div>
     </section>
+    <div class="ranges" role="group" aria-label={t('rangeLabel')}>
+      {#each RANGES as v}
+        <button class="chip small" class:on={range === v} aria-pressed={range === v} onclick={() => chooseRange(v)}>{rangeLabel(v)}</button>
+      {/each}
+    </div>
     <figure>
-      <svg viewBox="0 0 {W} {H}" role="img" aria-label={t('weightChart')}>
+      <svg viewBox="0 0 {W} {H}" role="img" aria-label={chartLabel}>
         {#each chart.grid as g}
           <path d="M{PL} {g.y}H{W - PR}" stroke="var(--hairline)" stroke-width="1.5" stroke-dasharray="3 4" />
           <text x={PL - 6} y={g.y + 4} text-anchor="end" class="axis">{g.label}</text>
@@ -176,7 +196,7 @@
         {#each chart.pts as q}<circle cx={q.x} cy={q.y} r="2.2" fill="var(--bar)" />{/each}
         <circle cx={chart.end.x} cy={chart.end.y} r="7" fill="var(--weight-orange)" stroke="var(--paper)" stroke-width="3" />
       </svg>
-      <figcaption class="micro quiet">{t('weightChart')}</figcaption>
+      <figcaption class="micro quiet">{chartLabel}</figcaption>
     </figure>
   {/if}
   {#if bodyTiles.length}
@@ -210,7 +230,7 @@
       <section class="stats">
         <div><span class="micro quiet">{t('wLowest')}</span><span class="sv display">{lowest == null ? '–' : fmt1(lowest)}<small> {t('kg')}</small></span></div>
         <div><span class="micro quiet">{t('wHighest')}</span><span class="sv display">{highest == null ? '–' : fmt1(highest)}<small> {t('kg')}</small></span></div>
-        <div><span class="micro quiet">{t('wEntriesCount')}</span><span class="sv display">{points.length}</span></div>
+        <div><span class="micro quiet">{t('wEntriesCount')}</span><span class="sv display">{shown?.length ?? 0}</span></div>
       </section>
       <section class="log">
         <h2 class="micro quiet">{t('wRecent')}</h2>
@@ -229,6 +249,8 @@
 </div>
 
 <style>
+  .ranges { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip.small { min-height: 36px; padding: 0 14px; font-size: 13px; }
   .entry { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
   .entry .field { flex: 1; }
   .body { order: 3; flex-basis: 100%; display: flex; gap: 10px; }
