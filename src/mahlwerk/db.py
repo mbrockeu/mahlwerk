@@ -1,6 +1,7 @@
 """SQLite storage: users, shared foods, per-user diary, goals and weights."""
 
 import json
+import re
 import secrets
 import sqlite3
 import time
@@ -504,6 +505,13 @@ def is_reserved_name(username: str) -> bool:
     return username.strip().lower() == RESERVED_USERNAME
 
 # A food row together with the recipe it was calculated from (NULL for everything else).
+def match_rank(words: list[str], haystack: str) -> int:
+    """How well a product matches the search words (lower case; every word occurs in `haystack`): per word 0 for a whole word
+    ("ei" in "Ei, gekocht"), 1 for the start of a word ("Eier"), 2 inside a word ("Kartoffelbrei"); the sum, lower is better."""
+    tokens = [t for t in re.split(r"[^\w]+", haystack) if t]
+    return sum(0 if word in tokens else 1 if any(t.startswith(word) for t in tokens) else 2 for word in words)
+
+
 FOOD_SELECT = ("SELECT food.*, (SELECT recipe.id FROM recipe WHERE recipe.food_id = food.id) AS recipe_id, "
                "(SELECT recipe.created_by FROM recipe WHERE recipe.food_id = food.id) AS recipe_owner FROM food")
 
@@ -907,6 +915,7 @@ class Store:
     def list_foods(self, query: str = "", source: str | None = None, limit: int = 50, exclude: tuple[str, ...] = (),
                    demo_account: bool = False) -> list[dict]:
         """Known products, newest first. The search looks at name, brand and barcode; `exclude` leaves out sources.
+        With a search, the better matches come first (`match_rank`), newest first among equally good ones.
         The foods of the demo account are listed only for the demo account itself (`demo_account`): the household's product list stays clean."""
         hide = "" if demo_account else f" AND NOT COALESCE({DEMO_ACCOUNT_FOOD}, 0)"
         with self._connect() as con:
@@ -925,8 +934,12 @@ class Store:
             haystack = " ".join(filter(None, (food["code"], data.get("name"), data.get("brand")))).lower()
             if all(word in haystack for word in words):
                 result.append(food)
-            if len(result) >= limit:
-                break
+                if not words and len(result) >= limit:
+                    break
+        if words:
+            ranks = [match_rank(words, " ".join(filter(None, (f["code"], f["data"].get("name"), f["data"].get("brand")))).lower()) for f in result]
+            order = sorted(range(len(result)), key=lambda i: ranks[i])  # stable: newest first among equal ranks
+            result = [result[i] for i in order[:limit]]
         return result
 
     def known_codes(self, codes: list[str]) -> set[str]:

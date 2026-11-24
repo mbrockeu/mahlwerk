@@ -138,6 +138,15 @@ def test_search_hides_empty_entries_and_filters(client):
     assert client.get("/api/v1/foods", params={"limit": 0}).status_code == 422
 
 
+def test_search_puts_whole_words_before_word_starts_before_inner_matches(client):
+    for name in ("Ei, gekocht", "Eierlikör", "Kartoffelbrei", "Hühnerei"):  # created in this order: newest last
+        assert client.post("/api/v1/foods", json={"name": name, "per_100": {"kcal": 100}}).status_code == 201
+    found = [f["name"] for f in client.get("/api/v1/foods", params={"q": "Ei"}).json()]
+    assert found == ["Ei, gekocht", "Eierlikör", "Hühnerei", "Kartoffelbrei"]  # equal rank: newest first
+    assert [f["name"] for f in client.get("/api/v1/foods", params={"q": "ei", "limit": 2}).json()] == ["Ei, gekocht", "Eierlikör"]
+    assert [f["name"] for f in client.get("/api/v1/foods").json()][:2] == ["Hühnerei", "Kartoffelbrei"]  # no search: newest first
+
+
 def test_food_validation(client):
     ok = {"name": "x", "per_100": {}}
     assert client.put(f"/api/v1/foods/barcode/{UNKNOWN}", json={"name": "", "per_100": {}}).status_code == 422

@@ -12,6 +12,10 @@
     { onpick: (food: Food) => void; onnew?: () => void; active?: boolean; query?: string } = $props();
 
   let results = $state<Food[]>([]);
+  // the stored products first, but not so many that the basic foods below are out of reach: the best 15, the rest on request
+  const FIRST = 15;
+  let showAll = $state(false);
+  const shown = $derived(showAll ? results : results.slice(0, FIRST));
   let searching = $state(false);
   let searchError = $state('');
   let timer = 0;
@@ -62,6 +66,7 @@
       const list = await api.foods(query.trim(), 50);
       if (mine !== searchToken) return;
       results = list;
+      showAll = false;
       searchError = '';
     } catch (err) {
       if (mine === searchToken) searchError = t('failed', { reason: err instanceof ApiError ? err.status : 'error' });
@@ -84,7 +89,10 @@
 {#if searchError}<p class="note warn">{searchError}</p>{/if}
 {#if results.length}
   {#if catalogItems.length}<h2 class="micro quiet">{t('yourProducts')}</h2>{/if}
-  <ul class="rows">{#each results as food (food.id)}<FoodRow {food} onpick={onpick} />{/each}</ul>
+  <ul class="rows">{#each shown as food (food.id)}<FoodRow {food} onpick={onpick} />{/each}</ul>
+  {#if results.length > shown.length}
+    <button type="button" class="btn quiet-btn" onclick={() => (showAll = true)}>{t('showMoreResults', { n: results.length - shown.length })}</button>
+  {/if}
 {:else if !catalogItems.length && !searching && !searchError}
   <p class="note">{t('noResults')}</p>
 {/if}
