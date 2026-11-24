@@ -6,12 +6,41 @@ import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { openSchema } from '../core/db.ts';
 import { makeApp } from './app.ts';
+import { OutError, type Outgoing } from '../core/outgoing.ts';
 import { openSqlite } from './sqlite.ts';
 
 const schema = readFileSync(new URL('../core/schema.sql', import.meta.url), 'utf8');
 const apps = new Map<string, { handle: ReturnType<typeof makeApp>; clock: { now: number | null }; db: { close?(): void } }>();
 const KEEP = 40; // a test uses at most a few apps; older ones are closed (file handles)
 let next = 1;
+
+/** Outgoing HTTP of a test app: nothing leaves the machine. Every request (and every DNS question) goes to the Python side
+ * (tests/ts_bridge.py), which answers it with the mock transport the test gave `create_app` for that purpose and with the fake
+ * resolver of conftest. The original URL travels in the JSON body; this exists only here, a production server has no such path. */
+function bridgeOutgoing(bridge: string, appId: string): Outgoing {
+  const call = async (path: string, payload: unknown) => {
+    const r = await fetch(`${bridge}/${path}/${appId}`, { method: 'POST', body: JSON.stringify(payload), headers: { 'content-type': 'application/json' } });
+    return (await r.json()) as any;
+  };
+  return {
+    async fetch(purpose, req) {
+      const body = typeof req.body === 'string' ? Buffer.from(req.body) : req.body;
+      const a = await call(`out/${purpose}`, {
+        method: req.method ?? 'GET', url: req.url, headers: req.headers ?? {}, body: body ? Buffer.from(body).toString('base64') : null,
+        timeout: req.timeout ?? null, address: req.address ?? null,
+      });
+      if (a.error) throw new OutError(a.error, a.message);
+      const bytes = Buffer.from(a.body, 'base64');
+      if (req.maxBytes !== undefined && bytes.length > req.maxBytes) throw new OutError('too_large');
+      return { status: a.status, headers: a.headers, body: new Uint8Array(bytes) };
+    },
+    async resolve(host, port) {
+      const a = await call('dns', { host, port });
+      if (a.error) throw new OutError('connect', a.message);
+      return a.addresses;
+    },
+  };
+}
 
 function json(res: import('node:http').ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { 'content-type': 'application/json' });
@@ -23,12 +52,13 @@ const server = createServer(async (req, res) => {
     if (req.url === '/__test/app' && req.method === 'POST') {
       const chunks: Buffer[] = [];
       for await (const c of req) chunks.push(c as Buffer);
-      const { env, db: path } = JSON.parse(Buffer.concat(chunks).toString());
+      const { env, db: path, bridge } = JSON.parse(Buffer.concat(chunks).toString());
       const db = openSqlite(path);
       await openSchema(db, schema);
       const clock = { now: null as number | null };
       const id = String(next++);
-      apps.set(id, { handle: makeApp({ db, env, now: () => clock.now ?? Date.now() / 1000, services: {} }), clock, db });
+      const services: Record<string, unknown> = bridge ? { out: bridgeOutgoing(bridge, id) } : {};
+      apps.set(id, { handle: makeApp({ db, env, now: () => clock.now ?? Date.now() / 1000, services }), clock, db });
       for (const [old, a] of apps) {
         if (apps.size <= KEEP) break;
         a.db.close?.();
