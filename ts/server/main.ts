@@ -19,5 +19,7 @@ addServices(ctx, dbPath, nodeOutgoing());
 await (ctx.services.images as RecipeImages).sweep(); // what no food refers to any more is tidied at start
 const handle = makeApp(ctx);
 const port = Number(env.MAHLWERK_PORT ?? 8120);
-createServer((req, res) => void handle(req, res)).listen(port, env.MAHLWERK_HOST ?? '127.0.0.1', () =>
+createServer((req, res) => {
+  handle(req, res).catch((e) => { console.error(e); if (!res.headersSent) { res.writeHead(500); res.end(); } else res.destroy(); });
+}).listen(port, env.MAHLWERK_HOST ?? '127.0.0.1', () =>
   console.log(`mahlwerk-ts listening on ${port}`));

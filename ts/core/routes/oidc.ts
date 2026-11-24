@@ -21,6 +21,11 @@ import { SignInRefused, oidcSignIn } from '../store/users.ts';
 import { addressKey } from './auth.ts';
 
 const COOKIE = 'mahlwerk_oidc';
+
+// Starlette's RedirectResponse: quote(url, safe=":/%#?=@[]!$&'()*+,;") – a header value never carries a raw non-ASCII character
+const KEEP = /[A-Za-z0-9_.\-~:/%#?=@[\]!$&'()*+,;]/;
+export const quoteLocation = (url: string): string =>
+  [...url].map((ch) => (KEEP.test(ch) ? ch : [...new TextEncoder().encode(ch)].map((b) => '%' + b.toString(16).toUpperCase().padStart(2, '0')).join(''))).join('');
 const KEY_NAME = 'oidc_cookie';
 const ERRORS = ['denied', 'failed', 'expired', 'blocked', 'conflict', 'exists', 'name'];
 
@@ -44,7 +49,7 @@ function fail(req: Req, code: string, detail: string) {
   if (!ERRORS.includes(code)) throw new Error('unknown sign-in error code');
   console.warn(`OpenID Connect sign-in failed (${code}): ${detail}`);
   dropCookie(req);
-  return respond({ status: 303, headers: { location: configOf(req.ctx).oidc!.home_path + '?auth_error=' + code } });
+  return respond({ status: 303, headers: { location: quoteLocation(configOf(req.ctx).oidc!.home_path + '?auth_error=' + code) } });
 }
 
 const loginQuery = z.object({ next: z.string().max(400).optional() });
@@ -78,7 +83,7 @@ export const routes: Route[] = [
     const pending: Pending = { state: st, nonce, verifier, next: safeNext(q.next, config.home_path) };
     // Lax, not Strict: the way back is a top-level navigation coming from the provider, which Strict would not send it with
     outOf(req).cookies.push(setCookieHeader(cookieName(req), await sealLogin(await cookieKey(ctx, KEY_NAME), pending, ctx.now()), { maxAge: 600, secure: secure(req) }));
-    return respond({ status: 302, headers: { location: url } });
+    return respond({ status: 302, headers: { location: quoteLocation(url) } });
   }, { auth: false }),
 
   route('GET', '/api/v1/auth/oidc/callback', async (req) => {
@@ -110,6 +115,6 @@ export const routes: Route[] = [
     }
     dropCookie(req);
     await startSession(req, user.id);
-    return respond({ status: 303, headers: { location: pending.next } });
+    return respond({ status: 303, headers: { location: quoteLocation(pending.next) } });
   }, { auth: false }),
 ];

@@ -26,7 +26,9 @@ function wrap(): string[] {
   if (wrapper) return wrapper;
   const prefix: string[] = [];
   if (available('unshare', ['--user', '--net', '--map-root-user', 'true'])) prefix.push('unshare', '--user', '--net', '--map-root-user');
+  else console.warn('mahlwerk: picture child runs WITHOUT its own user and network namespace (unshare --user --net is not possible here)');
   if (available('prlimit', ['--cpu=5', 'true'])) prefix.push('prlimit', `--cpu=${CPU_SECONDS}`, '--core=0', '--fsize=0', '--nofile=256');
+  else console.warn('mahlwerk: picture child runs WITHOUT cpu, file size and file limits (prlimit is not available)');
   return (wrapper = prefix);
 }
 

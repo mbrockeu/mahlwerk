@@ -47,13 +47,19 @@ export function openSqlite(path: string): Db {
       let release!: () => void;
       lock = new Promise((r) => (release = r));
       await before;
-      con.exec('BEGIN IMMEDIATE');
+      try {
+        con.exec('BEGIN IMMEDIATE'); // inside the try: a failing BEGIN (database locked) must release the lock too
+      } catch (e) {
+        pending--;
+        release();
+        throw e;
+      }
       try {
         const out = await fn(inner);
         con.exec('COMMIT');
         return out;
       } catch (e) {
-        con.exec('ROLLBACK');
+        if (con.isTransaction) con.exec('ROLLBACK');
         throw e;
       } finally {
         pending--;

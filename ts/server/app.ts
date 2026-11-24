@@ -108,8 +108,13 @@ export function makeApp(ctx: Ctx, routes: Route[] = ROUTES) {
     let plain = false; // an answer of the body limit: it carries only its own headers
     try {
       await ready;
-      const url = new URL(nreq.url ?? '/', 'http://x');
-      path = decodePath(url.pathname);
+      // the request target as sent, like uvicorn: no WHATWG parsing (it reads `//x/api/…` as host x and path /api/…, and folds
+      // dot segments), only the percent escapes of the path decoded once
+      const target = nreq.url ?? '/';
+      if (!target.startsWith('/')) throw new HttpError(400, 'Bad Request');
+      const q = target.indexOf('?');
+      path = decodePath(q < 0 ? target : target.slice(0, q));
+      const query = new URLSearchParams(q < 0 ? '' : target.slice(q + 1));
       const method = nreq.method ?? 'GET';
       const checked = WRITE_METHODS.includes(method) && path.startsWith('/api/');
       // only a write under /api/ has a body that is read (and limited); the Python app never reads any other one
@@ -124,7 +129,7 @@ export function makeApp(ctx: Ctx, routes: Route[] = ROUTES) {
           throw new HttpError(422, [{ type: 'json_invalid', loc: ['body', 0], msg: 'JSON decode error' }]);
         }
       };
-      res = await dispatch({ method, path, params: {}, query: url.searchParams, headers, body: undefined, scheme: scheme ?? 'http',
+      res = await dispatch({ method, path, params: {}, query, headers, body: undefined, scheme: scheme ?? 'http',
         peer: peer ?? nreq.socket.remoteAddress ?? 'unknown', ctx }, body);
     } catch (e) {
       if (e instanceof Refused) {
@@ -137,7 +142,13 @@ export function makeApp(ctx: Ctx, routes: Route[] = ROUTES) {
       }
     }
     if (!plain) res = { ...res, headers: withSecurityHeaders(res.headers, path, await csp) };
-    write(nres, res, nreq.method === 'HEAD');
+    try {
+      write(nres, res, nreq.method === 'HEAD');
+    } catch (e) { // e.g. a header value Node refuses: a 500 instead of an unhandled rejection that ends the process
+      console.error(e);
+      if (!nres.headersSent) write(nres, { status: 500, body: 'Internal Server Error', headers: { 'content-type': 'text/plain' } }, false);
+      else nres.destroy();
+    }
     if (plain) nres.on('finish', () => nreq.destroy()); // the refusal is on its way; whatever the client still sends is not read
   };
 }
