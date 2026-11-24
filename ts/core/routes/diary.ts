@@ -52,12 +52,12 @@ async function entryEvent(req: Req, row: EntryRow) {
   };
 }
 
-async function emitEntries(req: Req, rows: EntryRow[]): Promise<void> {
+export async function emitEntries(req: Req, rows: EntryRow[]): Promise<void> {
   for (const row of rows) emit(req, req.user!, 'entry.created', await entryEvent(req, row));
 }
 
 /** The food an entry is booked from and the snapshot the entry keeps of it (404 for an unknown food). */
-async function foodCopy(req: Req, foodId: number): Promise<{ id: number; copy: Snapshot }> {
+export async function foodCopy(req: Req, foodId: number): Promise<{ id: number; copy: Snapshot }> {
   const food = await getFood(req.ctx.db, foodId, Boolean(req.user!.is_demo));
   if (!food || !food.found) throw new HttpError(404, 'unknown food');
   const data = food.data!;
@@ -124,7 +124,7 @@ async function getDay(req: Req): Promise<Day> {
   };
 }
 
-const entriesOut = async (req: Req, ids: number[]) => ({
+export const entriesOut = async (req: Req, ids: number[]) => ({
   entries: await Promise.all(ids.map(async (i) => entryOut((await getEntry(req.ctx.db, req.user!.id, i))!))),
 });
 
