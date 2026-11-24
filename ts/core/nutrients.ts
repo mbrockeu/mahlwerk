@@ -1,5 +1,5 @@
 // Directory of the additional nutrients (nutrients.py): the part the diary and the food routes need. The importers
-// (Open Food Facts, BLS, Yazio conversions) come with the packages that use them.
+// (Open Food Facts, BLS conversions) come with the packages that use them; the Yazio ones are here.
 import { pySum, roundHalfEven } from './num.ts';
 
 export interface Nutrient { key: string; group: string; unit: string; nrv: number | null; off: string | null; yazio: string | null; max: number }
@@ -127,4 +127,33 @@ export function extraFromOff(lookup: (column: string) => number | null, fat: num
     result[x.key] = value;
   }
   return result;
+}
+
+// --- Yazio export values (yazio.py imports them) ---
+
+// Yazio uses more than one spelling for some minerals; the first one is listed on the nutrient itself.
+const YAZIO_ALIASES: Record<string, string> = { 'mineral.fluorine': 'fluoride' };
+export const YAZIO_KEYS: ReadonlyMap<string, string> = new Map([
+  ...NUTRIENTS.filter((x) => x.yazio).map((x): [string, string] => [x.yazio!, x.key]),
+  ...Object.entries(YAZIO_ALIASES),
+]);
+
+/** Additional nutrients from a Yazio nutrient object, and how many values had to be discarded. `values` maps Yazio keys to grams;
+ * `per` turns such a value into grams per 100 g/ml (100 for the Yazio per-gram products, 1 for the absolute values of an entry that is
+ * stored as exactly 100 g). Keys without a counterpart here are ignored (the caller counts them). A value that is not a number, is
+ * negative, implausibly large or larger than its parent (`fat`, `carbs` in g) is discarded and counted. */
+export function extraFromYazio(values: Record<string, unknown>, per: number, fat: number | null = null, carbs: number | null = null): [Extra, number] {
+  const result: Extra = {};
+  let dropped = 0;
+  for (const [yazioKey, raw] of Object.entries(values)) {
+    const key = YAZIO_KEYS.get(yazioKey);
+    if (key === undefined) continue;
+    const number = parseNumber(raw);
+    const value = number === null ? null : fromOff(key, number * per);
+    if (value === null) dropped++;
+    else if (fat !== null && PARTS_OF_FAT.includes(key) && value > fat + TOLERANCE) dropped++;
+    else if (carbs !== null && PARTS_OF_CARBS.includes(key) && value > carbs + TOLERANCE) dropped++;
+    else result[key] = value;
+  }
+  return [result, dropped];
 }

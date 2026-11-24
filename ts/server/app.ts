@@ -129,7 +129,7 @@ export function makeApp(ctx: Ctx, routes: Route[] = ROUTES) {
           throw new HttpError(422, [{ type: 'json_invalid', loc: ['body', 0], msg: 'JSON decode error' }]);
         }
       };
-      res = await dispatch({ method, path, params: {}, query, headers, body: undefined, scheme: scheme ?? 'http',
+      res = await dispatch({ method, path, params: {}, query, headers, body: undefined, raw, scheme: scheme ?? 'http',
         peer: peer ?? nreq.socket.remoteAddress ?? 'unknown', ctx }, body);
     } catch (e) {
       if (e instanceof Refused) {

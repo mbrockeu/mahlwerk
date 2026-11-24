@@ -30,10 +30,11 @@ import { routes as vision } from './vision.ts';
 import { routes as water } from './water.ts';
 import { routes as webhooks } from './webhooks.ts';
 import { routes as webRecipes } from './webRecipes.ts';
+import { routes as yazio } from './yazio.ts';
 
 export const ROUTES: Route[] = [
   ...health, ...auth, ...oidc, ...demoView, ...profile, ...tokens, ...admin,
   ...catalog, ...diary, ...combos, ...foods, ...templates, ...suggestions, ...recipes, ...recipeGroups,
   ...insights, ...badges, ...water, ...fasting, ...nutrients, ...summary, ...activity, ...exportRoutes, ...body,
-  ...images, ...labelScans, ...vision, ...webhooks, ...webRecipes,
+  ...images, ...labelScans, ...vision, ...webhooks, ...webRecipes, ...yazio,
 ];
