@@ -300,6 +300,10 @@ export interface HubOptions { factory: (settings: Settings) => CookidooClient; c
 export class Hub {
   factory: (settings: Settings) => CookidooClient;
   clock: () => number;
+  // the limits; the tests lower them
+  maxClients = MAX_CLIENTS;
+  maxAccounts = MAX_ACCOUNTS;
+  globalCallLimit = GLOBAL_CALL_LIMIT;
   private accounts = new Map<string, AccountState>();
   private calls: number[] = [];
   private bulkCalls: number[] = [];
@@ -329,7 +333,7 @@ export class Hub {
   private reserveCall(account: AccountState, bulk = false): void {
     const now = this.clock();
     const [mine, everyone] = bulk ? [account.bulkCalls, this.bulkCalls] : [account.calls, this.calls];
-    const limits = bulk ? [BULK_CALL_LIMIT, GLOBAL_BULK_CALL_LIMIT] : [CALL_LIMIT, GLOBAL_CALL_LIMIT];
+    const limits = bulk ? [BULK_CALL_LIMIT, GLOBAL_BULK_CALL_LIMIT] : [CALL_LIMIT, this.globalCallLimit];
     [mine, everyone].forEach((calls, i) => {
       const [limit, window] = limits[i]!;
       if (recent(calls, window, now) >= limit) throw new CookidooError('busy');
@@ -355,7 +359,7 @@ export class Hub {
     if (account === undefined) {
       account = new AccountState(access.key);
       this.accounts.set(access.key, account);
-      while (this.accounts.size > MAX_ACCOUNTS) {
+      while (this.accounts.size > this.maxAccounts) {
         const oldest = [...this.accounts].find(([k, a]) => a.client === null && !a.lock.locked() && k !== access.key);
         if (oldest === undefined) break;
         this.accounts.delete(oldest[0]);
@@ -380,7 +384,7 @@ export class Hub {
   }
 
   private async makeRoom(keep: AccountState): Promise<void> {
-    while (this.clientCount() >= MAX_CLIENTS) {
+    while (this.clientCount() >= this.maxClients) {
       const victim = [...this.accounts.values()].find((a) => a.client !== null && a !== keep && !a.lock.locked());
       if (victim === undefined) throw new CookidooError('busy');
       await this.drop(victim);
