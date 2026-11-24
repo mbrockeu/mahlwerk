@@ -9,13 +9,16 @@
 // Off in the app, and why:
 // - sign-in: `single` (one person, no password, no session); OIDC and the demo account (switch) do not exist;
 // - access tokens, webhooks: nothing outside the device can reach it (switches fixed off, the profile hides their cards);
-// - Cookidoo, web recipes, Yazio sign-in, photo recognition and the label reader: switches fixed off; web recipes would need DNS and
-//   a pinned address on the bridge (see outgoing.ts), the photo parts the parked vision ops;
+// - web recipes, Yazio sign-in, photo recognition and the label reader: switches fixed off; web recipes would need DNS and a pinned
+//   address on the bridge (see outgoing.ts), the photo parts the parked vision ops;
+// On: Cookidoo (its client follows redirects by hand and keeps its own cookies, so the plain `http` op is enough; the account is
+// stored in the vault, whose key comes from the keychain, see vaultKey.ts; its pictures stay links, as there is no picture service);
 // - the Yazio file import: it has no switch, so its routes are not registered (404);
 // - recipe pictures: no picture service (no sharp): the picture routes answer 501 like a server without one;
 // - the catalogue refresh: no refresh service (501, like a server without one); the catalogue files come with the app;
 // - demo data (MAHLWERK_DEMO_DATA unset).
 import { initAuth } from '../core/auth.ts';
+import { installCookidoo } from '../core/cookidooService.ts';
 import { bodyOf, decodePath, errorRes, makeRouter } from '../core/dispatch.ts';
 import type { FoodLinks } from '../core/foodView.ts';
 import { HttpError, type Ctx, type Res, type Route } from '../core/http.ts';
@@ -26,10 +29,11 @@ import type { Bridge } from './bridge.ts';
 import { bridgeCatalog } from './catalog.ts';
 import { openNativeDb } from './nativeDb.ts';
 import { bridgeOutgoing } from './outgoing.ts';
+import { bridgeKeyFile } from './vaultKey.ts';
 
 /** Fixed: the app's own environment cannot switch these back on. */
 export const APP_ENV: Record<string, string> = {
-  MAHLWERK_AUTH: 'single', MAHLWERK_TOKENS: 'off', MAHLWERK_WEBHOOKS: 'off', MAHLWERK_COOKIDOO: 'off', MAHLWERK_WEB_RECIPES: 'off',
+  MAHLWERK_AUTH: 'single', MAHLWERK_TOKENS: 'off', MAHLWERK_WEBHOOKS: 'off', MAHLWERK_COOKIDOO: 'on', MAHLWERK_COOKIDOO_IMAGES: 'off', MAHLWERK_WEB_RECIPES: 'off',
   MAHLWERK_YAZIO_LOGIN: 'off', MAHLWERK_DEMO_ACCOUNT: 'off', MAHLWERK_VISION: 'off', MAHLWERK_CATALOG_REFRESH: 'off', MAHLWERK_DEMO_DATA: '',
 };
 
@@ -53,9 +57,10 @@ export async function openLocal(opts: LocalOptions): Promise<{ ctx: Ctx; dispatc
   const foodLinks: FoodLinks = { cookidooUrl: () => null, webLink: safeLink, hostLabel };
   const ctx: Ctx = {
     db, env: { ...(opts.env ?? {}), ...APP_ENV }, now: opts.now ?? (() => Date.now() / 1000),
-    services: { out: bridgeOutgoing(opts.bridge), catalog: bridgeCatalog(opts.bridge), foodLinks },
+    services: { out: bridgeOutgoing(opts.bridge, ['off', 'cookidoo']), catalog: bridgeCatalog(opts.bridge), foodLinks, keyFile: bridgeKeyFile(opts.bridge) },
   };
   initAuth(ctx);
+  installCookidoo(ctx); // no picture service: the Cookidoo pictures stay links (MAHLWERK_COOKIDOO_IMAGES off)
   const routeRequest = makeRouter(APP_ROUTES);
 
   async function answer(method: string, rawPath: string, query: string, headers: Record<string, string>, raw: Uint8Array): Promise<Res> {

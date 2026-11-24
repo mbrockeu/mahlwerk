@@ -21,10 +21,13 @@ const b64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s 
 const unb64 = (t) => Uint8Array.from(atob(t), (c) => c.charCodeAt(0));
 const arg = (v) => (v !== null && typeof v === 'object' && typeof v.b64 === 'string' ? unb64(v.b64) : v);
 
+const SECRET_KEY = b64(crypto.getRandomValues(new Uint8Array(32))); // this "device's" keychain key (per worker)
+
 async function handle(msg) {
   const { sqlite3, dbs } = await ready;
   const name = msg.db ?? 'main';
   if (msg.op === 'http') throw new Error('connect: no network in the e2e app mode');
+  if (msg.op === 'secretKey') return { keyB64: SECRET_KEY };
   if (msg.op !== 'sql' && msg.op !== 'exec') throw new Error(`unknown op ${msg.op}`);
   const db = dbs[name];
   if (!db) throw new Error('missing');

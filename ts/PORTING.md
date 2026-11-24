@@ -43,9 +43,10 @@ Security code (auth, sessions, tokens, OIDC, vault, netguard/SSRF, upload checks
 ## App-Host
 The same interface and core run in the iOS app (WKWebView), the data in SQLite on the phone. `ts/app/localHost.ts` builds the ctx
 like `server/main.ts` for one device and answers requests in-process through `core/dispatch.ts` (the router the server uses), without
-host check, CSRF and security headers; the body limit stays. Fixed off (`APP_ENV`): tokens, webhooks, Cookidoo, web recipes, Yazio
+host check, CSRF and security headers; the body limit stays. Fixed off (`APP_ENV`): tokens, webhooks, Cookidoo pictures, web recipes, Yazio
 sign-in, demo account, photo recognition / label reader, demo data, catalogue refresh; the Yazio file import routes are left out;
-no picture service (501 like a server without one). Auth is `single`.
+no picture service (501 like a server without one). Auth is `single`. Cookidoo is on (shared and own account; the
+vault key comes from the keychain, see `secretKey`).
 - Build: `cd frontend && npm run build:app` -> `web/dist-app/` (index.html + assets; entry `src/appMain.ts`, which sets
   `window.mahlwerkLocal`; `src/lib/local.ts` routes `request()`, pictures and the export through it). `npm run build` is unchanged.
 - Tests: `ts/tests/appHost.test.ts` (node:sqlite stand-in of the native side, `tests/appBridge.ts`); `e2e/run.sh app` runs the
@@ -62,8 +63,12 @@ no picture service (501 like a server without one). Auth is `single`.
   - `{op:"exec", db:"main", sql}` -> `{}`: sqlite3_exec, several statements in one call (the schema is sent as
     `BEGIN; …; PRAGMA user_version = 20; COMMIT;`), BEGIN IMMEDIATE / COMMIT / ROLLBACK. The JS side holds the transaction lock.
   - `{op:"http", method, url, headers, bodyB64|null, timeoutMs, connectTimeoutMs, maxBytes}` -> `{status, headers, bodyB64}`:
-    no redirects followed, no cookies stored. Errors start with `timeout`, `too_large` or `connect` (anything else counts as other).
-    Only the Open Food Facts lookup uses it; there is no DNS op, so every netguard-checked target is refused.
+    no redirects followed, no cookies stored or added (URLSession: `httpShouldSetCookies = false`, no cookie storage), the request
+    headers sent as given (also `User-Agent` and `Cookie`). Errors start with `timeout`, `too_large` or `connect` (anything else counts
+    as other). Used by the Open Food Facts lookup and Cookidoo (its client follows redirects by hand and keeps its own cookies);
+    there is no DNS op, so every netguard-checked target is refused.
+  - `{op:"secretKey"}` -> `{keyB64}`: 32 random bytes, made once and kept in this device's keychain (not in the database, not in
+    the export): the key of the stored secrets (Cookidoo accounts). Anything but 32 bytes, or an error: storing is refused (503).
   - When the web view loads a page (reload, crash), an open transaction must be rolled back; the JS side also sends a
     `ROLLBACK` (error ignored) before it opens the database.
 

@@ -132,7 +132,7 @@ test('what is off in the app answers like a server without it', async () => {
   const native = fresh();
   const { dispatch } = await openLocal({ bridge: native.bridge, schemaSql });
   const me = json(await dispatch('GET', '/api/v1/me', '', {}));
-  assert.deepEqual(me.features, { access_tokens: false, webhooks: false, cookidoo: false, web_recipes: false });
+  assert.deepEqual(me.features, { access_tokens: false, webhooks: false, cookidoo: true, web_recipes: false });
   assert.equal((await dispatch('GET', '/api/v1/me/yazio', '', {})).status, 404);
   assert.equal((await dispatch('POST', '/api/v1/admin/catalog/refresh', '', JSON_HEADERS)).status, 501);
   assert.equal((await dispatch('GET', '/api/v1/vision/status', '', {})).status, 200);
@@ -183,4 +183,31 @@ test('the app sources import nothing of node', () => {
     assert.doesNotMatch(text, /from '(node:|\.\.\/server\/)/, file);
   }
   void DatabaseSync;
+});
+
+test('Cookidoo in the app: the own account is stored with the keychain key, the client talks over the http op', async () => {
+  const seen: any[] = [];
+  const native = fresh(async (m) => { seen.push(m); throw new Error('connect: no network in the tests'); });
+  const { dispatch } = await openLocal({ bridge: native.bridge, schemaSql });
+  const body = new TextEncoder().encode(JSON.stringify({ email: 'koch@example.org', password: 'geheim-123', country: 'de', language: 'de-DE' }));
+  const put = await dispatch('PUT', '/api/v1/me/cookidoo-account', '', JSON_HEADERS, body);
+  assert.equal(put.status, 200, new TextDecoder().decode(put.body!));
+  assert.equal(JSON.stringify(json(put)).includes('geheim'), false);
+  const own = json(await dispatch('GET', '/api/v1/me/cookidoo-account', '', {}));
+  assert.equal(JSON.stringify(own).includes('k***@example.org'), true);
+  const stored = (await native.bridge({ op: 'sql', db: 'main', sql: 'SELECT blob FROM secret', args: [] })).rows;
+  assert.equal(stored.length, 1);
+  assert.equal(Buffer.from(stored[0].blob.b64, 'base64').includes(Buffer.from('geheim')), false); // encrypted at rest
+  await dispatch('POST', '/api/v1/me/cookidoo-account/check', '', JSON_HEADERS, new Uint8Array(0));
+  assert.equal(seen.length > 0 && seen.every((m) => new URL(m.url).protocol === 'https:'), true); // went out over the bridge
+  native.close();
+});
+
+test('without a keychain key the app refuses to store an account instead of making a key of its own', async () => {
+  const native = fresh();
+  const bridge = async (m: any) => { if (m.op === 'secretKey') throw new Error('keychain unavailable'); return native.bridge(m); };
+  const { dispatch } = await openLocal({ bridge, schemaSql });
+  const body = new TextEncoder().encode(JSON.stringify({ email: 'koch@example.org', password: 'geheim-123', country: 'de', language: 'de-DE' }));
+  assert.equal((await dispatch('PUT', '/api/v1/me/cookidoo-account', '', JSON_HEADERS, body)).status, 503);
+  native.close();
 });

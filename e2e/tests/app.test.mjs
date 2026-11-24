@@ -12,7 +12,7 @@ test('app: a basic food from the catalogue on the device, found and added', { sk
   const hits = await api('GET', 'catalog?q=hafer');
   assert.equal(hits[0]?.name, 'Haferflocken');
   const me = await api('GET', 'me');
-  assert.deepEqual(me.features, { access_tokens: false, webhooks: false, cookidoo: false, web_recipes: false });
+  assert.deepEqual(me.features, { access_tokens: false, webhooks: false, cookidoo: true, web_recipes: false });
   await withPage(browser, 'app-catalog', async (page) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Add to Breakfast' }).click();

@@ -26,6 +26,7 @@ export function nodeBridge(paths: { main: string; bls?: string; catalog?: string
     return (open[name] = new DatabaseSync(path, { readOnly: name !== 'main' }));
   };
   const log: Msg[] = [];
+  const secretKey = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))); // this "device's" keychain key
   return {
     log,
     async bridge(msg) {
@@ -41,6 +42,7 @@ export function nodeBridge(paths: { main: string; bls?: string; catalog?: string
         const meta = c.prepare('SELECT changes() AS changes, last_insert_rowid() AS lastId').get() as any;
         return { rows: rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, encode(v)]))), changes: meta.changes, lastId: meta.lastId };
       }
+      if (msg.op === 'secretKey') return { keyB64: secretKey };
       if (msg.op === 'http') {
         if (!http) throw new Error('connect: no network in the tests');
         return http(msg);
