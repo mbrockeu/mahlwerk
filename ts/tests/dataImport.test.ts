@@ -249,3 +249,61 @@ test('refused: not an export, unknown format, a key twice, too large, a ZIP bomb
   }
   assert.equal((await send(w, 'ann', 'GET', '/api/v1/me')).json.features.data_import, true);
 });
+
+test('rows that exist on both sides under different ids meet by their natural key: Yazio entry, Health workout, barcode', async () => {
+  const one = await world(), two = await world();
+  await fill(one, 'ann');
+  // an entry from a Yazio import and a workout from Apple Health carry the id of their source
+  await one.ctx.db.run("UPDATE diary_entry SET external_id = 'yazio:e1' WHERE id = (SELECT min(id) FROM diary_entry)");
+  await one.ctx.db.run("UPDATE workout SET external_id = 'health:w1'");
+  const zip = await exportZip(one, 'ann');
+  const first = await preview(two, 'ann', zip);
+  assert.equal((await confirm(two, 'ann', first.json.token)).status, 200);
+  // the other side got its ids on its own (the v21 backfill of each database): every uid differs
+  for (const table of ['diary_entry', 'workout', 'food', 'recipe', 'template', 'fast', 'recipe_group']) {
+    await two.ctx.db.run(`UPDATE ${table} SET uid = lower(hex(randomblob(16)))`);
+  }
+  const counts = (await preview(two, 'ann', zip)).json.modes.merge.counts;
+  assert.deepEqual([counts.workouts.new, counts.workouts.unchanged], [0, 1]);
+  assert.equal(counts.diary.unchanged, 1); // the Yazio entry
+  assert.equal(counts.diary.new, 3); // hand-logged entries have no key but their uid: they would come twice
+  assert.deepEqual([counts.foods.new, counts.foods.unchanged], [1, 1]); // the bar by its barcode; the own oats have none
+  assert.equal(counts.recipes.new, 1); // a recipe has no key but its uid: it would come twice ...
+  assert.equal(counts.recipe_groups.changed, 1); // ... and join the group, found by its name
+  assert.equal(counts.templates.new, 1);
+  assert.deepEqual([counts.weight.unchanged, counts.weight.new], [2, 0]); // by day
+});
+
+test('the goal of the file wins also over a later change here, as a change from today on', async () => {
+  const w = await world();
+  await fill(w, 'ann');
+  const file = await jsonOf(await exportZip(w, 'ann'));
+  // a later change here (a day after the file's newest)
+  await w.ctx.db.run("INSERT INTO goal_history (user_id, valid_from, kcal, protein, carbs, fat, water_ml, steps, changed_at) SELECT id, '2999-01-01', 1500, 90, 150, 50, NULL, NULL, 1 FROM user WHERE username = 'ann'");
+  await w.ctx.db.run("UPDATE goal SET kcal = 1500, protein = 90, carbs = 150, fat = 50 WHERE user_id = (SELECT id FROM user WHERE username = 'ann')");
+  const p = await preview(w, 'ann', JSON.stringify(file));
+  assert.deepEqual(p.json.warnings.map((x: any) => x.code), ['goal_from_today']);
+  assert.equal(p.json.modes.merge.counts.goal.changed, 1);
+  assert.equal((await confirm(w, 'ann', p.json.token)).status, 200);
+  assert.equal((await send(w, 'ann', 'GET', '/api/v1/me')).json.goal.kcal, 2100);
+});
+
+test('replace: the products of a removed Yazio batch lose the batch; a guest\'s new products are the guest\'s', async () => {
+  const w = await world();
+  await fill(w, 'ann');
+  const zip = await exportZip(w, 'ann');
+  const annId = (await w.ctx.db.get<any>("SELECT id FROM user WHERE username = 'ann'"))!.id;
+  const batch = (await w.ctx.db.run("INSERT INTO import_batch (user_id, kind, created_at) VALUES (?, 'yazio', 1)", [annId])).lastId;
+  await w.ctx.db.run("INSERT INTO food (code, source, found, data, fetched_at, import_id) VALUES (NULL, 'yazio', 1, '{\"name\":\"Y\",\"per_100\":{}}', 1, ?)", [batch]);
+  const p = await preview(w, 'ann', zip);
+  assert.equal((await confirm(w, 'ann', p.json.token, 'replace')).status, 200);
+  assert.equal((await w.ctx.db.get<any>('SELECT count(*) AS n FROM food WHERE import_id IS NOT NULL'))!.n, 0);
+  assert.equal((await w.ctx.db.get<any>("SELECT count(*) AS n FROM food WHERE source = 'yazio'"))!.n, 1); // the product itself stays
+  // a guest imports a product that was not their own in the file: here it is theirs
+  const file = await jsonOf(zip);
+  const bar = file.foods.find((f: any) => f.code);
+  const g = await preview(w, 'gast', JSON.stringify({ ...file, foods: [{ ...bar, code: '4000000000017', uid: 'ab'.repeat(16), own: false }] }), '');
+  assert.equal((await confirm(w, 'gast', g.json.token, 'merge', '')).status, 200);
+  const owner = await w.ctx.db.get<any>("SELECT created_by FROM food WHERE code = '4000000000017'");
+  assert.equal(owner!.created_by, (await w.ctx.db.get<any>("SELECT id FROM user WHERE username = 'gast'"))!.id);
+});

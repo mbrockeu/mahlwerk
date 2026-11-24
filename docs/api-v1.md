@@ -304,8 +304,9 @@ into their own account; an access key is refused (**403**), the demo account too
   (case-insensitive), then uid. They change only where the caller may change them under the normal rules (Guests and the household);
   otherwise they stay and count as skipped (`not_editable`). A group is never emptied: members the file names are added. New products and
   recipes belong to the importing user (a product that was not `own` in the file belongs to the household). Links of entries and items go to
-  the local food with that uid or barcode, else stay null (the entry keeps its values; warning `links_unknown`). The goal is the newest
-  change of the merged history (warning `goal_newer_here` when that is not the file's). Settings: only the keys of `PATCH /me/settings`,
+  the local food with that uid or barcode, else stay null (the entry keeps its values; warning `links_unknown`). The goal is the file's;
+  when a change here is newer than the file's newest, the file's goal is recorded as a change from today on, like `PUT /me/goal` (warning
+  `goal_from_today`), so earlier days keep their goal. Settings: only the keys of `PATCH /me/settings`,
   checked like there (`not_a_setting`, `invalid`). Webhooks are not imported (`not_imported`, their secret is not in the file).
   Rows of other people are never changed.
 - **Replace** first deletes the caller's own diary, weights, water, activity, sleep, workouts, fasts, templates, goal and goal history,

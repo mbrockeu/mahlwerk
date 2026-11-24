@@ -257,6 +257,7 @@ def test_the_export_holds_nothing_of_other_users(duo):
     ben.patch("/api/v1/me", json={"display_name": "Bens Anzeigename"})
     files = open_zip(ann.get(EXPORT))
     everything = b"\n".join(files.values()).decode("utf-8-sig")
+    everything = re.sub(r"\b[0-9a-f]{32}\b", "", everything)  # the random row ids (format 2) may hold any digits
     for trace in ("BensGeheimnis", "BensLauf", "BensVorlage", "BensRezept", "99.9", "4321", "3333", "Bens Anzeigename", "ben"):
         assert trace not in everything, trace
     data = json.loads(files["mahlwerk-export.json"])

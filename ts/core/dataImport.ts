@@ -17,7 +17,7 @@
 //   are read once per table up front, new rows of the long tables are written in batches.
 import { z } from 'zod';
 import { CODES as BADGE_CODES } from './badges.ts';
-import { dayToDate } from './dates.ts';
+import { dayToDate, today } from './dates.ts';
 import { toJson, type Db, type Row } from './db.ts';
 import { SINCE_START } from './goals.ts';
 import type { User } from './http.ts';
@@ -101,7 +101,7 @@ const fileSchema = z.object({
   fasting: z.array(z.object({ uid: uid.optional(), started_at: iso, ended_at: iso.nullable().optional(), target_hours: num(0, 10000) })).default([]),
   templates: z.array(z.object({ uid: uid.optional(), name: text(300), created_at: iso.nullable().optional(), items: z.array(item).max(500) })).default([]),
   recipes: z.array(z.object({
-    uid: uid.optional(), food_uid: uid.optional(), name: text(300), portions: z.number().gt(0).max(10000), total_weight: z.number().gt(0).max(1e6).nullable().optional(),
+    uid: uid.optional(), food_uid: uid.optional(), name: text(300).nullable(), portions: z.number().gt(0).max(10000), total_weight: z.number().gt(0).max(1e6).nullable().optional(),
     updated_at: iso.nullable().optional(), items: z.array(item).max(500),
   })).default([]),
   recipe_groups: z.array(z.object({ uid, name: text(60).min(1), source: text(200).nullable().optional(), created_at: iso.nullable().optional(), members: z.array(uid).max(10000) })).default([]),
@@ -157,7 +157,7 @@ export function parseExport(json: Uint8Array): ExportFile {
   noDuplicates(f.foods, (r) => r.code, 'a barcode');
   noDuplicates(f.foods, (r) => r.external_id, 'a product id');
   noDuplicates(f.recipe_groups, (r) => r.uid, 'a recipe group');
-  noDuplicates(f.recipe_groups, (r) => r.name.toLowerCase(), 'a recipe group name');
+  noDuplicates(f.recipe_groups, (r) => asciiLower(r.name), 'a recipe group name');
   noDuplicates(f.recipe_groups, (r) => r.source, 'a recipe group link');
   for (const [name, rows] of [['weight', f.weight], ['water', f.water], ['activity', f.activity], ['sleep', f.sleep]] as const) noDuplicates(rows as { day: string }[], (r) => r.day, `a day of ${name}`);
   noDuplicates(f.goal_history, (r) => r.valid_from, 'a goal change');
@@ -193,6 +193,9 @@ export async function ownCounts(db: Db, userId: number): Promise<Record<string, 
 }
 
 async function deleteOwn(db: Db, userId: number): Promise<void> {
+  // the products a Yazio batch of this person made stay (shared), but lose the batch: its id may be given to a later batch, whose
+  // removal would otherwise take them along
+  await db.run('UPDATE food SET import_id = NULL WHERE import_id IN (SELECT id FROM import_batch WHERE user_id = ?)', [userId]);
   await db.run('DELETE FROM template_item WHERE template_id IN (SELECT id FROM template WHERE user_id = ?)', [userId]);
   for (const [, table] of OWN_TABLES) await db.run(`DELETE FROM ${table} WHERE user_id = ?`, [userId]);
   await db.run(`DELETE FROM user_setting WHERE user_id = ? AND key IN ${settingKeysSql()}`, [userId]);
@@ -278,16 +281,19 @@ async function importFoods(r: Run): Promise<Foods> {
       if (r.write) {
         await db.run('UPDATE food SET source = ?, found = 1, data = ?, fetched_at = ?, import_id = NULL, piece_label = ?, piece_grams = ?, drink = ?, '
           + 'created_by = CASE WHEN found = 0 THEN ? ELSE created_by END WHERE id = ?',
-        [x.source, toJson(data), r.now, want.piece_label, want.piece_grams, want.drink === null ? null : flag(want.drink), x.own ? user.id : null, row.id]);
+        [x.source, toJson(data), r.now, want.piece_label, want.piece_grams, want.drink === null ? null : flag(want.drink), x.own || !user.household ? user.id : null, row.id]);
       }
       continue;
     }
     count(r, 'foods', 'new');
+    // own products of the file are the importer's; others belong to the household, like a product looked up by barcode, except for a
+    // guest: what a guest brings in is theirs (the routes give a guest's new product to the guest too)
+    const owner = x.own || !user.household ? user.id : null;
     const newUid = m.takenUids.has(x.uid) ? null : x.uid;
     let id = m.nextFake--;
     if (r.write) {
       id = (await db.run('INSERT INTO food (uid, code, source, found, data, fetched_at, external_id, piece_label, piece_grams, drink, created_by) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)',
-        [newUid, x.code ?? null, x.source, toJson(data), r.now, x.external_id ?? null, want.piece_label, want.piece_grams, want.drink === null ? null : flag(want.drink), x.own ? user.id : null])).lastId;
+        [newUid, x.code ?? null, x.source, toJson(data), r.now, x.external_id ?? null, want.piece_label, want.piece_grams, want.drink === null ? null : flag(want.drink), owner])).lastId;
     }
     if (newUid) m.takenUids.add(newUid);
     m.byUid.set(x.uid, id);
@@ -338,7 +344,7 @@ async function importRecipes(r: Run, m: Foods): Promise<void> {
   const takenRecipeUids = new Set(byUid.keys());
   for (const row of rows) m.source.set(row.food_id, 'recipe');
   for (const x of f.recipes) {
-    const row = x.uid ? byUid.get(x.uid) : byName.get(asciiLower(x.name));
+    const row = x.uid ? byUid.get(x.uid) : byName.get(asciiLower(x.name ?? ''));
     const fileItems: [FileItem, number | null][] = x.items.map((i) => [i, itemFood(r, m, i, true)]);
     const data = { ...recipeFood(fileItems.map(([i]) => itemView(i)) as any, x.portions, x.total_weight ?? null), name: x.name };
     const updated = seconds(x.updated_at) ?? r.now;
@@ -579,9 +585,10 @@ async function importFasts(r: Run): Promise<void> {
 }
 
 const GOAL_KEYS = ['kcal', 'protein', 'carbs', 'fat', 'water_ml', 'steps'] as const;
+const goalKeys = (g: Record<string, unknown>) => Object.fromEntries(GOAL_KEYS.map((k) => [k, g[k]]));
 
-/** The goal history by `valid_from` (the file wins on the same day, rows only here stay); the goal is then the newest change of the
- * merged history, which keeps "the newest history row is the goal" true. */
+/** The goal history by `valid_from` (the file wins on the same day, rows only here stay). The goal is the file's: when a change here is
+ * newer than the file's newest, the file's goal is recorded as a change from today on, which keeps "the newest history row is the goal". */
 async function importGoal(r: Run): Promise<void> {
   const { db, f, user } = r;
   const hist = r.mode === 'replace' ? [] : await db.all('SELECT * FROM goal_history WHERE user_id = ?', [user.id]);
@@ -602,10 +609,25 @@ async function importGoal(r: Run): Promise<void> {
     }
   }
   if (!rows.length) return;
-  const newest = merged.get([...merged.keys()].sort().at(-1)!)!;
-  const goal = Object.fromEntries(GOAL_KEYS.map((k) => [k, newest[k]]));
+  let newest = merged.get([...merged.keys()].sort().at(-1)!)!;
+  if (f.goal && !same(goalKeys(newest), goalKeys(goalOf(f.goal)))) {
+    // a later change here than in the file: the file's goal still wins, as a change from today on (like PUT /me/goal), so that earlier
+    // days keep their goal and the newest history row stays the goal
+    const day = today();
+    const want = { ...goalOf(f.goal), changed_at: r.now };
+    count(r, 'goal_history', merged.has(day) ? 'changed' : 'new');
+    merged.set(day, want);
+    newest = want;
+    warn(r, 'goal_from_today');
+    if (r.write) {
+      await db.run('INSERT INTO goal_history (user_id, valid_from, kcal, protein, carbs, fat, water_ml, steps, changed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) '
+        + 'ON CONFLICT(user_id, valid_from) DO UPDATE SET kcal = excluded.kcal, protein = excluded.protein, carbs = excluded.carbs, fat = excluded.fat, '
+        + 'water_ml = excluded.water_ml, steps = excluded.steps, changed_at = excluded.changed_at',
+      [user.id, day, ...GOAL_KEYS.map((k) => want[k]), want.changed_at]);
+    }
+  }
+  const goal = goalKeys(newest);
   if (local && same(goalOf(local), goal)) { count(r, 'goal', 'unchanged'); return; }
-  if (local && f.goal && !same(goalOf(f.goal), goal)) warn(r, 'goal_newer_here');
   count(r, 'goal', local ? 'changed' : 'new');
   if (r.write) {
     await db.run('INSERT INTO goal (user_id, kcal, protein, carbs, fat, water_ml, steps) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET '
