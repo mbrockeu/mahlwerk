@@ -6,6 +6,7 @@ import { ApiError, DEMO_BLOCKED } from './api';
 import { lang } from './i18n';
 import { fromDay, isoWeek, mondayOfWeek, shiftDay, today, weekStart } from './date';
 import { addDays, autoGran, diffDays } from './insightsRange';
+import { trainingDays, trainingSummary, weekBlock, weeklyCounts } from './training';
 import { recipePreview } from './nutrition';
 import { buildCookidoo } from './mockCookidoo';
 import { buildWebPages, interpretWeb, normaliseWeb, NO_RECIPE } from './mockWeb';
@@ -224,7 +225,7 @@ const workoutRows: (Omit<Workout, 'kcal' | 'kcal_estimated'> & { kcal: number | 
 let nextWorkoutId = 1;
 const demoActivityDays = new Set<string>();
 const demoWorkoutIds = new Set<number>();
-const activitySettings = { add_to_goal: false };
+const activitySettings = { add_to_goal: false, workouts_week: 3 }; // the demo starts with a weekly goal, so the week row shows
 for (let back = 0; back <= 9; back += 1) {
   const d = shiftDay(today(), -back);
   const steps = back === 0 ? 3140 : 5200 + ((back * 1531) % 6200);
@@ -232,6 +233,16 @@ for (let back = 0; back <= 9; back += 1) {
   if (back % 3 === 1) {
     workoutRows.push({ id: nextWorkoutId++, day: d, started_at: Math.floor(new Date(`${d}T18:00:00`).getTime() / 1000), kind: back === 4 ? 'cycling' : 'running', name: '', minutes: back === 4 ? 70 : 32, kcal: back === 4 ? null : 318, distance_m: back === 4 ? 21000 : 5400, steps: null, note: null, source: 'manual' });
   }
+}
+// older weeks for the training card and the badges: mostly Tuesday, Thursday and Saturday, one quiet week, a few days with two workouts
+for (let back = 10; back <= 62; back += 1) {
+  const d = shiftDay(today(), -back);
+  const wd = (fromDay(d).getDay() + 6) % 7; // 0 = Monday
+  const week = Math.ceil(diffDays(d, weekStart(today())) / 7) - 1;
+  if (week === 4 || !(wd === 1 || wd === 3 || (wd === 5 && week % 3 !== 0) || (wd === 6 && week % 4 === 2))) continue;
+  const t = Math.floor(new Date(`${d}T07:30:00`).getTime() / 1000);
+  workoutRows.push({ id: nextWorkoutId++, day: d, started_at: t, kind: wd === 5 ? 'hiking' : wd === 1 ? 'strength' : 'cycling', name: '', minutes: wd === 5 ? 95 : 45, kcal: null, distance_m: null, steps: null, note: null, source: 'manual' });
+  if (wd === 3 && week % 2 === 0) workoutRows.push({ id: nextWorkoutId++, day: d, started_at: t + 7200, kind: 'yoga', name: '', minutes: 20, kcal: null, distance_m: null, steps: null, note: null, source: 'manual' });
 }
 /** Minutes asleep in the night before day d (mock: every day up to today has a value; short, middle and long nights alternate). */
 const SLEEP_MOCK = [330, 450, 390, 465, 345, 420, 480];
@@ -258,6 +269,7 @@ function dayActivity(d: string): DayActivity {
   return {
     steps: a?.steps ?? null, steps_goal: goalOn(d)?.steps ?? 8000, active_kcal: a?.active_kcal ?? null, distance_m: a?.distance_m ?? null,
     source: a?.source ?? null, bonus_kcal: bonusOf(d), workouts: workoutRows.filter((w) => w.day === d).sort((x, y) => (x.started_at ?? 0) - (y.started_at ?? 0)).map(workoutOut),
+    week: weekBlock(trainingDays(workoutRows), activitySettings.workouts_week, d),
   };
 }
 let nextFastId = 1;
@@ -534,10 +546,13 @@ function baseInsights(from: string, to: string): Insights {
   const longNights = compared.filter((d) => sleepOf(d)! >= 420);
   const sleep = nights.length ? { nights: nights.length, avg_minutes: Math.round(mean(nights)), compared_days: compared.length, middle_days: compared.length - shortNights.length - longNights.length,
     min_days: 5, short: sleepGroup(shortNights), long: sleepGroup(longNights) } : null;
+  // training days and eating (the server's rules in lib/training.ts; the workouts reach to the whole calendar weeks around the period)
+  const training = trainingSummary(from, to, workoutRows.filter((w) => w.day >= weekStart(from) && w.day <= shiftDay(weekStart(to), 6)), activitySettings.workouts_week,
+    loggedDays, (d) => totals.get(d)!, (d) => dayGoalKcal(d), today());
   return {
     range: { from, to, days: dayKeys.length, logged_days: loggedDays.length }, goal: clone(goal), period_goal: periodGoal,
     goal_kcal: periodGoal ? r1(loggedDays.length ? mean(loggedDays.map((d) => dayGoalKcal(d)!)) : periodGoal.kcal) : null, steps_goal: periodGoal?.steps ?? 8000, days, averages, by_weekday, by_meal,
-    top_foods: { kcal: top('kcal'), sugars: top('sugars'), salt: top('salt'), protein: top('protein') }, weight, adherence, micros, hints: hints.slice(0, 4), sleep,
+    top_foods: { kcal: top('kcal'), sugars: top('sugars'), salt: top('salt'), protein: top('protein') }, weight, adherence, micros, hints: hints.slice(0, 4), sleep, training,
   };
 }
 
@@ -731,12 +746,15 @@ function badgeProgress(): Record<BadgeCode, [number, number]> {
   const g = goal;
   const hit = (f: (d: string) => boolean) => bestWindow(days.filter(f));
   const weeks = [...weights.keys()].map((d) => Math.floor(ord(weekStart(d)) / 7));
+  const trained = trainingDays(workoutRows);
   return {
     first_entry: cap(days.length, 1), streak_3: cap(streak, 3), streak_7: cap(streak, 7), streak_30: cap(streak, 30), streak_100: cap(streak, 100),
     scans_10: cap(foodIds.size, 10), scans_50: cap(foodIds.size, 50), first_recipe: cap(recipes.length, 1),
     protein_week: cap(g ? hit((d) => { const p = goalOn(d)!.protein; return p > 0 && (totals.get(d)?.protein ?? 0) >= p * 0.9; }) : 0, 5),
     balanced_week: cap(g ? hit((d) => { const k = totals.get(d)?.kcal ?? 0, gk = dayGoalKcal(d)!; return k >= gk * 0.9 && k <= gk * 1.1; }) : 0, 5),
     fiber_5: cap(hit((d) => (totals.get(d)?.fiber ?? 0) >= 25), 5), weigh_in_4: cap(longestRun(weeks), 4),
+    first_workout: cap(trained.size, 1), active_week: cap(Math.max(0, ...weeklyCounts(trained).values()), 3),
+    active_month: cap(longestRun([...weeklyCounts(trained)].filter(([, c]) => c >= 2).map(([n]) => n)), 4), workouts_25: cap(trained.size, 25),
     full_day_10: cap(days.filter((d) => ['breakfast', 'lunch', 'dinner'].every((m) => (entries.get(d) ?? []).some((e) => e.meal === m))).length, 10),
   };
 }

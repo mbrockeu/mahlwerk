@@ -197,6 +197,14 @@ class FastingSettingsPatch(BaseModel):
 class ActivitySettings(BaseModel):
     add_to_goal: bool = Field(
         False, description="the day's active energy is added to its calorie goal (day view, kcal left, insights, badges)")
+    workouts_week: int = Field(
+        0, ge=0, le=activity.MAX_WORKOUTS_WEEK,
+        description="weekly goal: training days (a day with at least 10 minutes of workouts) per calendar week, 0 = off")
+
+
+class ActivitySettingsPatch(BaseModel):
+    add_to_goal: bool | None = None
+    workouts_week: int | None = Field(None, ge=0, le=activity.MAX_WORKOUTS_WEEK)
 
 
 HOME_CARDS = ("ring", "macros", "fasting", "water", "activity", "weight", "meals", "micros", "suggestions")
@@ -247,7 +255,7 @@ class Settings(BaseModel):
 class SettingsPatch(BaseModel):
     playful: bool | None = None
     fasting: FastingSettingsPatch | None = Field(None, description="only the given fields change")
-    activity: ActivitySettings | None = None
+    activity: ActivitySettingsPatch | None = Field(None, description="only the given fields change")
     tour_seen: bool | None = None
     suggestions: bool | None = None
     home: list[HomeCard] | None = Field(None, description="replaces the whole layout; null resets to the default")
@@ -485,6 +493,13 @@ class Workout(BaseModel):
     source: Source
 
 
+class WeekProgress(BaseModel):
+    goal: int = Field(description="training days per week wanted (settings activity.workouts_week)")
+    days: list[bool] = Field(description="Monday to Sunday of the week of the shown day: a training day (workouts of at least 10 minutes in total)")
+    done: int = Field(description="training days of that week so far")
+    streak: int = Field(description="consecutive weeks that reached the goal, ending with this week if it is reached, else with the week before")
+
+
 class DayActivity(BaseModel):
     steps: int | None = None
     steps_goal: int = Field(activity.DEFAULT_STEPS_GOAL)
@@ -493,6 +508,7 @@ class DayActivity(BaseModel):
     source: Source | None = Field(None, description="where the day's values come from, null without any")
     bonus_kcal: int = Field(0, description="kcal this day adds to the calorie goal (0 unless activity.add_to_goal is on)")
     workouts: list[Workout] = Field(default_factory=list)
+    week: WeekProgress | None = Field(None, description="the week of this day against the weekly training goal; null while the goal is off")
 
 
 class ActivityDay(DayActivity):
@@ -764,6 +780,28 @@ class InsightSleep(BaseModel):
     long: InsightSleepGroup = Field(description="days after a night of 7 h or more")
 
 
+class InsightTrainingWeek(BaseModel):
+    week_start: str = Field(description="the Monday of the calendar week")
+    training_days: int = Field(description="training days of the whole week (also those outside the period)")
+
+
+class InsightTrainingGroup(BaseModel):
+    days: int = Field(description="logged days in this group")
+    kcal: float | None = Field(None, description="mean kcal of these days; null below the minimum days")
+    protein: float | None = Field(None, description="mean protein (g) of these days; null below the minimum days")
+    kcal_vs_goal: float | None = Field(None, description="mean of (kcal - that day's own kcal goal); null below the minimum days or without a goal")
+
+
+class InsightTraining(BaseModel):
+    training_days: int = Field(description="training days inside the period")
+    workout_minutes: float = Field(description="minutes of all workouts inside the period")
+    weeks: list[InsightTrainingWeek] = Field(description="the calendar weeks that touch the period, oldest first")
+    goal: int | None = Field(None, description="the weekly goal (settings activity.workouts_week), null while off")
+    min_days: int = Field(description="logged days each of the two groups needs before either shows its means")
+    trained: InsightTrainingGroup = Field(description="logged days that are training days")
+    rest: InsightTrainingGroup = Field(description="logged days that are not (today excluded from both)")
+
+
 class InsightHint(BaseModel):
     code: str
     params: dict
@@ -904,6 +942,7 @@ class Insights(BaseModel):
     micros: list[InsightMicro]
     hints: list[InsightHint]
     sleep: InsightSleep | None = Field(None, description="sleep against eating, null without a sleep value in the range (see docs/api-v1.md)")
+    training: InsightTraining | None = Field(None, description="training days and eating, null without a workout in the range (see docs/api-v1.md)")
 
 
 TemplateName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]

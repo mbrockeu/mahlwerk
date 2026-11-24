@@ -165,6 +165,16 @@ export interface WorkoutIn {
   note?: string | null;
 }
 
+/** The week of a day against the weekly training goal. */
+export interface WeekProgress {
+  goal: number;
+  /** Monday to Sunday: a training day. */
+  days: boolean[];
+  done: number;
+  /** Consecutive weeks that reached the goal (this week included once it is reached). */
+  streak: number;
+}
+
 export interface DayActivity {
   steps: number | null;
   steps_goal: number;
@@ -174,6 +184,8 @@ export interface DayActivity {
   /** kcal this day adds to the calorie goal (0 unless the setting is on). */
   bonus_kcal: number;
   workouts: Workout[];
+  /** Null while the weekly goal is off. */
+  week?: WeekProgress | null;
 }
 
 export interface ActivityDayOut extends DayActivity { day: string }
@@ -218,6 +230,8 @@ interface FastingSettings {
 interface ActivitySettings {
   /** Add the day's active energy to its calorie goal. */
   add_to_goal: boolean;
+  /** Weekly goal: training days (a day with at least 10 minutes of workouts) per calendar week, 0 = off. */
+  workouts_week: number;
 }
 
 export interface Settings {
@@ -499,6 +513,25 @@ export interface InsightSleep {
   long: InsightSleepGroup;
 }
 
+export interface InsightTrainingGroup {
+  days: number;
+  /** null unless both groups have `min_days`, so is the rest */
+  kcal: number | null;
+  protein: number | null;
+  /** mean of (kcal - that day's own kcal goal) */
+  kcal_vs_goal: number | null;
+}
+/** Training days and eating: the calendar weeks touching the period and logged training days against the other logged days. */
+export interface InsightTraining {
+  training_days: number;
+  workout_minutes: number;
+  weeks: { week_start: string; training_days: number }[];
+  goal: number | null;
+  min_days: number;
+  trained: InsightTrainingGroup;
+  rest: InsightTrainingGroup;
+}
+
 export interface Insights {
   range: InsightRange;
   first_day?: string | null;
@@ -532,6 +565,8 @@ export interface Insights {
   hints: InsightHint[];
   /** null without a sleep value in the range */
   sleep?: InsightSleep | null;
+  /** null without a workout in the range */
+  training?: InsightTraining | null;
 }
 
 export interface NutrientCurve {
@@ -649,7 +684,8 @@ export interface IngredientMatches { lines: IngredientLine[]; ignored: number }
 
 export type BadgeCode =
   | 'first_entry' | 'streak_3' | 'streak_7' | 'streak_30' | 'streak_100' | 'scans_10' | 'scans_50' | 'first_recipe'
-  | 'protein_week' | 'balanced_week' | 'fiber_5' | 'weigh_in_4' | 'full_day_10';
+  | 'protein_week' | 'balanced_week' | 'fiber_5' | 'weigh_in_4' | 'full_day_10'
+  | 'first_workout' | 'active_week' | 'active_month' | 'workouts_25';
 
 export interface Badges {
   earned: { code: BadgeCode; earned_at: number; seen: boolean }[];

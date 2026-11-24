@@ -4,7 +4,7 @@ from datetime import date, timedelta
 
 from . import activity, goals
 from .db import Store
-from .models import DayActivity, Workout
+from .models import DayActivity, WeekProgress, Workout
 
 
 def workout_out(row: dict, weight_kg: float | None) -> Workout:
@@ -38,6 +38,22 @@ def day_activities(store: Store, uid: int, first: str, last: str, goal=None, set
             weights[day] = store.weight_for(uid, day)
         return weights[day]
 
+    weekly = activity.workouts_week_on(settings)
+    trained: set[str] = set()
+    counts: dict[int, int] = {}
+    weeks: dict[date, dict | None] = {}  # the week block depends on the week only, so it is made once per week
+    if weekly:
+        trained = store.training_days_between(uid, "0000-01-01", (activity.week_start(last) + timedelta(days=6)).isoformat())
+        counts = activity.weekly_counts(trained)
+
+    def week_of(day: str) -> WeekProgress | None:
+        if not weekly:
+            return None
+        monday = activity.week_start(day)
+        if monday not in weeks:
+            weeks[monday] = activity.week_block(trained, weekly, day, counts)
+        return WeekProgress(**weeks[monday])
+
     out: dict[str, DayActivity] = {}
     cursor, end = date.fromisoformat(first), date.fromisoformat(last)
     while cursor <= end:
@@ -47,7 +63,7 @@ def day_activities(store: Store, uid: int, first: str, last: str, goal=None, set
             steps=row["steps"] if row else None, steps_goal=steps_goal(day),
             active_kcal=row["active_kcal"] if row else None, distance_m=row["distance_m"] if row else None,
             source=row["source"] if row else None, bonus_kcal=activity.goal_bonus(row["active_kcal"], add) if row else 0,
-            workouts=[workout_out(w, weight(day)) for w in by_day.get(day, [])],
+            workouts=[workout_out(w, weight(day)) for w in by_day.get(day, [])], week=week_of(day),
         )
         cursor += timedelta(days=1)
     return out

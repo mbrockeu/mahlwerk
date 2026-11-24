@@ -26,7 +26,8 @@ class Data:
     """What the badges look at, prepared once from the stored rows."""
 
     def __init__(
-        self, entries: list[dict], weight_days: list[str], recipes: int, goal, bonus: dict[str, int] | None = None
+        self, entries: list[dict], weight_days: list[str], recipes: int, goal, bonus: dict[str, int] | None = None,
+        workouts: list[dict] | None = None,
     ):
         self.days: dict[str, dict] = {}
         self.foods: set[tuple] = set()
@@ -40,6 +41,7 @@ class Data:
         self.weight_days = set(weight_days)
         self.recipes = recipes
         self.goal = goals.timeline(goal)  # every day is judged against the goal of that day (a plain goal: one that always held)
+        self.training_days = activity.training_days(workouts or [])  # days with at least TRAINING_MIN_MINUTES of workouts
         self.bonus = bonus or {}  # per day: kcal the active energy adds to the calorie goal (empty while that is off)
 
 
@@ -153,6 +155,27 @@ def full_day_10(d: Data) -> tuple[int, int]:
     return _capped(sum(1 for v in d.days.values() if all(m in v["meals"] for m in MAIN_MEALS)), 10)
 
 
+def first_workout(d: Data) -> tuple[int, int]:
+    """One training day (workouts of at least 10 minutes in total). Why: starting is the hardest part."""
+    return _capped(len(d.training_days), 1)
+
+
+def active_week(d: Data) -> tuple[int, int]:
+    """Three training days within one calendar week (Monday to Sunday). Why: a rhythm, not a record; no pace or kcal counts."""
+    return _capped(max(activity.weekly_counts(d.training_days).values(), default=0), 3)
+
+
+def active_month(d: Data) -> tuple[int, int]:
+    """At least two training days in each of 4 consecutive calendar weeks. Why: staying with it, week after week."""
+    weeks = sorted(n for n, c in activity.weekly_counts(d.training_days).items() if c >= 2)
+    return _capped(longest_run(weeks), 4)
+
+
+def workouts_25(d: Data) -> tuple[int, int]:
+    """25 training days in total. Why: regularity adds up over time."""
+    return _capped(len(d.training_days), 25)
+
+
 assert set(MAIN_MEALS) <= set(MEALS)
 
 # the order is the order of the badge wall
@@ -170,6 +193,10 @@ BADGES: tuple[tuple[str, Callable[[Data], tuple[int, int]]], ...] = (
     ("fiber_5", fiber_5),
     ("weigh_in_4", weigh_in_4),
     ("full_day_10", full_day_10),
+    ("first_workout", first_workout),
+    ("active_week", active_week),
+    ("active_month", active_month),
+    ("workouts_25", workouts_25),
 )
 CODES = tuple(code for code, _ in BADGES)
 
@@ -186,8 +213,12 @@ def overview(store, user_id: int, goal) -> dict:
     """`goal`: the goal timeline (Store.goal_timeline) or a plain goal. Bring the remembered badges up to date and describe them: earned, still open (with progress) and new."""
     entries, weights, recipes = store.badge_inputs(user_id)
     bonus = activity.goal_bonuses(store, user_id, "0000-01-01", "9999-12-31")
-    everything = Data(entries, [w["day"] for w in weights], recipes, goal, bonus)
-    real = Data([e for e in entries if not e["demo"]], [w["day"] for w in weights if not w["demo"]], recipes, goal, bonus)
+    workouts = store.workouts_for_badges(user_id)
+    everything = Data(entries, [w["day"] for w in weights], recipes, goal, bonus, workouts)
+    real = Data(
+        [e for e in entries if not e["demo"]], [w["day"] for w in weights if not w["demo"]], recipes, goal, bonus,
+        [w for w in workouts if not w["demo"]],
+    )
     store.record_badges(user_id, reached(everything), reached(real))
     return describe(store.badges_earned(user_id), progress(everything))
 

@@ -76,8 +76,12 @@ def get_insights(
                 "workouts": store.workouts_between(uid, a, b), "bonus": activity.goal_bonuses(store, uid, a, b, settings)}
 
     extra = period(f, t)
+    # the training weeks of the period are whole calendar weeks, so its workouts reach to the Monday before and the Sunday after
+    extra["workouts"] = store.workouts_between(
+        uid, activity.week_start(first).isoformat(), (activity.week_start(last) + timedelta(days=6)).isoformat())
     result = insights.compute(first, last, store.entries_between(uid, f, t), store.weights_between(uid, f, t), goal,
-                              extra.pop("water"), granularity=granularity, sleep=store.sleep_between(uid, f, t), today=today(), **extra)
+                              extra.pop("water"), granularity=granularity, sleep=store.sleep_between(uid, f, t), today=today(),
+                              workouts_week=activity.workouts_week_on(settings), **extra)
     span = entry_span(store, uid)
     result["first_day"], result["last_day"] = (span[0].isoformat(), span[1].isoformat()) if span else (None, None)
     if compare == "previous":

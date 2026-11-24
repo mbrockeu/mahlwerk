@@ -5,6 +5,7 @@
   import ActivityChart from '../components/ActivityChart.svelte';
   import ExpenditureCard from '../components/ExpenditureCard.svelte';
   import SleepCard from '../components/SleepCard.svelte';
+  import TrainingCard from '../components/TrainingCard.svelte';
   import FoodsCard from '../components/FoodsCard.svelte';
   import Icon from '../components/Icon.svelte';
   import KcalChart from '../components/KcalChart.svelte';
@@ -501,6 +502,12 @@
             <h2 id="h-sleep" class="micro quiet">{t('sleepTitle')}</h2>
             <SleepCard sleep={data.sleep ?? null} />
           </section>
+          {#if data.training}
+            <section class="card" aria-labelledby="h-training">
+              <h2 id="h-training" class="micro quiet">{t('trainTitle')}</h2>
+              <TrainingCard training={data.training} />
+            </section>
+          {/if}
           </section>
         {:else if tab === 'nutrients'}
           <section id="sec-nut" class="sec">

@@ -139,13 +139,13 @@ def test_workout_kinds_and_names():
 def test_an_empty_day_has_null_values_and_the_default_goal(client):
     assert day_of(client)["activity"] == {
         "steps": None, "steps_goal": 8000, "active_kcal": None, "distance_m": None, "source": None, "bonus_kcal": 0,
-        "workouts": []}
+        "workouts": [], "week": None}
 
 
 def test_values_are_set_partially_and_cleared_with_null(client):
     out = put_activity(client, steps=7500)
     assert out == {"day": DAY, "steps": 7500, "steps_goal": 8000, "active_kcal": None, "distance_m": None,
-                   "source": "manual", "bonus_kcal": 0, "workouts": []}
+                   "source": "manual", "bonus_kcal": 0, "workouts": [], "week": None}
     out = put_activity(client, active_kcal=410.5, distance_m=5200)
     assert (out["steps"], out["active_kcal"], out["distance_m"]) == (7500, 410.5, 5200)  # steps stay
     out = put_activity(client, steps=None)
@@ -481,11 +481,11 @@ def add_to_goal(client, on: bool):
 
 def test_the_setting_defaults_to_off_and_is_kept_per_user(duo):
     ann, ben = duo
-    assert ann.get("/api/v1/me").json()["settings"]["activity"] == {"add_to_goal": False}
-    assert add_to_goal(ann, True)["activity"] == {"add_to_goal": True}
-    assert ann.get("/api/v1/me").json()["settings"]["activity"] == {"add_to_goal": True}
-    assert ben.get("/api/v1/me").json()["settings"]["activity"] == {"add_to_goal": False}
-    assert ann.patch("/api/v1/me/settings", json={"playful": False}).json()["activity"] == {"add_to_goal": True}  # untouched
+    assert ann.get("/api/v1/me").json()["settings"]["activity"] == {"add_to_goal": False, "workouts_week": 0}
+    assert add_to_goal(ann, True)["activity"] == {"add_to_goal": True, "workouts_week": 0}
+    assert ann.get("/api/v1/me").json()["settings"]["activity"] == {"add_to_goal": True, "workouts_week": 0}
+    assert ben.get("/api/v1/me").json()["settings"]["activity"] == {"add_to_goal": False, "workouts_week": 0}
+    assert ann.patch("/api/v1/me/settings", json={"playful": False}).json()["activity"] == {"add_to_goal": True, "workouts_week": 0}  # untouched
 
 
 def test_day_and_summary_goal_with_and_without_active_energy(client, dense):

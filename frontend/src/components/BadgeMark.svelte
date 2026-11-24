@@ -11,6 +11,7 @@
     first_entry: 'lime', streak_3: 'lime', streak_7: 'green', streak_30: 'orange', streak_100: 'pink',
     scans_10: 'pink', scans_50: 'lime', first_recipe: 'orange', protein_week: 'orange', balanced_week: 'green',
     fiber_5: 'green', weigh_in_4: 'pink', full_day_10: 'lime',
+    first_workout: 'lime', active_week: 'green', active_month: 'orange', workouts_25: 'pink',
   };
   const DISC = { lime: '#c9f04a', orange: '#ff8a1f', pink: '#ffb8d6', green: 'var(--green)' } as const;
   const tone = $derived(TONE[code]);
@@ -38,6 +39,10 @@
     {:else if code === 'fiber_5'}<path d="M12 21V8M12 8c-3 0-4.5-2-4.5-4.5 3 0 4.5 2 4.5 4.5zM12 8c3 0 4.5-2 4.5-4.5-3 0-4.5 2-4.5 4.5zM12 15c-3 0-4.5-2-4.5-4.5M12 15c3 0 4.5-2 4.5-4.5" />
     {:else if code === 'weigh_in_4'}<rect x="4" y="4" width="16" height="16" rx="5" /><path d="M8.5 10.5a5 5 0 0 1 7 0M12 10.5l1.6-1.6" />
     {:else if code === 'full_day_10'}<circle cx="12" cy="12" r="3.5" /><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.4 1.4M16.6 16.6L18 18M18 6l-1.4 1.4M7.4 16.6L6 18" />
+    {:else if code === 'first_workout'}<path d="M5 21V4M5 4h11l-2 4 2 4H5" />
+    {:else if code === 'active_week'}<rect x="4" y="5" width="16" height="15" rx="3.5" /><path d="M4 10h16M9 3v4M15 3v4M9.5 15l2 2 3.5-3.5" />
+    {:else if code === 'active_month'}<path d="M3 12c2-4 4-4 6 0s4 4 6 0 4-4 6 0" /><path d="M3 18c2-4 4-4 6 0s4 4 6 0 4-4 6 0" />
+    {:else if code === 'workouts_25'}<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11" />
     {/if}
   </svg>
 </svg>

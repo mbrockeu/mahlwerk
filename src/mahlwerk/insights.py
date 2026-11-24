@@ -6,7 +6,7 @@ See docs/api-v1.md (GET /api/v1/insights) for the response shape.
 
 from datetime import date, timedelta
 
-from . import analysis, goals, nutrients
+from . import activity as activity_rules, analysis, goals, nutrients
 from .activity import DEFAULT_STEPS_GOAL
 from .models import MEALS
 from .nutrition import scale
@@ -24,6 +24,7 @@ FAST_LOSS_PCT = 1.0  # a loss of more than this percent of the body weight per w
 SLEEP_SHORT_BELOW = 360  # minutes: a night under 6 h is "short", from 7 h (420) "normal"; 6-7 h is the middle and left out of the comparison
 SLEEP_LONG_FROM = 420
 SLEEP_MIN_DAYS = 5  # fewer logged days than this in a group: the group is reported with its count but without means
+TRAINING_MIN_DAYS = 5  # fewer logged days than this on either side: the groups are reported with their count but without means
 TREND_HALF_WINDOW = 3  # centred 7-day window
 
 
@@ -40,7 +41,7 @@ def compute(
     first: date, last: date, rows: list[dict], weights: list[dict], goal: "dict | goals.Timeline | None", water: dict[str, int] | None = None,
     *, granularity: str = "auto", light: bool = False, activity: dict[str, dict] | None = None,
     workouts: list[dict] | None = None, bonus: dict[str, int] | None = None, sleep: dict[str, int] | None = None,
-    today: date | None = None,
+    today: date | None = None, workouts_week: int = 0,
 ) -> dict:
     """Build the whole response for the days `first`..`last` (both included).
 
@@ -55,6 +56,9 @@ def compute(
     `sleep` maps a day to the minutes slept in the night that ended on its morning; with it the result gets a `sleep` block
     (see `sleep_summary`; `today`, an unfinished day, stays out of the comparison).
 
+    `workouts` may reach beyond the period (to the whole calendar weeks that touch it, for the `training` block); the
+    figures of the period only count the days inside it. `workouts_week` is the weekly training goal (0 = off).
+
     `goal` is the user's goal timeline (or a plain goal that always held): each day is judged against the goal of that day,
     the period's figures (`period_goal`, `goal_kcal`, the protein hints) are means over the logged days. `goal` in the result
     is the current goal.
@@ -68,9 +72,11 @@ def compute(
     water = {d: ml for d, ml in (water or {}).items() if d in key_set}
     activity = {d: a for d, a in (activity or {}).items() if d in key_set}
     workout_minutes: dict[str, float] = {}
+    workout_count = 0
     for w in workouts or []:
         if w["day"] in key_set:
             workout_minutes[w["day"]] = workout_minutes.get(w["day"], 0.0) + w["minutes"]
+            workout_count += 1
     bonus = bonus or {}
 
     totals = {d: dict.fromkeys(NUTRIENTS, 0.0) for d in day_keys}
@@ -197,6 +203,51 @@ def compute(
         "micros": micros,
         "hints": hints(ctx),
         "sleep": sleep_summary({d: m for d, m in (sleep or {}).items() if d in key_set}, logged_days, totals, tl, bonus, today),
+        "training": training_summary(
+            first, last, workouts or [], workouts_week, logged_days, totals, tl, bonus, today) if workout_count else None,
+    }
+
+
+def training_summary(
+    first: date, last: date, workouts: list[dict], goal: int, logged_days: list[str], totals: dict[str, dict],
+    tl: "goals.Timeline | None", bonus: dict[str, int], today: date | None,
+) -> dict:
+    """Training days and eating (null, decided by the caller, without a workout in the period). A training day is a day whose
+    workouts add up to `activity.TRAINING_MIN_MINUTES`. `weeks` lists every calendar week (Monday to Sunday) that touches the
+    period with the training days of the WHOLE week (`workouts` reaches that far); `training_days` and `workout_minutes` count
+    inside the period only. For the logged days (today excluded, it is not over) two groups: training days and the others, each
+    with its day count and, from TRAINING_MIN_DAYS days on in BOTH groups, the mean kcal, protein and the mean difference of the
+    kcal to that day's own goal; else the means are null. A pattern in the data, not a proof of a cause; nothing here rewards
+    pace or energy, only regularity."""
+    trained_all = activity_rules.training_days(workouts)
+    inside = {d for d in trained_all if first.isoformat() <= d <= last.isoformat()}
+    counts = activity_rules.weekly_counts(trained_all)
+    weeks, monday = [], activity_rules.week_start(first)
+    while monday <= last:
+        weeks.append({"week_start": monday.isoformat(), "training_days": counts.get(activity_rules.week_number(monday), 0)})
+        monday += timedelta(days=7)
+    key = today.isoformat() if today else None
+    days = [d for d in logged_days if d != key]
+    trained = [d for d in days if d in inside]
+    rest = [d for d in days if d not in inside]
+    full = len(trained) >= TRAINING_MIN_DAYS and len(rest) >= TRAINING_MIN_DAYS
+
+    def group(chosen: list[str]) -> dict:
+        return {
+            "days": len(chosen),
+            "kcal": _r(_mean([totals[d]["kcal"] for d in chosen])) if full else None,
+            "protein": _r(_mean([totals[d]["protein"] for d in chosen])) if full else None,
+            "kcal_vs_goal": _r(_mean([totals[d]["kcal"] - goals.kcal_on(tl, bonus, d) for d in chosen])) if full and tl else None,
+        }
+
+    return {
+        "training_days": len(inside),
+        "workout_minutes": _r(sum(w["minutes"] for w in workouts if first.isoformat() <= w["day"] <= last.isoformat())),
+        "weeks": weeks,
+        "goal": goal or None,
+        "min_days": TRAINING_MIN_DAYS,
+        "trained": group(trained),
+        "rest": group(rest),
     }
 
 

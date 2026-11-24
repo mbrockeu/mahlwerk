@@ -1605,6 +1605,21 @@ class Store:
             ).fetchall()
         return [self._workout(r) for r in rows]
 
+    def workouts_for_badges(self, user_id: int) -> list[dict]:
+        """Every workout as (day, minutes, demo): what the training badges look at."""
+        with self._connect() as con:
+            rows = con.execute("SELECT day, minutes, demo FROM workout WHERE user_id = ?", (user_id,)).fetchall()
+        return [dict(r) for r in rows]
+
+    def training_days_between(self, user_id: int, first: str, last: str) -> set[str]:
+        """The training days in the range (days whose workouts add up to `activity.TRAINING_MIN_MINUTES`), demo rows included."""
+        with self._connect() as con:
+            rows = con.execute(
+                "SELECT day FROM workout WHERE user_id = ? AND day BETWEEN ? AND ? GROUP BY day HAVING SUM(minutes) >= ?",
+                (user_id, first, last, activity.TRAINING_MIN_MINUTES),
+            ).fetchall()
+        return {r["day"] for r in rows}
+
     def get_workout(self, user_id: int, workout_id: int) -> dict | None:
         with self._connect() as con:
             row = con.execute("SELECT * FROM workout WHERE id = ? AND user_id = ?", (workout_id, user_id)).fetchone()

@@ -147,7 +147,10 @@ Entry    { id, food_id:int|null, meal:Meal, name, brand, amount:number, unit:"g"
            kcal, protein, carbs, fat }            nutrients already scaled to the amount, number|null
 Workout  { id, day, started_at:int|null (Unix s), kind, name, minutes, kcal:number, kcal_estimated:bool, distance_m|null,
            steps|null, note|null, source:"manual"|"health"|"yazio"|"demo" }      see Activity
-DayActivity { steps:int|null, steps_goal:int, active_kcal|null, distance_m|null, source|null, bonus_kcal:int, workouts:[Workout] }
+DayActivity { steps:int|null, steps_goal:int, active_kcal|null, distance_m|null, source|null, bonus_kcal:int, workouts:[Workout],
+              week:WeekProgress|null (null while settings.activity.workouts_week is 0) }
+WeekProgress { goal:int (1-7), days:[bool x7] (Monday to Sunday of the week of that day: a training day), done:int,
+               streak:int (consecutive weeks that reached the goal, ending with this week if it is reached, else with the week before) }
 Day      { day:"YYYY-MM-DD", goal:Goal|null, kcal_goal:int|null (the goal that counts, see Activity), activity:DayActivity,
            water:Water,
            totals:Per100-shaped object with the day's sums (null counts as 0),
@@ -175,14 +178,14 @@ Editing or deleting the food later does not change past days; deleting sets `foo
 | Method | Path | Body | Returns | Notes |
 | --- | --- | --- | --- | --- |
 | GET | `/healthz` | – | `{status, version}` | no auth |
-| GET | `/api/v1/me` | – | `{username, display_name, display_name_custom:bool, provider_name:string\|null, is_admin:bool, household:bool, goal:Goal\|null, settings:{playful:bool, fasting:{enabled:bool, target_hours:number}, activity:{add_to_goal:bool}, tour_seen:bool, suggestions:bool, home:HomeCard[]\|null, water_glasses:int[]\|null, water_drinks:bool}, demo:{available:bool, entries:int, weights:int, water:int, activity:int, workouts:int}, demo_account:{can_switch:bool, viewing:bool, real_username:string\|null, real_display_name:string\|null}, catalog:{products:int, updated_at:int\|null, bls:{products:int, updated_at:int\|null}}}` | `demo.available` is true when the server runs with `MAHLWERK_DEMO_DATA`; the counts are this user's demo rows. `catalog` is the size and build time (unix seconds) of the Open Food Facts catalogue file (`products`, `updated_at`) and of the basic foods file (`bls`), `0` and `null` without a file |
+| GET | `/api/v1/me` | – | `{username, display_name, display_name_custom:bool, provider_name:string\|null, is_admin:bool, household:bool, goal:Goal\|null, settings:{playful:bool, fasting:{enabled:bool, target_hours:number}, activity:{add_to_goal:bool, workouts_week:int}, tour_seen:bool, suggestions:bool, home:HomeCard[]\|null, water_glasses:int[]\|null, water_drinks:bool}, demo:{available:bool, entries:int, weights:int, water:int, activity:int, workouts:int}, demo_account:{can_switch:bool, viewing:bool, real_username:string\|null, real_display_name:string\|null}, catalog:{products:int, updated_at:int\|null, bls:{products:int, updated_at:int\|null}}}` | `demo.available` is true when the server runs with `MAHLWERK_DEMO_DATA`; the counts are this user's demo rows. `catalog` is the size and build time (unix seconds) of the Open Food Facts catalogue file (`products`, `updated_at`) and of the basic foods file (`bls`), `0` and `null` without a file |
 | PATCH | `/api/v1/me` | `{display_name: string\|null}` | `Me` (same as GET) | Chooses the display name: trimmed, blanks collapsed, 1-60 characters, no control characters or line breaks (Unicode and emojis are fine), else `422`. Empty or `null` goes back to the provider's name (proxy header, OIDC claim, local account) or the user name. The chosen name wins in every sign-in mode and is **not** overwritten by proxy headers or later OIDC sign-ins; it shows in `/me`, `/auth/status`, the login answer and `/admin/users`. `username` never changes. Stored as the user setting `display_name` (no schema change). Needs a write token like `PATCH /me/settings` (`read` scope: `403`) |
 | GET | `/api/v1/me/imports` | – | ImportBatch[] | this user's import batches, newest first, see Importing from Yazio |
 | DELETE | `/api/v1/me/imports/{id}` | – | `{entries, weights, water, activity, workouts, foods:int, goal:bool}` | takes back one of the user's own batches (404 for an unknown or foreign one); the numbers are what was removed |
 | GET | `/api/v1/me/export?from=&to=&lang=` | – | ZIP (`application/zip`) | the caller's own data, see Personal data export; `from`/`to` (`YYYY-MM-DD`, inclusive) limit the day-based data, an invalid date or `from` after `to` → 422; works with a read key |
 | PUT | `/api/v1/me/goal` | Goal | Goal | kcal 500–10000, macros 0–1000, water_ml 500–6000; counts from today on, earlier days keep their goal (see Goal history) |
 | GET | `/api/v1/me/goal/history` | – | `[GoalChange]` | every goal change, newest first; empty without a goal (see Goal history) |
-| PATCH | `/api/v1/me/settings` | `{playful?:bool, fasting?:{enabled?:bool, target_hours?:number}, activity?:{add_to_goal?:bool}, tour_seen?:bool, suggestions?:bool, home?:HomeCard[]\|null, water_glasses?:int[]\|null, water_drinks?:bool}` | `{playful, fasting, activity, tour_seen, suggestions, home, water_glasses, water_drinks}` | per-user settings, `playful` defaults to true, `fasting` to `{enabled:false, target_hours:16}` (hours 8–72), `activity` to `{add_to_goal:false}`, `tour_seen` to false (set once the first-run tour of the day view was shown or skipped; the profile can reset it), `suggestions` to true (the day view shows the card "what still fits today"; `GET /recipes/suggestions` answers either way), `home` to null (the default layout of the day view; otherwise a list of `{id, hidden, wide}` with `id` one of `ring, macros, fasting, water, activity, weight, meals, micros, suggestions`, no duplicates, at most 9; **422** otherwise; the list replaces the whole layout, `null` resets it; cards missing from the list are appended by the client), `water_glasses` to null (the default glasses 250 and 500 ml of the quick buttons on the water card; otherwise 1–3 whole numbers of 50–1000 ml, no duplicates, **422** otherwise; stored ascending, `null` resets it), `water_drinks` to true (drinks of the diary count towards the water card, see "Drinks count as water"); fields left out stay as they are, also inside `fasting` and `activity` |
+| PATCH | `/api/v1/me/settings` | `{playful?:bool, fasting?:{enabled?:bool, target_hours?:number}, activity?:{add_to_goal?:bool, workouts_week?:int (0-7)}, tour_seen?:bool, suggestions?:bool, home?:HomeCard[]\|null, water_glasses?:int[]\|null, water_drinks?:bool}` | `{playful, fasting, activity, tour_seen, suggestions, home, water_glasses, water_drinks}` | per-user settings (only the given fields of `fasting` and `activity` change), `playful` defaults to true, `fasting` to `{enabled:false, target_hours:16}` (hours 8–72), `activity` to `{add_to_goal:false}`, `tour_seen` to false (set once the first-run tour of the day view was shown or skipped; the profile can reset it), `suggestions` to true (the day view shows the card "what still fits today"; `GET /recipes/suggestions` answers either way), `home` to null (the default layout of the day view; otherwise a list of `{id, hidden, wide}` with `id` one of `ring, macros, fasting, water, activity, weight, meals, micros, suggestions`, no duplicates, at most 9; **422** otherwise; the list replaces the whole layout, `null` resets it; cards missing from the list are appended by the client), `water_glasses` to null (the default glasses 250 and 500 ml of the quick buttons on the water card; otherwise 1–3 whole numbers of 50–1000 ml, no duplicates, **422** otherwise; stored ascending, `null` resets it), `water_drinks` to true (drinks of the diary count towards the water card, see "Drinks count as water"); fields left out stay as they are, also inside `fasting` and `activity` |
 | GET | `/api/v1/badges` | – | Badges | see Playful feedback; empty lists while `playful` is false |
 | POST | `/api/v1/badges/seen` | `{codes:[string]}` | Badges | marks those badges as seen; unknown codes are ignored |
 | GET | `/api/v1/review?week=YYYY-Www` | – | Review | see Playful feedback; default the last completed week (Monday to Sunday); malformed or non-existent week → 422 |
@@ -553,6 +556,13 @@ Item { name, brand, amount_total, value, share, times }
   energy when it is added, so that a changed goal does not distort it; null without a goal); below `min_days` the three means are null.
   A pattern in the data, not a proof of a cause. The night counts for the day it ends on, so the day's eating is compared with the
   sleep before it.
+- `training`: null while the range has no workout. Otherwise `{training_days, workout_minutes, weeks, goal, min_days, trained, rest}`:
+  `training_days` and `workout_minutes` count inside the range; `weeks` lists every calendar week (Monday to Sunday) that touches the
+  range, oldest first, as `{week_start, training_days}` with the training days of the WHOLE week (also those outside the range);
+  `goal` is `settings.activity.workouts_week` or null while it is off. Over the logged days, today excluded, two groups: `trained` =
+  logged training days, `rest` = the other logged days. Each is `{days, kcal, protein, kcal_vs_goal}` (as in `sleep`; the last is the
+  mean of kcal minus that day's own calorie goal). The means are shown only when BOTH groups have at least `min_days` (5) days, else
+  all six are null. A pattern in the data, not a proof of a cause.
 - `hints`: rule based, at most 4, most important first. With fewer than 7 days with entries the only hint is
   `few_days`. Codes and params (all numbers rounded for display):
 
@@ -638,6 +648,13 @@ The "x of 7 days" badges look at any seven consecutive calendar days, not at cal
 | `fiber_5` | at least 25 g fibre on 5 of 7 consecutive days |
 | `weigh_in_4` | a weight entered in each of 4 consecutive calendar weeks (Monday to Sunday) |
 | `full_day_10` | 10 days with breakfast, lunch and dinner all logged |
+| `first_workout` | one training day (see Training days) |
+| `active_week` | 3 training days within one calendar week (Monday to Sunday) |
+| `active_month` | at least 2 training days in each of 4 consecutive calendar weeks |
+| `workouts_25` | 25 training days |
+
+The four training badges reward regularity only, never pace, distance or energy. Demo workouts count like demo entries: a badge that
+only demo workouts reach goes away with the demo data.
 
 There is no badge for "own product": foods are shared and store no author, so it cannot be told per user.
 
@@ -866,6 +883,14 @@ adds tables and columns, nothing existing changes.
   holds the MET values and icon names). Without `kcal` the value is estimated as MET x body weight x hours; the weight is the
   latest entry up to the workout's day, else the latest of all, else 75 kg. Such a workout reads `kcal_estimated: true`; the
   estimate follows later changes of minutes and kind. Workouts do not add to the day's active energy (that is the watch's total).
+- **Training days and the weekly goal** (one place: `activity.py`, mirrored in `frontend/src/lib/training.ts`). A calendar week runs
+  Monday to Sunday (days as the server counts them, like `weigh_in_4`). A *training day* is a day whose workouts add up to at least
+  10 minutes (`TRAINING_MIN_MINUTES`); several workouts on a day are one training day. `settings.activity.workouts_week` (0-7, default
+  0 = off) is the weekly goal in training days. With a goal, every `DayActivity` (day view, `GET /activity`, `PUT /activity/{day}`)
+  carries `week`: `{goal, days, done, streak}` for the week of that day (`days` = seven booleans Monday to Sunday, `done` their
+  count). `streak` counts the consecutive weeks that reached the goal, ending with the shown day's week if it is reached already,
+  otherwise with the week before (so an open week never shows a broken streak). Demo workouts count like all others (they are the
+  user's visible data). Webhook events and `summary/today` are unchanged.
 - **Goal with active energy**: with `settings.activity.add_to_goal` the calorie goal of a day is `goal.kcal` plus that day's
   rounded active energy, otherwise `goal.kcal`. The rule lives in ONE function (`activity.day_goal_kcal`, fed by
   `activity.goal_bonuses`) and is used for: `Day.kcal_goal` and the ring, `kcal_left` and `kcal_goal` of `summary/today`, the

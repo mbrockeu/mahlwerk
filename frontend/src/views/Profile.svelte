@@ -17,6 +17,7 @@
     DEFAULT_GLASSES, GLASS_LIMITS, KCAL_LIMITS, MACRO_LIMITS, PRESETS, STEPS_LIMITS, WATER_LIMITS, alignCarbs, clamp, macroGap, macroShares, matchingPreset, presetMacros,
     type MacroKey, type PresetId,
   } from '../lib/goals';
+  import { MAX_WORKOUTS_WEEK } from '../lib/training';
   import { GOAL_SINCE_START, type GoalChange, type ImportBatch } from '../lib/types';
   import { fromDay } from '../lib/date';
   import { fmt, fmtDate, lang, langPref, setLangPref, t, type LangPref } from '../lib/i18n';
@@ -94,6 +95,7 @@
   const playful = $derived(ui.me?.settings?.playful !== false);
   const fasting = $derived(ui.me?.settings?.fasting ?? { enabled: false, target_hours: 16 });
   const addToGoal = $derived(ui.me?.settings?.activity?.add_to_goal === true);
+  const weekGoal = $derived(ui.me?.settings?.activity?.workouts_week ?? 0);
   let actBusy = $state(false);
   let actError = $state('');
   const FAST_PRESETS = [12, 14, 16, 18, 20];
@@ -256,6 +258,20 @@
     actError = '';
     try {
       ui.me.settings = await api.setSettings({ activity: { add_to_goal: !addToGoal } });
+      changed();
+    } catch (err) {
+      actError = t('saveFailed', { reason: err instanceof ApiError ? err.status || err.message : 'error' });
+    } finally {
+      actBusy = false;
+    }
+  }
+
+  async function setWeekGoal(n: number) {
+    if (!ui.me || actBusy || n < 0 || n > MAX_WORKOUTS_WEEK) return;
+    actBusy = true;
+    actError = '';
+    try {
+      ui.me.settings = await api.setSettings({ activity: { workouts_week: n } });
       changed();
     } catch (err) {
       actError = t('saveFailed', { reason: err instanceof ApiError ? err.status || err.message : 'error' });
@@ -544,6 +560,15 @@
           <h2 id="act-title" class="micro quiet">{t('actTitle')}</h2>
           <Toggle checked={addToGoal} label={t('actSettingTitle')} sub={addToGoal ? t('playOn') : t('playOff')} disabled={actBusy} onchange={toggleAddToGoal} />
           <p class="note">{t('actSettingText')}</p>
+          <div class="tg" role="group" aria-labelledby="tg-title">
+            <span id="tg-title" class="micro lab">{t('trainGoalTitle')}</span>
+            <div class="tgb">
+              <button type="button" class="tgs" onclick={() => setWeekGoal(weekGoal - 1)} disabled={actBusy || weekGoal <= 0} aria-label={t('trainGoalLess')}>−</button>
+              <output class="tgv mono" aria-label={t('trainGoalAria')}>{weekGoal ? t('trainGoalValue', { n: weekGoal }) : t('trainGoalOff')}</output>
+              <button type="button" class="tgs" onclick={() => setWeekGoal(weekGoal + 1)} disabled={actBusy || weekGoal >= MAX_WORKOUTS_WEEK} aria-label={t('trainGoalMore')}>+</button>
+            </div>
+            <p class="note">{t('trainGoalText')}</p>
+          </div>
           {#if actError}<p class="note warn" role="alert">{actError}</p>{/if}
         </section>
 
@@ -765,6 +790,13 @@
   .btns .add { flex: 1; background: var(--deep); color: var(--on-deep); }
   .btns .minus { padding: 0 18px; border: 2px solid var(--hairline); font-family: var(--f-mono); font-size: 13px; }
   .btns button:active { transform: scale(0.97); }
+  .tg { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 2px solid var(--hairline); }
+  .tg .lab { color: var(--quiet); }
+  .tgb { display: flex; align-items: center; gap: 8px; }
+  .tgs { width: 44px; height: 44px; border-radius: 22px 22px 22px 8px; border: 2px solid var(--hairline); font-size: 20px; font-weight: 600; line-height: 1; --focus: var(--focus-base); }
+  .tgs:active { transform: scale(0.97); }
+  .tgs[disabled] { opacity: 0.45; }
+  .tgv { min-width: 8em; text-align: center; font-size: 16px; font-weight: 600; }
   .gl { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 2px solid var(--hairline); }
   .gl .lab { color: var(--quiet); }
   .gchip { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 4px 0 16px; border-radius: 22px 22px 22px 8px; background: var(--stone); font-family: var(--f-mono); font-size: 14px; font-weight: 600; color: var(--quiet); }

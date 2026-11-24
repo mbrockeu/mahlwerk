@@ -5,7 +5,7 @@ from mahlwerk.main import create_app
 
 NO_DEMO_ACCOUNT = {"can_switch": False, "viewing": False, "real_username": None, "real_display_name": None}
 NO_DEMO = {"available": False, "entries": 0, "weights": 0, "water": 0, "activity": 0, "workouts": 0}
-DEFAULT_SETTINGS = {"playful": True, "fasting": {"enabled": False, "target_hours": 16}, "activity": {"add_to_goal": False}, "tour_seen": False, "suggestions": True, "home": None, "water_glasses": None, "water_drinks": True}
+DEFAULT_SETTINGS = {"playful": True, "fasting": {"enabled": False, "target_hours": 16}, "activity": {"add_to_goal": False, "workouts_week": 0}, "tour_seen": False, "suggestions": True, "home": None, "water_glasses": None, "water_drinks": True}
 NO_CATALOG = {"products": 0, "updated_at": None, "bls": {"products": 0, "updated_at": None}}
 FEATURES = {"access_tokens": True, "webhooks": True, "cookidoo": False, "web_recipes": False}
 

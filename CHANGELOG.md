@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Training motivation: a weekly goal `settings.activity.workouts_week` (0-7 training days, 0 = off; a training day is a day with at least
+  10 minutes of workouts in total, a week runs Monday to Sunday). With a goal the activity answer gets a `week` block
+  (`{goal, days, done, streak}`) and the activity card a row "This week: 2 of 3 training days" with seven dots and the number of weeks
+  in a row that reached the goal. Four new badges for regularity (`first_workout`, `active_week`, `active_month`, `workouts_25`), and
+  `GET /insights` gets a `training` block (training days per calendar week, minutes, and logged training days against other days
+  in kcal, protein and distance to the goal, from 5 days per side) shown as the card "Training and eating" on the Body tab. Nothing
+  rewards pace or energy. `PATCH /me/settings` now changes only the given fields of `activity`. No schema change.
 - Favourite combos in the add sheet: the tab "Recent" shows up to 3 sets of foods you often eat together in the chosen meal
   (at least 3 different days of the last 6 weeks), e.g. "Quark · Oats · Berries – 420 kcal". A tap opens a checklist with the amounts
   of the last time (changeable); "Add" books the checked ones into the day and meal of the sheet, with Undo. A combo can be saved as a

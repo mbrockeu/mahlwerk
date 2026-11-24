@@ -4,6 +4,7 @@
   import NumField from './NumField.svelte';
   import TickBar from './TickBar.svelte';
   import { api, ApiError } from '../lib/api';
+  import { shiftDay, weekdayInitial, weekdayLong, weekStart } from '../lib/date';
   import { fmt, t } from '../lib/i18n';
   import { changed, openWorkout, toast } from '../lib/store.svelte';
   import { clock, kindInfo } from '../lib/workouts';
@@ -38,6 +39,12 @@
       toast(t('actSaveFailed', { reason: err instanceof ApiError ? err.status || err.message : 'error' }));
     }
   }
+
+  // the week row: only with a weekly goal; seven dots Monday to Sunday (filled = training day, the shown day has a ring)
+  const week = $derived(activity.week ?? null);
+  const monday = $derived(weekStart(day));
+  const weekDays = $derived(week ? week.days.map((on, i) => { const d = shiftDay(monday, i); return { d, on, shown: d === day, name: weekdayLong(d), ini: weekdayInitial(d) }; }) : []);
+  const weekText = $derived(week ? t('trainWeekRow', { done: week.done, goal: week.goal }) : '');
 
   const kindName = (w: Workout) => (w.kind === 'other' && w.name ? w.name : t(`wk_${w.kind}`));
   const detail = (w: Workout) =>
@@ -80,6 +87,23 @@
       </div>
     {/if}
   </dl>
+  {#if week}
+    <div class="week" role="group" aria-label={t('trainWeekAria', { done: week.done, goal: week.goal })}>
+      <p class="wtext"><span>{weekText}</span>
+        {#if week.done >= week.goal}<span class="wok mono"><Icon name="check" size={13} stroke={3} />{t('trainWeekReached')}</span>{/if}
+        {#if week.streak >= 2}<span class="wstreak mono">{t('trainWeekStreak', { n: week.streak })}</span>{/if}
+      </p>
+      <ul class="dots">
+        {#each weekDays as w (w.d)}
+          <li class:on={w.on} class:shown={w.shown} title={w.name}>
+            <span class="dot" aria-hidden="true"></span>
+            <span class="ini mono" aria-hidden="true">{w.ini}</span>
+            <span class="sr-only">{t(w.on ? 'trainDayOn' : 'trainDayOff', { day: w.name })}{w.shown ? `, ${t('trainDayShown')}` : ''}</span>
+          </li>
+        {/each}
+      </ul>
+    </div>
+  {/if}
   {#if activity.steps == null && activity.active_kcal == null && !activity.workouts.length}<p class="note">{t('actNoValue')}</p>{/if}
 
   {#if activity.workouts.length}<ul class="workouts" aria-label={t('actWorkoutsToday')}>
@@ -118,6 +142,17 @@
   .fact dd :global(.edit) { padding: 8px 0 1px; border-bottom: 2px dotted var(--hairline); border-radius: 0; }
   .u { font-size: 12px; font-weight: 500; color: var(--quiet); margin-left: 2px; }
 
+  .week { display: flex; flex-direction: column; gap: 6px; padding-right: 4px; }
+  .wtext { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 14px; font-weight: 600; }
+  .wok { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 600; background: var(--lime); color: var(--on-lime); border-radius: 10px 10px 10px 4px; padding: 1px 8px; }
+  .wstreak { font-size: 12px; color: var(--quiet); }
+  .dots { display: flex; gap: 6px; }
+  .dots li { flex: 1 1 0; max-width: 40px; display: flex; flex-direction: column; align-items: center; gap: 2px; position: relative; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--hairline); box-sizing: border-box; }
+  .dots li.on .dot { background: var(--bar); border-color: var(--bar); }
+  .dots li.shown .dot { box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--text); }
+  .ini { font-size: 10px; color: var(--quiet); }
+  .dots li.shown .ini { color: var(--text); font-weight: 600; }
   .workouts { display: flex; flex-direction: column; gap: 6px; }
   .wrow { width: 100%; min-height: 56px; padding: 6px 14px 6px 8px; border-radius: 20px 20px 20px 8px; background: var(--stone); display: flex; align-items: center; gap: 12px; text-align: left; }
   .ico { width: 40px; height: 40px; border-radius: 14px 14px 14px 6px; background: var(--lime); color: var(--on-lime); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
