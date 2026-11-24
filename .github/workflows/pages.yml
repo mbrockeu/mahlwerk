@@ -22,12 +22,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,5 +40,15 @@ jobs:
         with:
           path: _site
           include-hidden-files: true
+
+  # a separate job, as in GitHub's own template: deploy-pages looks the artifact up through the artifact service,
+  # which did not list an artifact uploaded earlier in the same job (Nov 2026)
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v5
