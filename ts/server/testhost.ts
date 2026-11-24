@@ -9,6 +9,7 @@ import { testToday } from '../core/dates.ts';
 import { makeApp } from './app.ts';
 import { OutError, type Outgoing } from '../core/outgoing.ts';
 import type { Ctx } from '../core/http.ts';
+import { authServices } from './authServices.ts';
 import { addServices } from './services.ts';
 import { openSqlite } from './sqlite.ts';
 
@@ -56,14 +57,20 @@ const server = createServer(async (req, res) => {
     if (req.url === '/__test/app' && req.method === 'POST') {
       const chunks: Buffer[] = [];
       for await (const c of req) chunks.push(c as Buffer);
-      const { env, db: path, bridge } = JSON.parse(Buffer.concat(chunks).toString());
+      const { env, db: path, bridge, password_cost: passwordCost } = JSON.parse(Buffer.concat(chunks).toString());
       const db = openSqlite(path);
       await openSchema(db, schema);
       const clock = { now: null as number | null };
       const id = String(next++);
-      const ctx: Ctx = { db, env, now: () => clock.now ?? Date.now() / 1000, services: {} };
+      // `passwordCost` (a lower scrypt cost) exists for the tests only: this is the one place that sets it, no environment variable does
+      const ctx: Ctx = { db, env, now: () => clock.now ?? Date.now() / 1000, services: { ...authServices(path), ...(passwordCost ? { passwordCost } : {}) } };
       addServices(ctx, path, bridgeOutgoing(bridge, id));
-      apps.set(id, { handle: makeApp(ctx), clock, db, env });
+      let handle: ReturnType<typeof makeApp>;
+      try { handle = makeApp(ctx); } catch (e) {
+        db.close?.(); // a configuration the server refuses to start with (Python: ValueError from create_app)
+        return json(res, 400, { startup_error: String((e as Error).message) });
+      }
+      apps.set(id, { handle, clock, db, env });
       for (const [old, a] of apps) {
         if (apps.size <= KEEP) break;
         a.db.close?.();
@@ -74,6 +81,14 @@ const server = createServer(async (req, res) => {
     if (req.url?.startsWith('/__test/clock/') && req.method === 'POST') {
       const [, , , id, value] = req.url.split('/');
       apps.get(id)!.clock.now = value === 'real' ? null : Number(value);
+      return json(res, 200, {});
+    }
+    if (req.url?.startsWith('/__test/env/') && req.method === 'POST') { // the environment as it is now (the features read it live, like os.environ)
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      const app = apps.get(req.url.split('/')[3]!)!;
+      for (const k of Object.keys(app.env)) delete app.env[k];
+      Object.assign(app.env, JSON.parse(Buffer.concat(chunks).toString()));
       return json(res, 200, {});
     }
     if (req.url?.startsWith('/__test/app/') && req.method === 'DELETE') {
@@ -88,7 +103,13 @@ const server = createServer(async (req, res) => {
       Object.assign(app.env, JSON.parse(newEnv));
     }
     testToday.day = typeof req.headers['x-test-today'] === 'string' ? req.headers['x-test-today'] : null; // tests run one request at a time
-    await app.handle(req, res, String(req.headers['x-test-peer'] ?? '127.0.0.1'));
+    const raw = req.headers['x-test-rawheaders']; // header values the test client could not send as they are (blanks at the ends)
+    if (typeof raw === 'string') {
+      const given = JSON.parse(Buffer.from(raw, 'base64').toString());
+      for (const [name, value] of Object.entries(given)) req.headers[name.toLowerCase()] = value as string;
+      delete req.headers['x-test-rawheaders'];
+    }
+    await app.handle(req, res, String(req.headers['x-test-peer'] ?? '127.0.0.1'), String(req.headers['x-test-scheme'] ?? 'http'));
   } catch (e) {
     console.error(e);
     if (!res.headersSent) json(res, 500, { detail: String(e) });

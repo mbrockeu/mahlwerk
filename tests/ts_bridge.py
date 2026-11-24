@@ -126,6 +126,10 @@ def _bridge() -> str:
     return _host["bridge"]
 
 
+def _environment() -> dict:
+    return {k: v for k, v in os.environ.items() if k.startswith("MAHLWERK_")}
+
+
 class _State:
     """Only so that `app.state.x` gives a clear error instead of a confusing one."""
 
@@ -135,12 +139,16 @@ class _State:
 
 class RemoteApp:
     def __init__(self, db_path=None, transport=None, *, clock=None, oidc_transport=None, yazio_transport=None,
-                 web_transport=None, vision_transport=None, webhook_transport=None, **_ignored):
-        env = {k: v for k, v in os.environ.items() if k.startswith("MAHLWERK_")}
+                 web_transport=None, vision_transport=None, webhook_transport=None, password_cost=None, **_ignored):
+        env = _environment()
         path = db_path or env.get("MAHLWERK_DB", "./data/mahlwerk.db")
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        r = httpx.post(_base() + "/__test/app", json={"env": env, "db": str(path), "bridge": _bridge()}, timeout=30)
+        r = httpx.post(_base() + "/__test/app", json={"env": env, "db": str(path), "bridge": _bridge(),
+                                                      "password_cost": list(password_cost) if password_cost else None}, timeout=30)
+        if r.status_code == 400 and "startup_error" in r.json():  # the server refuses this configuration (Python: ValueError)
+            raise ValueError(r.json()["startup_error"])
         r.raise_for_status()
+        self.env = env
         self.id = r.json()["id"]
         self.transport, self.oidc_transport, self.yazio_transport = transport, oidc_transport, yazio_transport
         self.web_transport, self.vision_transport, self.webhook_transport = web_transport, vision_transport, webhook_transport
@@ -187,9 +195,23 @@ class _ToHost(httpx.HTTPTransport):
             request.headers["x-test-today"] = day
         if self.app.clock is not None:
             httpx.post(f"{_base()}/__test/clock/{self.app.id}/{self.app.clock()}", timeout=10)
+        env = _environment()
+        if env != self.app.env:  # a test changed the environment after create_app (the features read it live, like os.environ)
+            httpx.post(f"{_base()}/__test/env/{self.app.id}", json=env, timeout=10)
+            self.app.env = env
+        raw = {k: v for k, v in request.headers.items() if v != v.strip()}  # h11 refuses a value with blanks at the ends, Starlette's client sends it
+        if raw:
+            for k, v in raw.items():
+                request.headers[k] = v.strip()
+            request.headers["x-test-rawheaders"] = base64.b64encode(json.dumps(raw).encode()).decode()
         target = httpx.URL(_base())
-        request.url = request.url.copy_with(scheme=target.scheme, host=target.host, port=target.port)
-        return super().handle_request(request)
+        original = request.url
+        request.headers["x-test-scheme"] = original.scheme  # the app decides on the Secure flag from it
+        request.url = original.copy_with(scheme=target.scheme, host=target.host, port=target.port)
+        try:
+            return super().handle_request(request)
+        finally:
+            request.url = original  # cookies and redirects stay with the name the test used
 
 
 class RemoteClient(httpx.Client):
