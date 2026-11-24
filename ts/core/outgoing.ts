@@ -4,7 +4,7 @@
 import type { Ctx } from './http.ts';
 
 /** What a request is for; the tests answer each purpose with its own mock. */
-export type Purpose = 'off' | 'oidc' | 'yazio' | 'web' | 'vision' | 'webhook';
+export type Purpose = 'off' | 'oidc' | 'yazio' | 'web' | 'vision' | 'webhook' | 'cookidoo';
 
 export interface OutRequest {
   method?: string;
@@ -24,6 +24,8 @@ export interface OutResponse {
   status: number;
   /** lower-case names; a repeated header is joined with ", " */
   headers: Record<string, string>;
+  /** The raw Set-Cookie values (a joined header cannot be split safely); hosts that cannot give them leave it out. */
+  setCookies?: string[];
   body: Uint8Array;
 }
 
