@@ -72,6 +72,7 @@ tests/test_api.py::test_food_crud_without_barcode
 tests/test_api.py::test_editing_an_upstream_food_turns_it_into_own
 tests/test_api.py::test_serving_is_parsed_for_milliliters_unless_unit_is_explicit
 tests/test_api.py::test_search_hides_empty_entries_and_filters
+tests/test_api.py::test_search_puts_whole_words_before_word_starts_before_inner_matches
 tests/test_api.py::test_food_validation
 tests/test_auth.py::test_single_mode_needs_no_login
 tests/test_auth.py::test_single_mode_user_name_is_configurable
