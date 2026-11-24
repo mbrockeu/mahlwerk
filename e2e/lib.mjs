@@ -1,16 +1,43 @@
 // Small shared helpers for the UI smoke tests: one browser per test file, a page that fails the test on page errors / 5xx, API setup via HTTP.
 import { chromium } from 'playwright-core';
-import { mkdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 
 export const BASE = process.env.MW_BASE;
 export const AUTH = process.env.MW_AUTH;
+/** `app`: the app build with the fake native side (app/), the API answered in the page; else a server. */
+export const APP = process.env.MW_TARGET === 'app';
+const CONTEXT = { baseURL: BASE, locale: 'en-US', viewport: { width: 1280, height: 900 }, acceptDownloads: true };
+
+// app mode: ONE context per test file (its SharedWorker holds the data, like the phone), a helper page that keeps the worker alive
+// and answers the API calls of the tests; every test gets a new page in that context instead of a new context
+let shared = null;
 
 export async function launch() {
-  return chromium.launch({ executablePath: '/usr/bin/chromium', args: ['--disable-gpu', '--no-sandbox'], headless: true });
+  const browser = await chromium.launch({ executablePath: '/usr/bin/chromium', args: ['--disable-gpu', '--no-sandbox'], headless: true });
+  if (APP) {
+    const context = await browser.newContext(CONTEXT);
+    await context.addInitScript({ content: readFileSync(new URL('./app/init.js', import.meta.url), 'utf8') });
+    const helper = await context.newPage();
+    await helper.goto('/');
+    await helper.waitForFunction(() => typeof window.mahlwerkLocal === 'function', null, { timeout: 15000 });
+    shared = { context, helper };
+  }
+  return browser;
 }
 
-/** HTTP API of the server under test (single mode: no login; local mode: pass the cookie). */
+/** HTTP API of the server under test (single mode: no login; local mode: pass the cookie). In app mode: the app host of the helper page. */
 export function apiClient(cookie) {
+  if (APP) return async (method, path, body) => {
+    if (!shared) throw new Error('launch() first');
+    const r = await shared.helper.evaluate(async ([m, p, b]) => {
+      const headers = { 'X-Mahlwerk-Request': '1' };
+      if (b !== undefined) headers['content-type'] = 'application/json';
+      const res = await window.mahlwerkLocal(`api/v1/${p}`, { method: m, headers, body: b === undefined ? undefined : JSON.stringify(b) });
+      return { ok: res.ok, status: res.status, text: await res.text() };
+    }, [method, path, body]);
+    if (!r.ok) throw new Error(`${method} ${path} -> ${r.status} ${r.text.slice(0, 200)}`);
+    return r.text ? JSON.parse(r.text) : null;
+  };
   return async (method, path, body) => {
     const headers = { 'X-Mahlwerk-Request': '1', ...(cookie ? { cookie } : {}) };
     if (body !== undefined) headers['content-type'] = 'application/json';
@@ -23,12 +50,19 @@ export function apiClient(cookie) {
 
 /** A fresh browser context (English, wide screen) and page; problems seen during the test are collected in `problems`. */
 export async function newPage(browser, { cookies, moments = true } = {}) {
-  const context = await browser.newContext({ baseURL: BASE, locale: 'en-US', viewport: { width: 1280, height: 900 }, acceptDownloads: true });
-  if (cookies) await context.addCookies(cookies);
-  const page = await context.newPage();
+  let context, page;
+  if (APP) {
+    page = await shared.context.newPage();
+    context = { close: () => page.close() }; // the context (and its data) stays for the next test
+  } else {
+    context = await browser.newContext(CONTEXT);
+    if (cookies) await context.addCookies(cookies);
+    page = await context.newPage();
+  }
   const problems = [];
   page.on('pageerror', (e) => problems.push(`page error: ${e.message}`));
   page.on('response', (r) => { if (r.url().includes('/api/') && r.status() >= 500) problems.push(`HTTP ${r.status()} ${r.request().method()} ${r.url()}`); });
+  page.on('console', (m) => { if (m.text().startsWith('MW-5XX ')) problems.push(m.text().slice(7)); }); // app mode (app/init.js)
   page.setDefaultTimeout(8000);
   // a new badge covers the screen with a dialog: click it away wherever it turns up (the badge test turns this off)
   if (moments) await page.addLocatorHandler(page.getByRole('button', { name: 'Continue', exact: true }), (b) => b.click());

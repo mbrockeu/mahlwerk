@@ -2,6 +2,11 @@
   "name": "mahlwerk-e2e",
   "private": true,
   "type": "module",
-  "scripts": { "test": "node --test --test-concurrency=1 tests/*.test.mjs" },
-  "devDependencies": { "playwright-core": "^1.49.0" }
+  "scripts": {
+    "test": "node --test --test-concurrency=1 tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "@sqlite.org/sqlite-wasm": "^3.54.1-build1",
+    "playwright-core": "^1.49.0"
+  }
 }
