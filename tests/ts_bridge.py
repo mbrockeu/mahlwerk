@@ -62,19 +62,20 @@ def _error_kind(exc: Exception) -> str:
 def _call_transport(transport, payload: dict) -> dict:
     request = httpx.Request(payload["method"], payload["url"], headers=payload["headers"],
                             content=base64.b64decode(payload["body"]) if payload["body"] else None)
-    if isinstance(transport, httpx.AsyncBaseTransport):
+    if not isinstance(transport, httpx.BaseTransport):  # (a MockTransport is both: the sync way is used)
         async def run():
             response = await transport.handle_async_request(request)
-            await response.aread()
-            return response
-        response = asyncio.run(run())
+            body = response.content if response.is_stream_consumed else b"".join([c async for c in response.aiter_raw()])
+            return response, body
+        response, body = asyncio.run(run())
     else:
         response = transport.handle_request(request)
-        response.read()
+        # the bytes as they were sent (a body with a content-encoding stays encoded: the app inflates it itself)
+        body = response.content if response.is_stream_consumed else b"".join(response.iter_raw())
     headers: dict[str, str] = {}
     for key, value in response.headers.multi_items():
         headers[key.lower()] = f"{headers[key.lower()]}, {value}" if key.lower() in headers else value
-    return {"status": response.status_code, "headers": headers, "body": base64.b64encode(response.content).decode()}
+    return {"status": response.status_code, "headers": headers, "body": base64.b64encode(body).decode()}
 
 
 class _Handler(BaseHTTPRequestHandler):

@@ -11,6 +11,7 @@ import type { Ctx } from '../core/http.ts';
 import { addServices } from './services.ts';
 import { openSqlite } from './sqlite.ts';
 
+console.info = console.debug = console.warn; // the port line is the only thing on stdout; the rest goes to stderr
 const schema = readFileSync(new URL('../core/schema.sql', import.meta.url), 'utf8');
 const apps = new Map<string, { handle: ReturnType<typeof makeApp>; clock: { now: number | null }; db: { close?(): void }; env: Record<string, string | undefined> }>();
 const KEEP = 40; // a test uses at most a few apps; older ones are closed (file handles)
