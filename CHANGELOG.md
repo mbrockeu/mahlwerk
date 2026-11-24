@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-24
+
 ### Added
 - Training motivation: a weekly goal `settings.activity.workouts_week` (0-7 training days, 0 = off; a training day is a day with at least
   10 minutes of workouts in total, a week runs Monday to Sunday). With a goal the activity answer gets a `week` block
@@ -78,6 +80,7 @@ All notable changes to this project are documented here. The format follows
 - The list of recent foods (`GET /api/v1/foods/recent`) reads its foods in one query instead of one per food.
 
 ### Changed
+- Weight page: the chart has a period choice (30 days, 90 days, year, all), remembered per browser; lowest, highest, the entry count and "since …" follow it, the change tiles keep looking back 7/30/90 days.
 
 - The interactive API docs (`/docs`, `/redoc`, `/openapi.json`) are off in every sign-in mode unless `MAHLWERK_DOCS=1` (before: only in `local` and `oidc`).
 - Blocking a user in the admin area works in every sign-in mode (before: `local` and `oidc` only); outside `local` only blocking is possible there, the admin right and the household still come from the proxy's or provider's groups. Nobody can block themself in any mode.
