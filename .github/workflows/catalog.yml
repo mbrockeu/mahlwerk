@@ -1,0 +1,54 @@
+name: Catalogue for the app
+
+# Once a month (and on demand): the Open Food Facts catalogue for Germany as one SQLite file, attached to the release `catalog`
+# together with its manifest catalog.json (address, sha256, size). The iOS app loads the manifest and then the file.
+on:
+  schedule:
+    - cron: "23 3 4 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalog
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -e .
+      - name: Build the catalogue
+        run: scripts/build-catalog-release.sh out
+      - name: Publish to the release "catalog"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          name=$(basename out/catalog-de-*.db.gz)
+          cat > notes.md <<'NOTES'
+          Lebensmittelkatalog für die Mahlwerk-App: Produkte aus Deutschland aus Open Food Facts, als SQLite-Datei (gzip).
+          Wird monatlich neu gebaut; `catalog.json` nennt die aktuelle Datei mit Größe und sha256.
+
+          Food catalogue for the Mahlwerk app: products sold in Germany from Open Food Facts, as an SQLite file (gzip), rebuilt monthly.
+
+          Data from [Open Food Facts](https://world.openfoodfacts.org), made available under the
+          [Open Database License (ODbL) 1.0](https://opendatacommons.org/licenses/odbl/1-0/); the contents under the
+          [Database Contents License (DbCL) 1.0](https://opendatacommons.org/licenses/dbcl/1-0/). This file is a derived database
+          and is shared under the same licence.
+          NOTES
+          gh release view catalog >/dev/null 2>&1 || \
+            gh release create catalog --title "Lebensmittelkatalog (Open Food Facts, Deutschland)" --notes-file notes.md --latest=false --target "$GITHUB_SHA"
+          gh release edit catalog --notes-file notes.md
+          gh release upload catalog "out/$name" --clobber
+          gh release upload catalog out/catalog.json --clobber   # after the file, so the manifest never names a missing one
+          gh release view catalog --json assets -q '.assets[].name' | grep '^catalog-de-.*\.db\.gz$' | grep -vx "$name" \
+            | xargs -r -n1 gh release delete-asset catalog -y
+          cat out/catalog.json >> "$GITHUB_STEP_SUMMARY"
