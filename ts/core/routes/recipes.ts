@@ -10,7 +10,8 @@ import * as nutrients from '../nutrients.ts';
 import { pySum } from '../num.ts';
 import { canEdit, needEdit } from '../ownership.ts';
 import { getFood, listFoods } from '../store/foods.ts';
-import { deleteRecipe, eatenSince, getRecipe, knownCatalog, listRecipes, saveRecipe, type RecipeRow } from '../store/recipes.ts';
+import { knownCatalog } from '../store/foods.ts';
+import { deleteRecipe, eatenSince, getRecipe, listRecipes, saveRecipe, type RecipeRow } from '../store/recipes.ts';
 import type { ItemIn } from '../store/templates.ts';
 
 /** The pictures of recipes live outside core (files); the host may hand in what has to happen to a file. */
@@ -79,7 +80,7 @@ export const routes: Route[] = [
     const own = (await listFoods(db, '', null, 100_000, ['recipe', 'cookidoo', 'web'], Boolean(user.is_demo))) as ingredients.OwnFood[];
     const eaten = body.recent ? await eatenSince(db, user.id, addDays(today(), -(ingredients.RECENT_DAYS - 1))) : null;
     const catalog = req.ctx.services.catalog as ingredients.CatalogSearch | undefined;
-    const skip = (hits: ingredients.CatalogHit[]) => knownCatalog(db, hits, ingredients.skipKey);
+    const skip = (hits: ingredients.CatalogHit[]) => knownCatalog(db, hits);
     const lines: IngredientLine[] = [];
     for (const [number, line] of parsed) {
       const found = await ingredients.candidates(line.name, own, catalog, skip, line.text, line.canned, eaten);

@@ -175,17 +175,3 @@ export async function eatenSince(db: Db, userId: number, first: string): Promise
   return new Map(rows.map((r) => [r.food_id as number, { count: r.count as number, last: r.last as string }]));
 }
 
-/** The (source, code) of those catalogue `hits` that exist as a food already: by barcode for packaged products, by `external_id`
- * (`bls:<code>`) for basic foods. Keys as `skipKey(source, code)` of ingredients.ts. */
-export async function knownCatalog(db: Db, hits: { source: string; code: string }[], key: (source: string, code: string) => string): Promise<Set<string>> {
-  const out = new Set<string>();
-  const codes = hits.filter((h) => h.source !== 'bls').map((h) => h.code);
-  if (codes.length) {
-    for (const r of await db.all(`SELECT code FROM food WHERE found = 1 AND code IN (${codes.map(() => '?').join(', ')})`, codes)) out.add(key('openfoodfacts', r.code));
-  }
-  const keys = hits.filter((h) => h.source === 'bls').map((h) => `bls:${h.code}`);
-  if (keys.length) {
-    for (const r of await db.all(`SELECT external_id FROM food WHERE found = 1 AND external_id IN (${keys.map(() => '?').join(', ')})`, keys)) out.add(key('bls', (r.external_id as string).slice(4)));
-  }
-  return out;
-}

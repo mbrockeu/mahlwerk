@@ -420,7 +420,7 @@ export interface CatalogSearch {
   /** `skip` gets a list of hits and answers the `skipKey`s of those that exist as a food already (they are left out). */
   search(query: string, limit: number, source: string | null, skip?: (hits: CatalogHit[]) => Promise<Set<string>>): Promise<CatalogHit[]>;
 }
-export const skipKey = (source: string, code: string): string => `${source}\u0000${code}`;
+export const skipKey = (source: string, code: string): string => `${source}/${code}`; // the key catalog.search and store/foods.knownCatalog use
 
 /** A stored food as the finding needs it: a store row with its data. */
 export interface OwnFood { id: number; code: string | null; source: string; data: { name?: string | null; brand?: string | null; unit?: string | null; per_100: Record<string, number | null> } }
