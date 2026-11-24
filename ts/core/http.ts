@@ -11,6 +11,12 @@ export interface User {
   is_admin: boolean;
   via_token: boolean;
   household: boolean;
+  /** The caller is an admin who has switched to the demo account (auth.ts `currentUser`): this user is the demo account. */
+  is_demo?: boolean;
+  session_hash?: string | null;
+  provider_name?: string | null;
+  name_custom?: boolean;
+  demo_real?: { username: string; display_name: string };
   [k: string]: unknown;
 }
 
@@ -31,6 +37,12 @@ export interface Req {
   headers: Record<string, string>; // lower-case names
   body: unknown; // parsed JSON, or a Uint8Array for binary uploads, or undefined
   peer: string;
+  /** `http` or `https`: how the request reached the server (the test host passes what the test client used). */
+  scheme?: string;
+  /** The matched route template (FastAPI's `route.path`), set before auth runs. */
+  route?: string;
+  /** Headers and cookies the auth step adds to the answer of a successful request (FastAPI's injected `response`). */
+  out?: { headers: Record<string, string>; cookies: string[] };
   /** Set by the auth step before the handler runs (routes with `auth: false` have none). */
   user?: User;
   ctx: Ctx;
@@ -59,6 +71,9 @@ export class HttpError extends Error {
 
 /** Marks a full answer (status, headers, cookies) as opposed to a plain JSON value. */
 export const RES = Symbol('res');
+/** The side channel for headers and cookies of the auth step; merged into the answer when the handler succeeds. */
+export const outOf = (req: Req): { headers: Record<string, string>; cookies: string[] } => (req.out ??= { headers: {}, cookies: [] });
+
 export const respond = (res: Res): Res => Object.assign(res, { [RES]: true });
 
 export type Handler = (req: Req) => Promise<Res | unknown>;

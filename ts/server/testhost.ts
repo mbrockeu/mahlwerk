@@ -7,10 +7,11 @@ import { readFileSync } from 'node:fs';
 import { openSchema } from '../core/db.ts';
 import { makeApp } from './app.ts';
 import { OutError, type Outgoing } from '../core/outgoing.ts';
+import { authServices } from './authServices.ts';
 import { openSqlite } from './sqlite.ts';
 
 const schema = readFileSync(new URL('../core/schema.sql', import.meta.url), 'utf8');
-const apps = new Map<string, { handle: ReturnType<typeof makeApp>; clock: { now: number | null }; db: { close?(): void } }>();
+const apps = new Map<string, { handle: ReturnType<typeof makeApp>; clock: { now: number | null }; db: { close?(): void }; env: Record<string, string | undefined> }>();
 const KEEP = 40; // a test uses at most a few apps; older ones are closed (file handles)
 let next = 1;
 
@@ -52,13 +53,19 @@ const server = createServer(async (req, res) => {
     if (req.url === '/__test/app' && req.method === 'POST') {
       const chunks: Buffer[] = [];
       for await (const c of req) chunks.push(c as Buffer);
-      const { env, db: path, bridge } = JSON.parse(Buffer.concat(chunks).toString());
+      const { env, db: path, bridge, password_cost: passwordCost } = JSON.parse(Buffer.concat(chunks).toString());
       const db = openSqlite(path);
       await openSchema(db, schema);
       const clock = { now: null as number | null };
       const id = String(next++);
-      const services: Record<string, unknown> = bridge ? { out: bridgeOutgoing(bridge, id) } : {};
-      apps.set(id, { handle: makeApp({ db, env, now: () => clock.now ?? Date.now() / 1000, services }), clock, db });
+      // `passwordCost` (a lower scrypt cost) exists for the tests only: this is the one place that sets it, no environment variable does
+      const services: Record<string, unknown> = { ...(bridge ? { out: bridgeOutgoing(bridge, id) } : {}), ...authServices(path), ...(passwordCost ? { passwordCost } : {}) };
+      let handle: ReturnType<typeof makeApp>;
+      try { handle = makeApp({ db, env, now: () => clock.now ?? Date.now() / 1000, services }); } catch (e) {
+        db.close?.(); // a configuration the server refuses to start with (Python: ValueError from create_app)
+        return json(res, 400, { startup_error: String((e as Error).message) });
+      }
+      apps.set(id, { handle, clock, db, env });
       for (const [old, a] of apps) {
         if (apps.size <= KEEP) break;
         a.db.close?.();
@@ -71,13 +78,27 @@ const server = createServer(async (req, res) => {
       apps.get(id)!.clock.now = value === 'real' ? null : Number(value);
       return json(res, 200, {});
     }
+    if (req.url?.startsWith('/__test/env/') && req.method === 'POST') { // the environment as it is now (the features read it live, like os.environ)
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      const app = apps.get(req.url.split('/')[3]!)!;
+      for (const k of Object.keys(app.env)) delete app.env[k];
+      Object.assign(app.env, JSON.parse(Buffer.concat(chunks).toString()));
+      return json(res, 200, {});
+    }
     if (req.url?.startsWith('/__test/app/') && req.method === 'DELETE') {
       apps.delete(req.url.split('/')[3]);
       return json(res, 200, {});
     }
     const app = apps.get(String(req.headers['x-test-app'] ?? ''));
     if (!app) return json(res, 400, { detail: 'unknown x-test-app' });
-    await app.handle(req, res, String(req.headers['x-test-peer'] ?? '127.0.0.1'));
+    const raw = req.headers['x-test-rawheaders']; // header values the test client could not send as they are (blanks at the ends)
+    if (typeof raw === 'string') {
+      const given = JSON.parse(Buffer.from(raw, 'base64').toString());
+      for (const [name, value] of Object.entries(given)) req.headers[name.toLowerCase()] = value as string;
+      delete req.headers['x-test-rawheaders'];
+    }
+    await app.handle(req, res, String(req.headers['x-test-peer'] ?? '127.0.0.1'), String(req.headers['x-test-scheme'] ?? 'http'));
   } catch (e) {
     console.error(e);
     if (!res.headersSent) json(res, 500, { detail: String(e) });
