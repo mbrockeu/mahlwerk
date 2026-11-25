@@ -200,7 +200,7 @@
     {/if}
     <!-- the search stays mounted while another tab is shown, so the typed text survives a look at "Recent" -->
     {#if tab === 'search'}{@render photoButton()}{/if}
-    <div class="pane" hidden={tab !== 'search'}><FoodSearch onpick={(f) => pick(f)} onnew={newProduct} active={tab === 'search'} bind:query /></div>
+    <div class="pane" hidden={tab !== 'search'}><FoodSearch onpick={(f) => pick(f)} defer onnew={newProduct} active={tab === 'search'} bind:query /></div>
     {#if tab === 'recent'}
       {#if recent === null}
         <p class="note">{t('searching')}</p>

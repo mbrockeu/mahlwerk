@@ -121,7 +121,7 @@ def default_bls_path(off_path: str) -> str:
 
 def fold(text: str) -> str:
     """Lower case without diacritics ('Äpfel' -> 'apfel'), like the FTS tokenizer sees words."""
-    # 'ß' stays: the full text index keeps it too ('Weißzucker' is found by "weißzucker", not by "weisszucker")
+    # 'ß' stays: the full text index keeps it too; the search looks up 'ss' and 'ß' alike (`spellings`)
     decomposed = unicodedata.normalize("NFKD", "ß".join(part.casefold() for part in text.split("ß")))
     return "".join(c for c in decomposed if not unicodedata.combining(c))
 
@@ -137,6 +137,40 @@ def name_key(name: str) -> str:
 def name_compact(name: str | None) -> str | None:
     """The name without spaces and hyphens ('Hafer Flocken' -> 'haferflocken'), so that a compound word finds it."""
     return "".join(words(name)) if name else None
+
+
+def _ss(text: str) -> str:
+    """'ß' written 'ss' ('heiße' -> 'heisse'): the full text index keeps 'ß', but nobody types it on every keyboard."""
+    return text.replace("ß", "ss")
+
+
+def _spellings(word: str) -> list[str]:
+    """The spellings of a word that count as the same: as typed, all 'ß' as 'ss', all 'ss' as 'ß' ('heisse' <-> 'heiße')."""
+    return list(dict.fromkeys([word, _ss(word), word.replace("ss", "ß")]))
+
+
+# Everyday names for BLS foods. The BLS names are official ("Milchmischgetränk 3,5 % Fett, mit Kakao/Schokolade, gesüßt"), so
+# what people type ("heiße Schokolade") does not find them by name; these phrases do. The first BLS codes are listed first, in this order.
+_COCOA_DRINKS = ["M206300", "M206200", "M206100"]
+_ALIAS_PHRASES = (
+    "heiße schokolade", "heißer kakao", "warmer kakao", "kalter kakao", "kakao getränk", "kakaogetränk", "trinkkakao", "kakaomilch",
+    "schokomilch", "schokoladenmilch", "milchkakao", "kaba", "trinkschokolade",  # not "kakao" alone: that is the baking cocoa
+)
+BLS_ALIASES = {_ss(" ".join(words(phrase))): _COCOA_DRINKS for phrase in _ALIAS_PHRASES}
+
+
+def alias_codes(tokens: list[str]) -> list[str]:
+    """The codes of the everyday name the query spells out: the same number of words, each the start of the phrase's word
+    (a single word phrase has to be typed whole, or "kakao" would find "kakaomilch")."""
+    typed = [_ss(t) for t in tokens]
+    codes: list[str] = []
+    for phrase, listed in BLS_ALIASES.items():
+        parts = phrase.split(" ")
+        if len(parts) == len(typed) and all(
+            w == p if len(parts) == 1 else p.startswith(w) for w, p in zip(typed, parts, strict=True)
+        ):
+            codes.extend(c for c in listed if c not in codes)
+    return codes
 
 
 def food_data(item: dict) -> dict:
@@ -263,11 +297,33 @@ class Catalog:
             hits = self._search_off(tokens, limit)
         else:
             return []
-        return self._with_compounds(source, tokens, hits, limit) if len(tokens) == 1 else hits
+        if len(tokens) == 1:
+            hits = self._with_compounds(source, tokens, hits, limit)
+        return self._aliases_first(tokens, hits, limit) if source == BLS else hits
+
+    def _aliases_first(self, tokens: list[str], hits: list[dict], limit: int) -> list[dict]:
+        """The foods of an everyday name ("heiße Schokolade") go to the top of the basic foods."""
+        codes = alias_codes(tokens)
+        if not codes:
+            return hits
+        con = self._open(self.bls_path)
+        if con is None:
+            return hits
+        try:
+            rows = con.execute(
+                f"SELECT * FROM product WHERE source = 'bls' AND code IN ({', '.join('?' * len(codes))})", codes
+            ).fetchall()
+        except sqlite3.DatabaseError:
+            return hits
+        finally:
+            con.close()
+        named = sorted((self._item(r) for r in rows), key=lambda n: codes.index(n["code"]))
+        known = {n["code"] for n in named}
+        return (named + [h for h in hits if h["code"] not in known])[:limit]
 
     @staticmethod
     def _starts(item: dict, word: str) -> bool:
-        return any(name and name_key(name).startswith(word) for name in (item["name"], item.get("name_en")))
+        return any(name and _ss(name_key(name)).startswith(_ss(word)) for name in (item["name"], item.get("name_en")))
 
     def _whole_name_first(self, source: str, word: str, hits: list[dict], limit: int) -> list[dict]:
         """A food whose whole name is the word, only written apart ("Hafer Flocken" for "haferflocken"), is what
@@ -279,10 +335,12 @@ class Catalog:
             columns = {r["name"] for r in con.execute("PRAGMA table_info(product)")}
             if not {"name_compact", "name_compact_en"} <= columns:
                 return hits
+            forms = _spellings(word)
+            listed = ", ".join(f":w{i}" for i in range(len(forms)))
             rows = con.execute(
-                "SELECT * FROM product WHERE source = :source AND (name_compact = :w OR name_compact_en = :w) "
+                f"SELECT * FROM product WHERE source = :source AND (name_compact IN ({listed}) OR name_compact_en IN ({listed})) "
                 "ORDER BY id LIMIT 3",
-                {"source": source, "w": word},
+                {"source": source, **{f"w{i}": w for i, w in enumerate(forms)}},
             ).fetchall()
         except sqlite3.DatabaseError:
             return hits
@@ -300,21 +358,29 @@ class Catalog:
         that start with the word and before the rest. A catalogue file without the compact name columns skips this."""
         word = tokens[0]
         hits = self._whole_name_first(source, word, hits, limit)
-        starting = [h for h in hits if self._starts(h, word) or word in (name_compact(h["name"]), name_compact(h.get("name_en")))]
+        starting = [
+            h for h in hits
+            if self._starts(h, word)
+            or any(c is not None and _ss(c) == _ss(word) for c in (name_compact(h["name"]), name_compact(h.get("name_en"))))
+        ]
         if len(starting) >= COMPOUND_BELOW:
             return hits
         con = self._open(self._file(source))
         if con is None:
             return hits
-        upper = word[:-1] + chr(ord(word[-1]) + 1)
+        params: dict = {"source": source, "limit": limit}
+        ranges = []
+        for i, w in enumerate(_spellings(word)):
+            params[f"w{i}"] = w
+            params[f"u{i}"] = w[:-1] + chr(ord(w[-1]) + 1)
+            ranges.append(f"name_compact >= :w{i} AND name_compact < :u{i} OR name_compact_en >= :w{i} AND name_compact_en < :u{i}")
         try:
             columns = {r["name"] for r in con.execute("PRAGMA table_info(product)")}
             if not {"name_compact", "name_compact_en"} <= columns:
                 return hits
             rows = con.execute(
-                "SELECT * FROM product WHERE source = :source AND (name_compact >= :w AND name_compact < :u "
-                "OR name_compact_en >= :w AND name_compact_en < :u) ORDER BY length(name_key), id LIMIT :limit",
-                {"source": source, "w": word, "u": upper, "limit": limit},
+                f"SELECT * FROM product WHERE source = :source AND ({' OR '.join(ranges)}) ORDER BY length(name_key), id LIMIT :limit",
+                params,
             ).fetchall()
         except sqlite3.DatabaseError:
             return hits
@@ -329,7 +395,13 @@ class Catalog:
 
     @staticmethod
     def _match(tokens: list[str]) -> str:
-        return " ".join(f'"{t}"*' for t in tokens)  # tokens are letters and digits only, nothing to escape
+        # tokens are letters and digits only, nothing to escape; a word with 'ss' or 'ß' is looked up in both spellings:
+        # ("heisse"* OR "heiße"*) AND "schokolade"*
+        def term(token: str) -> str:
+            forms = [f'"{w}"*' for w in _spellings(token)]
+            return f"({' OR '.join(forms)})" if len(forms) > 1 else forms[0]
+
+        return " AND ".join(term(t) for t in tokens)
 
     def _search_off(self, tokens: list[str], limit: int) -> list[dict]:
         first = tokens[0]
@@ -339,10 +411,10 @@ class Catalog:
         try:
             rows = con.execute(
                 "SELECT p.* FROM product_fts JOIN product p ON p.id = product_fts.rowid WHERE product_fts MATCH :match "
-                "ORDER BY CASE WHEN p.name_key = :first OR p.name_key LIKE :first || ' %' THEN 0 "
-                "              WHEN p.name_key LIKE :first || '%' THEN 1 ELSE 2 END, "
+                "ORDER BY CASE WHEN replace(p.name_key, 'ß', 'ss') = :first OR replace(p.name_key, 'ß', 'ss') LIKE :first || ' %' THEN 0 "
+                "              WHEN replace(p.name_key, 'ß', 'ss') LIKE :first || '%' THEN 1 ELSE 2 END, "
                 "         length(p.name_key) - min(p.popularity, 400) / 10.0, p.name_key, p.id LIMIT :limit",
-                {"match": self._match(tokens), "first": first, "limit": limit},
+                {"match": self._match(tokens), "first": _ss(first), "limit": limit},
             ).fetchall()
         except sqlite3.DatabaseError:
             return []
@@ -371,13 +443,14 @@ class Catalog:
             return []
         finally:
             con.close()
-        first = tokens[0]
+        first = _ss(tokens[0])
 
         def rank(row: sqlite3.Row) -> tuple:
             best = None
-            for key, raw_word in ((row["name_key"], "roh"), (row["name_key_en"] or "", "raw")):
-                if not key:
+            for raw_key, raw_word in ((row["name_key"], "roh"), (row["name_key_en"] or "", "raw")):
+                if not raw_key:
                     continue
+                key = _ss(raw_key)
                 if key == first or key.startswith(first + " "):
                     klass = 0
                 elif key.startswith(first):

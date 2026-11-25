@@ -125,6 +125,7 @@ const basics: CatalogItem[] = [
   basicFood('H101100', 'Hühnerei Vollei roh', 'Hen egg whole raw', per(137, 9.3, 2.9, 0.4, 0.4, 0, 12.4, 0.35), { vitamin_d: 2.9 }),
   basicFood('G300100', 'Petersilie roh', 'Parsley raw', per(53, 0.9, 0.2, 5.4, 0.9, 4.9, 4.4, 0.1), { vitamin_c: 160, potassium: 810 }),
   basicFood('Q500100', 'Speisesalz', 'Table salt', per(0, 0, 0, 0, 0, 0, 0, 99.8)),
+  basicFood('M610200', 'Milchmischgetränk mit Kakao und Zucker, pasteurisiert, mind. 1,5 % Fett, Fertigprodukt', 'Milk mix drink with cocoa and sugar, pasteurised, min. 1.5 % fat, ready made', per(68, 3.1, 1.1, 10.4, 9.8, 0.4, 3.2, 0.1)),
   basicFood('G200100', 'Karotte roh', 'Carrot raw', per(27, 0.2, 0, 4.8, 4.8, 3.6, 0.8, 0.1), { vitamin_c: 5, potassium: 250 }),
 ];
 const adoptedBasics = new Map<string, number>();

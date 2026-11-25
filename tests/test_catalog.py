@@ -203,6 +203,21 @@ def test_search_ranks_simple_products_first(filled):
     assert len(filled.search("apfel", 2)) == 2
 
 
+def test_sz_and_ss_are_the_same_in_the_packaged_products(tmp_path):
+    rows = [line(ean("400000000101"), "Heiße Schokolade Instant", "380", **per("5", "70", "8")),
+            line(ean("400000000102"), "Heisse Schokolade Bio", "390", **per("6", "68", "9")),
+            line(ean("400000000103"), "Grießbrei", "100", **per("1", "20", "3")),
+            line(ean("400000000104"), "Hafer Griess Brei zart", "100", **per("1", "20", "3"))]
+    off = str(tmp_path / "catalog.db")
+    import_off(off, ["en:germany"], gz(tmp_path / "ss.csv.gz", rows=rows))
+    catalog = Catalog(off)
+    both = {"Heiße Schokolade Instant", "Heisse Schokolade Bio"}
+    for query in ("heisse schokolade", "heiße schokolade", "HEIßE schoko"):
+        assert set(names(catalog, query)) == both, query
+    assert names(catalog, "grießbrei") == names(catalog, "griessbrei") == ["Grießbrei"]
+    assert names(catalog, "griess")[0] == "Grießbrei"  # the name starts with the word, whichever way it is written
+
+
 @pytest.mark.parametrize("query", ['"', "*", "(", ")", "-", "ap*", '"apfel', "apfel)", "NEAR(a b)", "a OR b", "^a", "a:b", "'", "\\", "%_", "  "])
 def test_search_survives_special_characters(filled, query):
     assert isinstance(filled.search(query), list)
