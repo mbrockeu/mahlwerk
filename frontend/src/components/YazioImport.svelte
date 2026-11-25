@@ -6,6 +6,7 @@
   import { api, ApiError } from '../lib/api';
   import { exportName, packFile } from '../lib/gzip';
   import { fmt, t } from '../lib/i18n';
+  import { localApi } from '../lib/local';
   import type { YazioPreview, YazioRun, YazioState } from '../lib/types';
   import PasswordField from './PasswordField.svelte';
 
@@ -159,6 +160,8 @@
 <section class="icard yz" aria-labelledby="yz-title">
   <h2 id="yz-title" class="micro quiet">{t('yzTitle')}</h2>
   <p class="note">{t('yzText')}</p>
+  <!-- where the files come from: Yazio itself does not hand them out; the easier way is the direct sign-in (on a server) -->
+  <p class="note">{t('yzSource')} {ystate?.login.available ? t('yzSourceLogin') : localApi() ? t('yzSourceApp') : ''}</p>
 
   <div class="pick">
     <input bind:this={fileInput} id="yz-files" class="sr-only" type="file" multiple accept=".json,.zip,application/json,application/zip" disabled={busy}
