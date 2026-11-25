@@ -126,10 +126,22 @@ export class Catalog {
     return [it.name, it.name_en].some((name) => name && nameKey(name).startsWith(word));
   }
 
+  /** Sources whose file has the compact name columns. Only a yes is kept: a file swapped for one without them makes the compact
+   * queries fail (null), which forgets it again (`compactFailed`); a no is asked again, so a newer file is seen at once. */
+  private compact = new Set<string>();
+
   private async hasCompactColumns(source: string): Promise<boolean> {
+    if (this.compact.has(source)) return true;
     const cols = await this.files.all(source, 'PRAGMA table_info(product)');
     const names = new Set((cols ?? []).map((r) => r.name));
-    return names.has('name_compact') && names.has('name_compact_en');
+    const has = names.has('name_compact') && names.has('name_compact_en');
+    if (has) this.compact.add(source);
+    return has;
+  }
+
+  private compactRows(source: string, rows: Row[] | null): Row[] {
+    if (rows === null) this.compact.delete(source);
+    return rows ?? [];
   }
 
   /** A food whose whole name is the word, only written apart ("Hafer Flocken" for "haferflocken"), goes to the top. */
@@ -137,7 +149,7 @@ export class Catalog {
     if (!(await this.hasCompactColumns(source))) return hits;
     const rows = await this.files.all(source,
       'SELECT * FROM product WHERE source = :source AND (name_compact = :w OR name_compact_en = :w) ORDER BY id LIMIT 3', { source, w: word });
-    const exact = (rows ?? []).map(item);
+    const exact = this.compactRows(source, rows).map(item);
     if (!exact.length) return hits;
     const codes = new Set(exact.map((e) => e.code));
     return [...exact, ...hits.filter((h) => !codes.has(h.code))].slice(0, limit);
@@ -155,7 +167,7 @@ export class Catalog {
       'SELECT * FROM product WHERE source = :source AND (name_compact >= :w AND name_compact < :u '
       + 'OR name_compact_en >= :w AND name_compact_en < :u) ORDER BY length(name_key), id LIMIT :limit', { source, w: word, u: upper, limit });
     const seen = new Set(hits.map((h) => h.code));
-    const extra = (rows ?? []).filter((r) => !seen.has(r.code)).map(item);
+    const extra = this.compactRows(source, rows).filter((r) => !seen.has(r.code)).map(item);
     if (!extra.length) return hits;
     const rest = hits.filter((h) => !starting.includes(h));
     return [...starting, ...extra, ...rest].slice(0, limit);
