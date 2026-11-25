@@ -1,12 +1,8 @@
 services:
   mahlwerk:
     build:
+      # the TypeScript server (Dockerfile); Dockerfile.python is the fallback server and the command-line tools
       context: .
-      args:
-        # set to 1 to include the optional label reader (about 200 MB more)
-        WITH_LABEL: "0"
-        # set to 1 to include the optional Cookidoo connector (see README)
-        WITH_COOKIDOO: "0"
     image: mahlwerk:local
     restart: unless-stopped
     # Published on localhost only. To reach it from other devices put a reverse proxy with HTTPS in front
@@ -28,6 +24,28 @@ services:
       # if you open the app by a LAN name, put it here, e.g. MAHLWERK_ALLOWED_HOSTS=localhost,mahlwerk.lan
       # (the variable is passed on from .env). /healthz is exempt, so the container health check keeps working.
       # Fixed paths inside the container; they win over the same names in .env (the example file uses local paths).
+      MAHLWERK_DB: /data/mahlwerk.db
+      MAHLWERK_WEB_DIR: /app/web
+      # The Cookidoo connector is built in and off until switched on (MAHLWERK_COOKIDOO=on or in the admin area, see README).
+    volumes:
+      - mahlwerk-data:/data
+
+  # Command-line tools of the Python side on the same volume, not started by "up" (stop the server first for long imports):
+  #   docker compose run --rm tools mahlwerk.catalog import-bls /data/BLS.xlsx     (put the file into the volume first)
+  #   docker compose run --rm tools mahlwerk.catalog import-off
+  #   docker compose run --rm tools mahlwerk.yazio ...
+  # The Python fallback server (stop "mahlwerk" first): docker compose run --rm -p 127.0.0.1:8110:8110 tools uvicorn mahlwerk.main:app --factory --host 0.0.0.0 --port 8110
+  tools:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    image: mahlwerk:tools
+    entrypoint: ["python", "-m"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
       MAHLWERK_DB: /data/mahlwerk.db
       MAHLWERK_WEB_DIR: /app/web
     volumes:

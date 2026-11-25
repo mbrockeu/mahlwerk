@@ -156,8 +156,8 @@ try { var t = localStorage.getItem('mahlwerk.theme'); if (t === 'light' || t ===
 git clone https://github.com/mbrockeu/mahlwerk.git &amp;&amp; cd mahlwerk
 cp .env.example .env     <span class="c"># set MAHLWERK_CONTACT to your own address</span>
 docker compose up -d</code></pre>
-<p class="warn"><b>Server since 0.4.0.</b> The main server is now written in TypeScript (Node 22.6 or newer, no build step, start with <code>cd ts &amp;&amp; npm ci &amp;&amp; npm start</code>, see the README). The Python server stays as a fallback on the same database. The Docker image and the Compose file still start the Python server; the data import is built into the TypeScript server and the app only.</p>
-<p>Then open <code>http://localhost:8110</code> and create the first admin account on the setup page. The database lives in the volume <code>mahlwerk-data</code>. The optional label reader and Cookidoo connector are build options, see the README.</p>
+<p class="warn"><b>Server since 0.4.0.</b> The main server is now written in TypeScript (Node 22.6 or newer, no build step, start with <code>cd ts &amp;&amp; npm ci &amp;&amp; npm start</code>, see the README). The Python server stays as a fallback on the same database. The Docker image and the Compose file start the TypeScript server too; the command-line tools and the Python fallback server are in a second image (Compose profile <code>tools</code>). The data import is built into the TypeScript server and the app only.</p>
+<p>Then open <code>http://localhost:8110</code> and create the first admin account on the setup page. The database lives in the volume <code>mahlwerk-data</code>. The Cookidoo connector is built in and off until you switch it on; labels are read by the image model you set up. See the README.</p>
 <p class="warn"><b>Reaching it from other devices.</b> The Compose file starts Mahlwerk with its own accounts and publishes the port on 127.0.0.1 only. Put a reverse proxy with HTTPS in front instead of opening the port.</p>
 <div class="btns" style="margin-top:20px"><a class="btn solid" href="https://github.com/mbrockeu/mahlwerk#quick-start">Read the README</a></div>
 </div><div>

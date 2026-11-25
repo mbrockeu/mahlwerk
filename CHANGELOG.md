@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **The Docker image and the Compose file run the TypeScript server** (`node:22-slim`, port 8110, user 10001, data in `/data`, health
+  check on `/healthz`, clean stop on SIGTERM). The Cookidoo connector is built in (off until switched on) and labels are read by the image
+  model, so the build arguments `WITH_LABEL` and `WITH_COOKIDOO` are gone.
+- **The Python image is `Dockerfile.python`**: the fallback server and the command-line tools. The Compose service `tools` (profile
+  `tools`, same volume) runs them: `docker compose run --rm tools mahlwerk.catalog import-bls /data/BLS.xlsx`, `... mahlwerk.yazio ...`.
+- **The TypeScript server migrates schema version 20 to 21 itself** at start (one transaction), so it can take over a Python-era
+  database without a detour. Older versions are still refused, with a message that says to start the Python server (the `tools` service) once.
+
 ## [0.4.0] - 2026-11-25
 
 ### Added
@@ -12,8 +21,8 @@ All notable changes to this project are documented here. The format follows
   with the same answers; the Python test suite is the contract (`ts/api-tests.sh`) and a Playwright suite (`e2e/`) runs the interface
   against either server. It is now the main server. The Python server stays as a fallback: same API, same database, same settings, and
   you can switch back and forth. Start it with `cd ts && npm ci && npm start` (`MAHLWERK_PORT`, default 8120, and `MAHLWERK_HOST`, default
-  `127.0.0.1`; all other `MAHLWERK_*` variables as before). The TS server never migrates the database: it expects schema version 21 and
-  refuses any other (start the Python server once on an older file). Not available on the Python server: the data import, see below.
+  `127.0.0.1`; all other `MAHLWERK_*` variables as before). The TS server expects schema version 21 (since the next release it also migrates 20 itself, see Unreleased) and
+  refuses older versions (start the Python server once on an older file). Not available on the Python server: the data import, see below.
 - **The app without a server.** The interface also builds as an app (`cd frontend && npm run build:app`): the same interface and
   the same core run in the iOS app's web view, with the data in SQLite on the phone, a bridge to the native side for SQL, HTTP, the
   keychain and file downloads, and the Health sync, the history and the day summary answered in the app. Yazio file import, import of

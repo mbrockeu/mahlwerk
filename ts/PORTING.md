@@ -19,8 +19,8 @@ Node 22.6 or newer (`node:sqlite`, type stripping; no build step). `cd ts && npm
 - `server/` – Node only: HTTP, node:sqlite adapter, later images (sharp), outgoing HTTP.
 - `app/` – the app host (no `node:*` either): core for one device inside the iOS app's web view, see "App-Host" below.
 - `core/schema.sql` is generated from a fresh Python database (`PYTHONPATH=src python scripts/schema_sql.py`; tests/test_db.py checks it).
-  Never edit it by hand. The TS server never migrates: it refuses other versions. The one exception is the app (see App-Host): it runs
-  `core/migrations/v21.sql` (the same text as db.py's `V21_TABLES`, a test checks that) on a v20 database on the phone.
+  Never edit it by hand. The TS server (server/schema.ts) and the app (see App-Host) run
+  `core/migrations/v21.sql` (the same text as db.py's `V21_TABLES`, a test checks that) on a v20 database; every other version is refused.
 - `uid` (v21): diary entries, workouts, fasts, templates, recipes, recipe groups and foods get a random id from an AFTER INSERT trigger
   whatever code inserts them; the export carries it, the import (`core/dataImport.ts`) matches on it. An edit must keep a row (UPDATE),
   never delete and insert it again.
@@ -67,7 +67,7 @@ vault key comes from the keychain, see `secretKey`).
   `window.mahlwerkLocal`; `src/lib/local.ts` routes `request()`, pictures and the export through it). `npm run build` is unchanged.
 - Schema: an empty database gets `core/schema.sql`; a v20 database (phones that had the app before v21) is migrated by
   `openLocal({..., migrations: {20: core/migrations/v21.sql}})` (`src/appMain.ts` passes it) in one transaction, rolled back on error;
-  any other version is refused (SchemaMismatch). The server never passes `migrations`.
+  any other version is refused (SchemaMismatch). The server (server/schema.ts) and the app pass `{20: v21.sql}`.
 - Data import: the export (ZIP) of the server can be imported in the app and the other way round (`POST /me/import/preview`, then
   `/me/import/confirm` with the token; docs/api-v1.md "Importing an own export"). Unpacking uses DecompressionStream; the import is one
   transaction with batched inserts (`INSERT … SELECT … FROM json_each(?)`): 15,000 diary entries take about 400 bridge ops.
