@@ -9,6 +9,8 @@ Please open an issue before starting larger changes.
 | --- | --- |
 | `src/mahlwerk/` | FastAPI backend (SQLite storage, routes in `routes/`, catalogue and import tools) |
 | `tests/` | Backend tests (pytest) |
+| `ts/` | TypeScript server and app core (Node 22.6 or newer), see [ts/PORTING.md](ts/PORTING.md) |
+| `e2e/` | Playwright UI tests against the Python server, the TS server or the app build (`e2e/run.sh python|ts|app`) |
 | `frontend/` | Svelte 5 + TypeScript interface (Vite); builds into `web/dist` |
 | `frontend/tests/` | Frontend unit tests (Node test runner) |
 | `docs/` | API contract (`api-v1.md`), integrations, design direction (`design/`) |
@@ -36,6 +38,18 @@ npm run dev       # Vite dev server on 127.0.0.1
 
 Node 20 or newer; CI uses 22. To see the built interface from the backend, run the server as described in the
 [README](README.md#quick-start); it serves `web/dist` by default.
+
+## TypeScript server
+
+```sh
+cd ts && npm ci
+npx tsc --noEmit -p .            # type check
+node --test tests/*.test.ts      # unit tests
+ts/api-tests.sh                  # the Python API tests against the TS server (MAHLWERK_PY: a Python with the test dependencies)
+```
+
+Node 22.6 or newer, CI uses 22. A change to an API route belongs in both servers (the Python tests are the contract); the rules are in
+[ts/PORTING.md](ts/PORTING.md).
 
 ## Website and demo
 

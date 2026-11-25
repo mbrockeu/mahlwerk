@@ -1,7 +1,15 @@
 # Porting the backend to TypeScript – rules for every package
 
 Goal: the TS server answers `/api/v1` exactly like the Python server (src/mahlwerk) on the same SQLite file (schema v21).
-The frontend and the iOS app must not notice the switch. Python stays the reference until the switch.
+The frontend and the iOS app must not notice which server answers. Since 0.4.0 the TS server is the main server; the Python server stays as a fallback
+on the same database and the same API, and its tests are the contract (a change to a route goes into both).
+
+## Running it
+Node 22.6 or newer (`node:sqlite`, type stripping; no build step). `cd ts && npm ci && npm start` serves `/api/v1` and the interface from `web/dist`
+(`MAHLWERK_WEB_DIR`) on `MAHLWERK_HOST`:`MAHLWERK_PORT` (default `127.0.0.1:8120`), all other `MAHLWERK_*` variables as for the Python server
+(README, Configuration). TS only: `MAHLWERK_PORT`, `MAHLWERK_HOST`, `MAHLWERK_CATALOG_SOURCE`, `MAHLWERK_CATALOG_REFRESH=off`, the data import
+(`/me/import/*`) and the label reader through the image model. The catalogue for the app is the monthly release `catalog`
+(`.github/workflows/catalog.yml`, `scripts/build-catalog-release.sh`). Tests: `cd ts && npx tsc --noEmit -p . && node --test tests/*.test.ts`, then `ts/api-tests.sh`.
 
 ## Layout
 - `core/` – no `node:*`, no `fs`, no `sharp`: it must later run inside an app. Handlers, store functions, domain logic.
@@ -43,7 +51,7 @@ Security code (auth, sessions, tokens, OIDC, vault, netguard/SSRF, upload checks
   with the test dependencies (default `python3`; e.g. `MAHLWERK_PY=.venv/bin/python`), the same for `ts/crosscheck/run.sh` and `e2e/run.sh python`.
 - Run only your own files while working. The full list (`ts/api-tests.sh`) once at the end.
 - Never change a Python test to make TS pass. If a test checks Python internals it is not in the list; that is fine.
-- Typecheck: `cd ts && PATH=/opt/node22/bin:$PATH npx tsc --noEmit -p .` must stay clean.
+- Typecheck: `cd ts && npx tsc --noEmit -p .` must stay clean.
 - Heavy runs are throttled already by the script; never start a second suite or a browser in parallel.
 
 ## App-Host

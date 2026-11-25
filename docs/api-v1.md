@@ -1,7 +1,8 @@
 # API v1 – contract for the diary MVP
 
 This is the agreed contract between backend and frontend. Swagger at `/docs` (with `MAHLWERK_DOCS=1`) is generated from the code and
-must match this file. All bodies are JSON. All routes below `/api/v1` need an authenticated user.
+must match this file. All bodies are JSON. Two servers implement this contract on the same database: the TypeScript server (main server since 0.4.0) and the
+Python server (fallback). Routes marked "TS server and app only" (the data import) are not on the Python server. All routes below `/api/v1` need an authenticated user.
 
 ## Authentication
 

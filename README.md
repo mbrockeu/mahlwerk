@@ -69,6 +69,41 @@ set -a; . ./.env; set +a
 Browsers only hand out the camera on HTTPS (or `localhost`). To scan from a phone, put the service behind a reverse
 proxy with a valid certificate. Append `?engine=wasm` to the URL to force the bundled barcode detector.
 
+### The TypeScript server (main server since 0.4.0)
+
+`ts/` holds a second implementation of the whole `/api/v1` in TypeScript. It answers like the Python server on the same SQLite
+file (schema version 21) and is the main server from 0.4.0 on. **The Python server stays as a fallback**: same API, same database
+file, same `MAHLWERK_*` settings, so you can stop one and start the other on the same data. The Docker image and Compose file still
+run the Python server.
+
+Requirements: Node 22.6 or newer (it uses the built-in `node:sqlite` and runs the TypeScript sources directly, no build step) and the
+built interface in `web/dist`.
+
+```sh
+cd frontend && npm ci && npm run build && cd ..     # the interface, as above
+cd ts && npm ci
+set -a; . ../.env; set +a                           # the same variables as for the Python server
+npm start                                           # listens on 127.0.0.1:8120
+```
+
+- `MAHLWERK_PORT` (default `8120`) and `MAHLWERK_HOST` (default `127.0.0.1`) set where it listens; every other variable of
+  [Configuration](#configuration) is read the same way, including `MAHLWERK_DB` and `MAHLWERK_WEB_DIR`.
+- It never migrates the database: it starts only on schema version 21 and refuses any other. Start the Python server once on an
+  older file to migrate it.
+- Recipe pictures need `sharp` (installed by `npm ci`); the label reader needs an image model (see
+  [Photo recognition](docs/integrations.md#photo-recognition)) instead of the local OCR of the Python server.
+- Only the TS server (and the app) can **import an own export** (see below).
+- `MAHLWERK_CATALOG_SOURCE` names another source for the catalogue refresh; `MAHLWERK_CATALOG_REFRESH=off` switches the refresh off.
+- How it is built and the rules for changes: [ts/PORTING.md](ts/PORTING.md). Checks: `cd ts && npx tsc --noEmit -p . && node --test tests/*.test.ts`,
+  and `ts/api-tests.sh` runs the Python API tests against it.
+
+### The app host
+
+The same core runs without a server inside the iOS app's web view, with the data in SQLite on the phone. Build the interface for it with
+`cd frontend && npm run build:app` (writes `web/dist-app/`); the native side and the bridge it talks to are described in
+[ts/PORTING.md](ts/PORTING.md#app-host). Some things are fixed off in the app (access keys, webhooks, photo recognition, web recipes,
+the demo account); the Yazio file import, the import of an own export and Cookidoo work.
+
 ## Features
 
 - **Day view.** Calories left, protein, carbohydrates and fat against your goal, four meals, a seven-day
@@ -95,6 +130,8 @@ proxy with a valid certificate. Append `?engine=wasm` to the URL to force the bu
   Facts export and, for unpackaged foods, the BLS, searched offline and instantly (see [Product catalogue](#product-catalogue-and-data-sources)).
 - **Activity.** Steps, active energy and workouts by hand, from the Yazio export or from Apple Health via a
   Shortcut (see [docs/integrations.md](docs/integrations.md)); optionally added to the calorie goal.
+- **Export and import of your data.** Download everything as a ZIP (CSV files and one JSON file with stable ids); bring it back in with
+  a preview and a choice between merge and replace (see [Importing an own export](#importing-an-own-export)).
 - **History and weight.** The last 14 days against your goal, and a weight curve.
 - **Goal history.** A changed goal counts from today on; past days keep the goal they had, in the calendar, the charts, the
   weekly review and the badges. The goal page lists the changes.
@@ -374,7 +411,7 @@ other sites.
 
 ## Configuration
 
-All settings are environment variables (see `.env.example`). The Docker image sets `MAHLWERK_DB=/data/mahlwerk.db` and `MAHLWERK_WEB_DIR=/app/web`.
+All settings are environment variables (see `.env.example`); both servers read the same ones, rows marked **TS server only** are not read by the Python server. The Docker image sets `MAHLWERK_DB=/data/mahlwerk.db` and `MAHLWERK_WEB_DIR=/app/web`.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -421,6 +458,9 @@ All settings are environment variables (see `.env.example`). The Docker image se
 | `MAHLWERK_CACHE_DAYS` | `30` | How long a looked-up product is trusted before asking again. |
 | `MAHLWERK_DEMO_DATA` | off | `1` or `true` lets each user fill their profile with invented demo entries and remove them again (Profile, section Demo data). Test data in the *own* account; for clean testing use the demo account below. |
 | `MAHLWERK_DEMO_ACCOUNT` | off | `on` / `off` fixes the switch of the built-in demo account that admins can switch to (admin area, Import and demo). Without it the admin decides. |
+| `MAHLWERK_PORT`, `MAHLWERK_HOST` | `8120`, `127.0.0.1` | **TS server only:** port and address it listens on (the Python server takes them on the `uvicorn` command line). |
+| `MAHLWERK_CATALOG_SOURCE` | official export | **TS server only:** another source (address or file) for the catalogue refresh in the admin area. |
+| `MAHLWERK_CATALOG_REFRESH` | on | **TS server only:** `off` switches the catalogue refresh in the admin area off. |
 | `MAHLWERK_LABEL_DEBUG_DIR` | off | Keep the last 20 label photos (the cleaned copy that was read, no metadata) and OCR text here. |
 
 API documentation: `/docs` (Swagger UI, only with `MAHLWERK_DOCS=1`) and [docs/api-v1.md](docs/api-v1.md).
@@ -445,6 +485,15 @@ catalogue before asking Open Food Facts live. Without a catalogue file the app w
 Open Food Facts data is licensed under the [ODbL](https://opendatacommons.org/licenses/odbl/1-0/) and must be
 attributed. This repository contains no data: every installation downloads its own copy. Wrong or missing product data
 is best fixed at the source, at [Open Food Facts](https://world.openfoodfacts.org).
+
+### Catalogue as a release (for the app)
+
+The app has no server to build a catalogue, so the workflow [`catalog.yml`](.github/workflows/catalog.yml) builds the Germany catalogue
+once a month (and on demand) with [`scripts/build-catalog-release.sh`](scripts/build-catalog-release.sh) and attaches it as one gzip-ed
+SQLite file to the release `catalog`, together with a manifest `catalog.json` (address, size, sha256). "Refresh" in the app's admin area
+loads the manifest, then the file, checks the sha256, verifies the database and swaps it atomically. The same data licence applies
+(ODbL/DbCL, see the release notes). The workflow runs only while the repository is public. A server can use the file too: unpack it and
+point `MAHLWERK_CATALOG_DB` at it.
 
 ### Basic foods (BLS)
 
@@ -547,6 +596,16 @@ check that it is in line with Cookidoo's terms of use for your account.
 - **Backup:** back up the `<database file name>.images` folder together with the database. A database restored without it simply shows recipes without
   pictures (no error); a placeholder takes their place.
 
+## Importing an own export
+
+Profile, "Import my data" takes back a Mahlwerk export (the ZIP of "Export my data" or its `mahlwerk-export.json`, format 1 or 2), for
+a move between server and app, a new device or a backup. **TS server and app only**: the Python server has no import (the interface
+shows the card only where it exists). The file is checked completely and a preview lists, per kind, what is new, changed, unchanged and
+skipped (and why). Then choose **merge** (deletes nothing; rows are matched by their stable id, a shared product that is newer here keeps
+its version, the goal of the file counts from today) or **replace** (your own rows go first; the preview says how many). The import is one
+transaction, limited in size (32 MB as sent, 48 MB unpacked) and only works on your own account. Details, limits and answers:
+[docs/api-v1.md](docs/api-v1.md#importing-an-own-export).
+
 ## Importing from Yazio
 
 Coming from Yazio? Take your history along. The unofficial "yazio-exporter"
@@ -629,6 +688,8 @@ Examples for Home Assistant, Power Automate / n8n and curl: [docs/integrations.m
 .venv/bin/pip install -e ".[test]"
 .venv/bin/pytest
 cd frontend && npm run check && npm test
+cd ts && npm ci && npx tsc --noEmit -p . && node --test tests/*.test.ts     # TS server (Node 22.6 or newer)
+ts/api-tests.sh                                                              # the Python API tests against the TS server (MAHLWERK_PY: a Python with the test dependencies)
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for more.
