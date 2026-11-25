@@ -8,6 +8,7 @@
   import TrainingCard from '../components/TrainingCard.svelte';
   import FoodsCard from '../components/FoodsCard.svelte';
   import Icon from '../components/Icon.svelte';
+  import Sheet from '../components/Sheet.svelte';
   import KcalChart from '../components/KcalChart.svelte';
   import MacroChart from '../components/MacroChart.svelte';
   import MicroRow from '../components/MicroRow.svelte';
@@ -23,6 +24,7 @@
   import { DETAIL_DAYS, parseQuery, period, PRESETS, shifted, toParams, zoomTarget, type Q, type RangeKey } from '../lib/insightsRange';
   import { microTab, type MicroTab } from '../lib/nutrients.svelte';
   import { DEFAULT_PICK, parsePick, pickParam } from '../lib/nutrientCompare';
+  import { phone } from '../lib/media.svelte';
   import { navigate, router, setQuery } from '../lib/router.svelte';
   import { loadMe, ui } from '../lib/store.svelte';
   import type { Granularity, Insights, InsightHint, Meal, NutrientCurve, Section, TopMetric } from '../lib/types';
@@ -91,6 +93,17 @@
   const setGran = (g: Q['g']) => go({ ...q, g });
   const toggleCompare = () => go({ ...q, compare: !q.compare });
   const days = $derived(data?.range.days ?? 0);
+
+  // ---- phone: the period, detail level, comparison and help live in a sheet behind one button
+  let periodSheet = $state(false);
+  const short = (day: string, year: boolean) => new Intl.DateTimeFormat(lang, { day: 'numeric', month: 'numeric', ...(year ? { year: '2-digit' } : {}) }).format(fromDay(day));
+  const periodLabel = $derived(q.range === 'all' ? t('rangeAll') : q.range === 'custom' ? t('rangeCustom') : t(`range${q.range}` as 'range7'));
+  const periodDates = $derived.by(() => {
+    if (!shown) return '';
+    const year = shown.from.slice(0, 4) !== shown.to.slice(0, 4) || shown.to.slice(0, 4) !== ui.today.slice(0, 4);
+    return `${short(shown.from, year)}–${short(shown.to, year)}`;
+  });
+  const periodText = $derived(periodDates ? `${periodLabel} · ${periodDates}` : periodLabel);
 
   // click / Enter on a section: months open as weeks, weeks as days, a day opens the day view
   function zoom(sec: Section) {
@@ -248,35 +261,89 @@
   <p class="nogoal-note">{t('insNoGoalShort')} <a href="#/profile">{t('setGoal')}</a></p>
 {/snippet}
 
+{#snippet rangeChips()}
+  <div class="ranges" role="group" aria-label={t('rangeLabel')}>
+    {#each RANGES as r (r.key)}
+      <button class="chip" class:on={q.range === r.key} aria-pressed={q.range === r.key} onclick={() => choose(r.key)}>{r.label()}</button>
+    {/each}
+  </div>
+{/snippet}
+
+{#snippet granChips()}
+  <div class="gran" role="group" aria-label={t('granLabel')}>
+    {#each GRANS as g (g.key)}
+      <button class="chip small" class:on={q.g === g.key} aria-pressed={q.g === g.key} disabled={g.key === 'day' && days > DETAIL_DAYS + 30} onclick={() => setGran(g.key)}>{g.label()}</button>
+    {/each}
+  </div>
+{/snippet}
+
+{#snippet compareSwitch()}
+  <button class="switch" role="switch" aria-checked={q.compare} onclick={toggleCompare}>
+    <span class="track" class:on={q.compare} aria-hidden="true"><span class="knob"></span></span>
+    <span>{t('compareLabel')}</span>
+  </button>
+{/snippet}
+
+{#snippet helpButton()}
+  <button class="chip small help" onclick={() => (ui.help = true)} aria-label={t('hlpOpenAria')} aria-haspopup="dialog"><span class="q" aria-hidden="true">?</span>{t('hlpOpen')}</button>
+{/snippet}
+
+{#snippet dateFields()}
+  <div class="dates">
+    <label class="field"><span>{t('rangeFrom')}</span><input type="date" value={q.from} max={q.to} onchange={(e) => setDates(e.currentTarget.value, q.to)} /></label>
+    <label class="field"><span>{t('rangeTo')}</span><input type="date" value={q.to} min={q.from} onchange={(e) => setDates(q.from, e.currentTarget.value)} /></label>
+  </div>
+{/snippet}
+
 <div class="page wide insights">
   <div class="page-head">
     <h1>{t('historyTitle')}</h1>
-    {#if data}<span class="micro quiet range">{dmy(data.range.from)} – {dmy(data.range.to)}</span>{/if}
+    {#if data && !phone.on}<span class="micro quiet range">{dmy(data.range.from)} – {dmy(data.range.to)}</span>{/if}
   </div>
 
-  <div class="toolbar">
-    <div class="ranges" role="group" aria-label={t('rangeLabel')}>
-      {#each RANGES as r (r.key)}
-        <button class="chip" class:on={q.range === r.key} aria-pressed={q.range === r.key} onclick={() => choose(r.key)}>{r.label()}</button>
-      {/each}
+  {#if phone.on}
+    <div class="phonebar">
+      <button class="period" onclick={() => (periodSheet = true)} aria-haspopup="dialog" aria-label={`${t('periodOpen')}: ${periodText}`}>
+        <span class="pt">{periodText}</span><Icon name="down" size={20} />
+      </button>
+      <div class="steps">
+        <button class="round" onclick={() => step(-1)} disabled={q.range === 'all' || !base} aria-label={t('prevPeriod')}><Icon name="left" size={22} /></button>
+        <button class="round" onclick={() => step(1)} disabled={q.range === 'all' || atToday} aria-label={t('nextPeriod')}><Icon name="right" size={22} /></button>
+        {#if stack.length}<button class="chip back" onclick={back} aria-label={t('zoomBack')}><Icon name="left" size={18} />{t('back')}</button>{/if}
+      </div>
     </div>
+  <div class="tabs" role="tablist" aria-label={t('tabsLabel')}>
+    {#each INSIGHT_TABS as tb, i (tb)}
+      <button role="tab" id="ins-tab-{tb}" class="tab" class:on={tab === tb} aria-selected={tab === tb} aria-controls="ins-panel" tabindex={tab === tb ? 0 : -1}
+        onclick={() => setTab(tb)} onkeydown={(e) => tabKey(e, i)}>{t(TAB_LABEL[tb])}</button>
+    {/each}
+  </div>
+    {#if invalid && !periodSheet}<p class="note warn" role="alert">{t('rangeBad')}</p>{/if}
+    {#if periodSheet}
+      <Sheet title={t('periodSheetTitle')} onclose={() => (periodSheet = false)}>
+        <div class="sheetsec"><h3 class="micro quiet">{t('rangeLabel')}</h3>{@render rangeChips()}</div>
+        {#if q.range === 'custom'}
+          {@render dateFields()}
+          {#if invalid}<p class="note warn" role="alert">{t('rangeBad')}</p>{/if}
+        {/if}
+        <div class="sheetsec"><h3 class="micro quiet">{t('granLabel')}</h3>{@render granChips()}</div>
+        {@render compareSwitch()}
+        <div class="sheetsec">{@render helpButton()}</div>
+      </Sheet>
+    {/if}
+  {:else}
+  <div class="toolbar">
+    {@render rangeChips()}
     <div class="steps">
       <button class="round" onclick={() => step(-1)} disabled={q.range === 'all' || !base} aria-label={t('prevPeriod')}><Icon name="left" size={22} /></button>
       <button class="round" onclick={() => step(1)} disabled={q.range === 'all' || atToday} aria-label={t('nextPeriod')}><Icon name="right" size={22} /></button>
       {#if stack.length}<button class="chip back" onclick={back}><Icon name="left" size={18} />{t('zoomBack')}</button>{/if}
     </div>
-    <div class="gran" role="group" aria-label={t('granLabel')}>
-      {#each GRANS as g (g.key)}
-        <button class="chip small" class:on={q.g === g.key} aria-pressed={q.g === g.key} disabled={g.key === 'day' && days > DETAIL_DAYS + 30} onclick={() => setGran(g.key)}>{g.label()}</button>
-      {/each}
-    </div>
+    {@render granChips()}
   </div>
   <div class="rowb">
-    <button class="switch" role="switch" aria-checked={q.compare} onclick={toggleCompare}>
-      <span class="track" class:on={q.compare} aria-hidden="true"><span class="knob"></span></span>
-      <span>{t('compareLabel')}</span>
-    </button>
-    <button class="chip small help" onclick={() => (ui.help = true)} aria-label={t('hlpOpenAria')} aria-haspopup="dialog"><span class="q" aria-hidden="true">?</span>{t('hlpOpen')}</button>
+    {@render compareSwitch()}
+    {@render helpButton()}
   </div>
   <div class="tabs" role="tablist" aria-label={t('tabsLabel')}>
     {#each INSIGHT_TABS as tb, i (tb)}
@@ -285,11 +352,9 @@
     {/each}
   </div>
   {#if q.range === 'custom'}
-    <div class="dates">
-      <label class="field"><span>{t('rangeFrom')}</span><input type="date" value={q.from} max={q.to} onchange={(e) => setDates(e.currentTarget.value, q.to)} /></label>
-      <label class="field"><span>{t('rangeTo')}</span><input type="date" value={q.to} min={q.from} onchange={(e) => setDates(q.from, e.currentTarget.value)} /></label>
-    </div>
+    {@render dateFields()}
     {#if invalid}<p class="note warn" role="alert">{t('rangeBad')}</p>{/if}
+  {/if}
   {/if}
 
   <div class="tabpanel" role="tabpanel" id="ins-panel" aria-labelledby="ins-tab-{tab}">
@@ -580,6 +645,12 @@
   .chip.small { min-height: 38px; padding: 0 13px; font-size: 13px; }
   .chip[disabled] { opacity: 0.45; cursor: default; }
   .steps { display: flex; align-items: center; gap: 6px; }
+  /* phone: the period is one line (button + arrows), everything else is in the sheet */
+  .phonebar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+  .period { flex: 1 1 140px; min-width: 0; min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 12px 6px 18px; border-radius: 24px; border: 1.5px solid var(--field-line); background: var(--paper); font-size: 15px; font-weight: 700; text-align: left; }
+  .period .pt { min-width: 0; overflow-wrap: anywhere; }
+  .period :global(svg) { flex-shrink: 0; }
+  .sheetsec { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
   .round[disabled] { opacity: 0.4; cursor: default; }
   .chip.back { background: var(--sel-bg); color: var(--sel-fg); border-color: var(--sel-bg); padding: 0 16px 0 10px; }
   .switch { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; font-weight: 600; text-align: left; }

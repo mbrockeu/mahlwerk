@@ -8,3 +8,6 @@ export function media(query: string) {
 
 /** Wide windows (from 1280 px) get the split layouts of Products and Weight. */
 export const wide = media('(min-width: 1280px)');
+
+/** Phone layout: below the 900 px where the wide page and dialogs start. */
+export const phone = media('(max-width: 899px)');
