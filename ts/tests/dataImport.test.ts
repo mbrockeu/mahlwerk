@@ -304,9 +304,9 @@ test('replace: the products of a removed Yazio batch lose the batch; a guest\'s 
   // a guest imports a product that was not their own in the file: here it is theirs
   const file = await jsonOf(zip);
   const bar = file.foods.find((f: any) => f.code);
-  const g = await preview(w, 'gast', JSON.stringify({ ...file, foods: [{ ...bar, code: '4000000000017', uid: 'ab'.repeat(16), own: false }] }), '');
+  const g = await preview(w, 'gast', JSON.stringify({ ...file, foods: [{ ...bar, code: '4000000000013', uid: 'ab'.repeat(16), own: false }] }), '');
   assert.equal((await confirm(w, 'gast', g.json.token, 'merge', '')).status, 200);
-  const owner = await w.ctx.db.get<any>("SELECT created_by FROM food WHERE code = '4000000000017'");
+  const owner = await w.ctx.db.get<any>("SELECT created_by FROM food WHERE code = '4000000000013'");
   assert.equal(owner!.created_by, (await w.ctx.db.get<any>("SELECT id FROM user WHERE username = 'gast'"))!.id);
 });
 
@@ -435,4 +435,46 @@ test('an own export imported again is a real no-op: stored values the export cle
   assert.equal(sum(m, 'new') + sum(m, 'changed') + sum(m, 'skipped'), 0, JSON.stringify(m));
   assert.equal((await confirm(w, 'ann', p.json.token)).status, 200);
   assert.equal((await w.ctx.db.get<any>('SELECT count(*) AS n FROM diary_entry WHERE import_id = 42'))!.n, 4);
+});
+
+test('products of the file: malformed fields are refused, unknown keys dropped, shared sources are the household\'s, a guest brings only own ones', async () => {
+  const w = await world();
+  await fill(w, 'ann');
+  const file = await jsonOf(await exportZip(w, 'ann'));
+  const base = file.foods.find((f: any) => f.code === '4006381333931');
+  let n = 0;
+  const food = (over: any, data: any = {}) => ({ ...base, uid: (++n).toString(16).padStart(32, '0'), code: null, external_id: null, own: true, ...over,
+    data: { ...base.data, ...data } });
+  const bad = [
+    food({ source: 'openfoodfacts', code: '4000000000013' }, { brand: { a: 1 } }),
+    food({ source: 'openfoodfacts', code: '4000000000020' }, { unit: { z: 1 } }),
+    food({ source: 'yazio' }, { serving_quantity: 'abc' }),
+    food({ source: 'own' }, { name: 'x'.repeat(201) }), // the limits of an own product (FoodIn)
+    food({ source: 'own' }, { per_100: { kcal: 5000 } }),
+    food({ source: 'openfoodfacts', code: '123' }), // no EAN/UPC
+    food({ source: 'openfoodfacts', external_id: 'cookidoo:r12345' }), // a source id that does not fit the source
+    food({ source: 'web', external_id: 'cookidoo:r12346' }),
+  ];
+  const shared = food({ source: 'openfoodfacts', code: '4000000000037' }, { name: 'Shared bar', evil: { a: 1 } });
+  const p = await preview(w, 'ann', JSON.stringify({ ...file, foods: [...file.foods, ...bad, shared] }));
+  assert.equal(p.status, 200, p.text);
+  assert.deepEqual(p.json.modes.merge.counts.foods.reasons, { invalid: bad.length });
+  assert.equal(p.json.modes.merge.counts.foods.new, 1);
+  assert.equal((await confirm(w, 'ann', p.json.token)).status, 200);
+  const row = await w.ctx.db.get<any>("SELECT data, created_by FROM food WHERE code = '4000000000037'");
+  assert.equal(row!.created_by, null); // a product of a provider belongs to the household, whatever `own` says
+  assert.equal('evil' in JSON.parse(row!.data), false);
+  assert.equal((await w.ctx.db.get<any>("SELECT count(*) AS n FROM food WHERE code IN ('4000000000013', '4000000000020', '123')"))!.n, 0);
+  const listed = (await send(w, 'ann', 'GET', '/api/v1/foods?limit=100')).json;
+  assert.ok(listed.every((f: any) => (f.brand === null || typeof f.brand === 'string') && (f.unit === 'g' || f.unit === 'ml')));
+  // a guest: a shared product is not created (its entries keep their values), an own one is the guest's
+  const guestShared = food({ source: 'openfoodfacts', code: '4000000000044' }, { name: 'Guest bar' });
+  const guestOwn = food({ source: 'own' }, { name: 'Guest oats' });
+  const g = await preview(w, 'gast', JSON.stringify({ ...file, foods: [guestShared, guestOwn] }), '');
+  assert.equal(g.status, 200, g.text);
+  assert.deepEqual(g.json.modes.merge.counts.foods.reasons, { guest_shared: 1 });
+  assert.equal((await confirm(w, 'gast', g.json.token, 'merge', '')).status, 200);
+  assert.equal((await w.ctx.db.get<any>("SELECT count(*) AS n FROM food WHERE code = '4000000000044'"))!.n, 0);
+  const oats = await w.ctx.db.get<any>("SELECT created_by FROM food WHERE json_extract(data, '$.name') = 'Guest oats'");
+  assert.equal(oats!.created_by, await idOf(w, 'gast'));
 });

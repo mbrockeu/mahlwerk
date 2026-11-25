@@ -317,7 +317,12 @@ into their own account; an access key is refused (**403**), the demo account too
   `demo` are skipped (`demo`); entries that link a skipped sample product keep their values. An external id (Yazio, Health) that another
   row here already has is skipped (`external_id_taken`). Values are compared after the cleaning a write applies (further nutrients, the
   settings schema with its defaults), so importing an own export again changes nothing; unchanged rows are not written at all. New products and
-  recipes belong to the importing user (a product that was not `own` in the file belongs to the household). Links of entries and items go to
+  recipes belong to the importing user (an own product that was not `own` in the file belongs to the household); a product of a provider
+  (Open Food Facts, catalogue, Yazio, Cookidoo, web) always belongs to the household, like after a lookup, and a guest brings in only own
+  products (`guest_shared`: neither made nor changed; the entries keep their values). A product's data keeps only the keys the server
+  writes; a product with a field of the wrong type (a brand that is no text, a unit other than g/ml …), an own product outside the limits
+  of `POST /foods`, a barcode that is no EAN/UPC (Yazio products: digits) or a source id that does not fit its source is skipped
+  (`invalid`). Links of entries and items go to
   the local food with that uid or barcode, else stay null (the entry keeps its values; warning `links_unknown`). The goal is the file's;
   when a change here is newer than the file's newest, the file's goal is recorded as a change from today on, like `PUT /me/goal` (warning
   `goal_from_today`), so earlier days keep their goal. Settings: only the keys of `PATCH /me/settings`,
