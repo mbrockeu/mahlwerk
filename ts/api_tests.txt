@@ -116,6 +116,7 @@ tests/test_badges.py::test_home_layout_is_validated
 tests/test_badges.py::test_water_glasses_setting
 tests/test_badges.py::test_water_glasses_are_validated
 tests/test_bls.py::test_search_route_with_source_filter_and_known_items_left_out
+tests/test_bls.py::test_search_route_finds_everyday_names_and_both_spellings_of_sz
 tests/test_bls.py::test_adopt_creates_a_food_once
 tests/test_bls.py::test_editing_an_adopted_basic_food_makes_it_own
 tests/test_bls.py::test_me_reports_both_sources

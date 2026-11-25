@@ -54,7 +54,39 @@ const item = (row: Row): CatalogItem => {
   };
 };
 
-const match = (tokens: string[]): string => tokens.map((t) => `"${t}"*`).join(' '); // tokens are letters and digits only
+/** 'ß' written 'ss' ('heiße' -> 'heisse'): the full text index keeps 'ß', but nobody types it on every keyboard. */
+const ss = (text: string): string => text.replace(/ß/g, 'ss');
+
+/** The spellings of a word that count as the same: as typed, all 'ß' as 'ss', all 'ss' as 'ß' ('heisse' <-> 'heiße'). */
+const spellings = (word: string): string[] => [...new Set([word, ss(word), word.replace(/ss/g, 'ß')])];
+
+// tokens are letters and digits only; a word with 'ss' or 'ß' is looked up in both spellings: ("heisse"* OR "heiße"*) AND "schokolade"*
+const match = (tokens: string[]): string => tokens.map((t) => {
+  const forms = spellings(t).map((w) => `"${w}"*`);
+  return forms.length > 1 ? `(${forms.join(' OR ')})` : forms[0]!;
+}).join(' AND ');
+
+/** Everyday names for BLS foods. The BLS names are official ("Milchmischgetränk 3,5 % Fett, mit Kakao/Schokolade, gesüßt"), so
+ * what people type ("heiße Schokolade") does not find them by name; these phrases do. The first BLS codes are listed first, in this order. */
+const COCOA_DRINKS = ['M206300', 'M206200', 'M206100'];
+const BLS_ALIASES: [string, string[]][] = [
+  'heiße schokolade', 'heißer kakao', 'warmer kakao', 'kalter kakao', 'kakao getränk', 'kakaogetränk', 'trinkkakao', 'kakaomilch',
+  'schokomilch', 'schokoladenmilch', 'milchkakao', 'kaba', 'trinkschokolade', // not "kakao" alone: that is the baking cocoa
+].map((phrase) => [words(phrase).map(ss).join(' '), COCOA_DRINKS]);
+
+/** The codes of the everyday name the query spells out: the same number of words, each the start of the phrase's word (a single
+ * word phrase has to be typed whole, or "kakao" would find "kakaomilch"). */
+const aliasCodes = (tokens: string[]): string[] => {
+  const typed = tokens.map(ss);
+  const codes: string[] = [];
+  for (const [phrase, list] of BLS_ALIASES) {
+    const parts = phrase.split(' ');
+    const same = parts.length === typed.length
+      && typed.every((w, i) => (parts.length === 1 ? w === parts[i] : parts[i]!.startsWith(w)));
+    if (same) for (const c of list) if (!codes.includes(c)) codes.push(c);
+  }
+  return codes;
+};
 
 const compareTuple = (a: (string | number)[], b: (string | number)[]): number => {
   for (let i = 0; i < a.length; i++) {
@@ -119,11 +151,22 @@ export class Catalog {
     if (source === BLS) hits = await this.searchBls(tokens, limit);
     else if (source === OFF) hits = await this.searchOff(tokens, limit);
     else return [];
-    return tokens.length === 1 ? this.withCompounds(source, tokens, hits, limit) : hits;
+    if (tokens.length === 1) hits = await this.withCompounds(source, tokens, hits, limit);
+    return source === BLS ? this.aliasesFirst(tokens, hits, limit) : hits;
+  }
+
+  /** The foods of an everyday name ("heiße Schokolade") go to the top of the basic foods. */
+  private async aliasesFirst(tokens: string[], hits: CatalogItem[], limit: number): Promise<CatalogItem[]> {
+    const codes = aliasCodes(tokens);
+    if (!codes.length) return hits;
+    const rows = await this.files.all(BLS, `SELECT * FROM product WHERE source = 'bls' AND code IN (${codes.map(() => '?').join(', ')})`, codes);
+    const named = (rows ?? []).map(item).sort((a, b) => codes.indexOf(a.code) - codes.indexOf(b.code));
+    const known = new Set(named.map((n) => n.code));
+    return [...named, ...hits.filter((h) => !known.has(h.code))].slice(0, limit);
   }
 
   private static starts(it: CatalogItem, word: string): boolean {
-    return [it.name, it.name_en].some((name) => name && nameKey(name).startsWith(word));
+    return [it.name, it.name_en].some((name) => name && ss(nameKey(name)).startsWith(ss(word)));
   }
 
   /** Sources whose file has the compact name columns. Only a yes is kept: a file swapped for one without them makes the compact
@@ -147,8 +190,11 @@ export class Catalog {
   /** A food whose whole name is the word, only written apart ("Hafer Flocken" for "haferflocken"), goes to the top. */
   private async wholeNameFirst(source: string, word: string, hits: CatalogItem[], limit: number): Promise<CatalogItem[]> {
     if (!(await this.hasCompactColumns(source))) return hits;
+    const forms = spellings(word);
+    const list = forms.map((_, i) => `:w${i}`).join(', ');
     const rows = await this.files.all(source,
-      'SELECT * FROM product WHERE source = :source AND (name_compact = :w OR name_compact_en = :w) ORDER BY id LIMIT 3', { source, w: word });
+      `SELECT * FROM product WHERE source = :source AND (name_compact IN (${list}) OR name_compact_en IN (${list})) ORDER BY id LIMIT 3`,
+      { source, ...Object.fromEntries(forms.map((w, i) => [`w${i}`, w])) });
     const exact = this.compactRows(source, rows).map(item);
     if (!exact.length) return hits;
     const codes = new Set(exact.map((e) => e.code));
@@ -159,13 +205,18 @@ export class Catalog {
   private async withCompounds(source: string, tokens: string[], hits: CatalogItem[], limit: number): Promise<CatalogItem[]> {
     const word = tokens[0]!;
     hits = await this.wholeNameFirst(source, word, hits, limit);
-    const starting = hits.filter((h) => Catalog.starts(h, word) || [nameCompact(h.name), nameCompact(h.name_en)].includes(word));
+    const starting = hits.filter((h) => Catalog.starts(h, word)
+      || [nameCompact(h.name), nameCompact(h.name_en)].some((c) => c !== null && ss(c) === ss(word)));
     if (starting.length >= COMPOUND_BELOW) return hits;
     if (!(await this.hasCompactColumns(source))) return hits;
-    const upper = word.slice(0, -1) + String.fromCodePoint(word.codePointAt(word.length - 1)! + 1);
+    const params: Record<string, string | number> = { source, limit };
+    const ranges = spellings(word).map((w, i) => {
+      params[`w${i}`] = w;
+      params[`u${i}`] = w.slice(0, -1) + String.fromCodePoint(w.codePointAt(w.length - 1)! + 1);
+      return `name_compact >= :w${i} AND name_compact < :u${i} OR name_compact_en >= :w${i} AND name_compact_en < :u${i}`;
+    });
     const rows = await this.files.all(source,
-      'SELECT * FROM product WHERE source = :source AND (name_compact >= :w AND name_compact < :u '
-      + 'OR name_compact_en >= :w AND name_compact_en < :u) ORDER BY length(name_key), id LIMIT :limit', { source, w: word, u: upper, limit });
+      `SELECT * FROM product WHERE source = :source AND (${ranges.join(' OR ')}) ORDER BY length(name_key), id LIMIT :limit`, params);
     const seen = new Set(hits.map((h) => h.code));
     const extra = this.compactRows(source, rows).filter((r) => !seen.has(r.code)).map(item);
     if (!extra.length) return hits;
@@ -176,10 +227,10 @@ export class Catalog {
   private async searchOff(tokens: string[], limit: number): Promise<CatalogItem[]> {
     const rows = await this.files.all(OFF,
       'SELECT p.* FROM product_fts JOIN product p ON p.id = product_fts.rowid WHERE product_fts MATCH :match '
-      + "ORDER BY CASE WHEN p.name_key = :first OR p.name_key LIKE :first || ' %' THEN 0 "
-      + "              WHEN p.name_key LIKE :first || '%' THEN 1 ELSE 2 END, "
+      + "ORDER BY CASE WHEN replace(p.name_key, 'ß', 'ss') = :first OR replace(p.name_key, 'ß', 'ss') LIKE :first || ' %' THEN 0 "
+      + "              WHEN replace(p.name_key, 'ß', 'ss') LIKE :first || '%' THEN 1 ELSE 2 END, "
       + '         length(p.name_key) - min(p.popularity, 400) / 10.0, p.name_key, p.id LIMIT :limit',
-      { match: match(tokens), first: tokens[0]!, limit });
+      { match: match(tokens), first: ss(tokens[0]!), limit });
     return (rows ?? []).map(item);
   }
 
@@ -188,11 +239,12 @@ export class Catalog {
     const rows = await this.files.all(BLS,
       'SELECT p.* FROM product_fts JOIN product p ON p.id = product_fts.rowid WHERE product_fts MATCH ? ORDER BY length(p.name_key), p.id LIMIT ?',
       [match(tokens), BLS_CANDIDATES]);
-    const first = tokens[0]!;
+    const first = ss(tokens[0]!);
     const rank = (row: Row): (string | number)[] => {
       let best: [number, number] | null = null;
-      for (const [key, rawWord] of [[row.name_key, 'roh'], [row.name_key_en ?? '', 'raw']] as const) {
-        if (!key) continue;
+      for (const [rawKey, rawWord] of [[row.name_key, 'roh'], [row.name_key_en ?? '', 'raw']] as const) {
+        if (!rawKey) continue;
+        const key = ss(rawKey);
         const klass = key === first || key.startsWith(first + ' ') ? 0 : key.startsWith(first) ? 1 : 2;
         const length = key.length - (key.split(/\s+/).includes(rawWord) ? RAW_BONUS : 0);
         if (best === null || klass < best[0] || (klass === best[0] && length < best[1])) best = [klass, length];
