@@ -134,7 +134,7 @@ const jsonText = (value: unknown): Uint8Array => new TextEncoder().encode(JSON.s
 
 /** The whole archive in memory. `first`/`last` limit the day-based data; the demo rows of an own account are left out, the
  * demo account itself exports its sample data. */
-export async function buildExport(db: Db, user: { id: number; username: string; display_name: string; is_demo?: unknown }, first: string | null, last: string | null, lang: string, nowSeconds: number): Promise<Uint8Array> {
+export async function buildExport(db: Db, user: { id: number; username: string; display_name: string; is_demo?: unknown; household?: unknown }, first: string | null, last: string | null, lang: string, nowSeconds: number): Promise<Uint8Array> {
   const demo = Boolean(user.is_demo);
   const a = first || FIRST_DAY, b = last || LAST_DAY, uid = user.id;
   const account = (await exportAccount(db, uid)) ?? {};
@@ -164,7 +164,7 @@ export async function buildExport(db: Db, user: { id: number; username: string; 
     templates: withDates(await exportTemplates(db, uid), 'created_at'),
     recipes: withDates(await exportRecipes(db, uid, demo), 'updated_at'),
     recipe_groups: withDates(await exportRecipeGroups(db, uid), 'created_at'),
-    foods: withDates(await exportFoods(db, uid, a, b, demo), 'fetched_at'),
+    foods: withDates(await exportFoods(db, uid, a, b, demo, Boolean(user.household) && !demo), 'fetched_at'), // the demo account: its own sample data only
     badges: withDates(await exportBadges(db, uid, demo), 'earned_at'),
     webhooks: await webhooks(db, uid),
   };

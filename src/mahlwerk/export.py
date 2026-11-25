@@ -18,7 +18,7 @@ import zipfile
 from datetime import datetime
 from urllib.parse import urlsplit
 
-from . import __version__, nutrients
+from . import __version__, nutrients, ownership
 from .db import Store
 from .nutrition import PER_100_KEYS, scale
 
@@ -140,7 +140,8 @@ def recipes(store: Store, user: dict, demo: bool) -> list[dict]:
 
 
 def foods(store: Store, user: dict, first: str, last: str, demo: bool) -> list[dict]:
-    return _with_dates(store.export_foods(user["id"], first, last, demo), "fetched_at")
+    household = ownership.is_household(user) and not demo  # the demo account: its own sample data only
+    return _with_dates(store.export_foods(user["id"], first, last, demo, household), "fetched_at")
 
 
 def recipe_groups(store: Store, user: dict) -> list[dict]:

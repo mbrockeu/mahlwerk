@@ -319,6 +319,7 @@ tests/test_household.py::test_barcode_rule_for_guests
 tests/test_household.py::test_a_guest_cannot_overwrite_a_guest
 tests/test_household.py::test_everybody_is_household_without_the_variable
 tests/test_household.py::test_a_token_of_a_guest_stays_a_guest
+tests/test_household.py::test_a_member_exports_the_recipes_the_household_took_over_a_guest_only_what_they_use
 tests/test_hydration.py::test_coffee_counts_with_its_water_share
 tests/test_hydration.py::test_what_is_no_drink_does_not_count[Oliven\xf6l-spec0]
 tests/test_hydration.py::test_what_is_no_drink_does_not_count[K\xfcrbissuppe-spec1]

@@ -61,16 +61,18 @@ export async function exportRecipes(db: Db, userId: number, demo: boolean) {
 
 /** The products this user made, and those their diary (in the range), templates, recipes and groups use: shared with the household,
  * but needed to bring the links and the own products along. Never a recipe's calculated food (that is the recipe), a remembered miss,
- * a sample food or a picture. */
-export async function exportFoods(db: Db, userId: number, first: string, last: string, demo: boolean) {
+ * a sample food or a picture. A member of the household (`household`) also gets the recipes the household took over from Cookidoo or a
+ * web page (they belong to nobody, so a move would lose them); a guest only what they made or use. */
+export async function exportFoods(db: Db, userId: number, first: string, last: string, demo: boolean, household = false) {
   const hide = demo ? '' : ` AND NOT COALESCE(${DEMO_FOOD}, 0) AND NOT COALESCE(${DEMO_ACCOUNT_FOOD}, 0)`;
   const rows = await db.all('SELECT uid, code, source, external_id, data, piece_label, piece_grams, drink, created_by, fetched_at FROM food '
     + `WHERE found = 1 AND source <> 'recipe'${hide} AND (created_by = :u `
+    + "OR (:h AND created_by IS NULL AND source IN ('cookidoo', 'web')) "
     + 'OR id IN (SELECT food_id FROM diary_entry WHERE user_id = :u AND day BETWEEN :a AND :b AND (:d OR demo = 0)) '
     + 'OR id IN (SELECT i.food_id FROM template_item i JOIN template t ON t.id = i.template_id WHERE t.user_id = :u) '
     + 'OR id IN (SELECT i.food_id FROM recipe_item i JOIN recipe r ON r.id = i.recipe_id WHERE r.created_by = :u) '
     + 'OR id IN (SELECT i.food_id FROM recipe_group_item i JOIN recipe_group g ON g.id = i.group_id WHERE g.created_by = :u)) '
-    + 'ORDER BY id', { u: userId, a: first, b: last, d: demo ? 1 : 0 });
+    + 'ORDER BY id', { u: userId, a: first, b: last, d: demo ? 1 : 0, h: household ? 1 : 0 });
   return rows.map((r) => ({
     uid: r.uid, code: r.code, source: r.source, external_id: r.external_id, data: JSON.parse(r.data), piece_label: r.piece_label,
     piece_grams: r.piece_grams, drink: r.drink === null ? null : Boolean(r.drink), own: r.created_by === userId, fetched_at: r.fetched_at,

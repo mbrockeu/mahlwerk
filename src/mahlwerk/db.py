@@ -2684,20 +2684,22 @@ class Store:
                             "items": [self._export_item(i) for i in items]})
         return out
 
-    def export_foods(self, user_id: int, first: str, last: str, demo: bool) -> list[dict]:
+    def export_foods(self, user_id: int, first: str, last: str, demo: bool, household: bool = False) -> list[dict]:
         """The products this user made, and those their diary (in the range), templates, recipes and groups use: shared with the
         household, but needed to bring the links and the own products along. Never a recipe's calculated food (that is the recipe),
-        a remembered miss, a sample food or a picture."""
+        a remembered miss, a sample food or a picture. A member of the household (`household`) also gets the recipes the household
+        took over from Cookidoo or a web page (they belong to nobody, so a move would lose them); a guest only what they made or use."""
         hide = "" if demo else f" AND NOT COALESCE({DEMO_FOOD}, 0) AND NOT COALESCE({DEMO_ACCOUNT_FOOD}, 0)"
         with self._connect() as con:
             rows = con.execute(
                 "SELECT uid, code, source, external_id, data, piece_label, piece_grams, drink, created_by, fetched_at FROM food "
                 f"WHERE found = 1 AND source <> 'recipe'{hide} AND (created_by = :u "
+                "OR (:h AND created_by IS NULL AND source IN ('cookidoo', 'web')) "
                 "OR id IN (SELECT food_id FROM diary_entry WHERE user_id = :u AND day BETWEEN :a AND :b AND (:d OR demo = 0)) "
                 "OR id IN (SELECT i.food_id FROM template_item i JOIN template t ON t.id = i.template_id WHERE t.user_id = :u) "
                 "OR id IN (SELECT i.food_id FROM recipe_item i JOIN recipe r ON r.id = i.recipe_id WHERE r.created_by = :u) "
                 "OR id IN (SELECT i.food_id FROM recipe_group_item i JOIN recipe_group g ON g.id = i.group_id WHERE g.created_by = :u)) "
-                "ORDER BY id", {"u": user_id, "a": first, "b": last, "d": int(demo)},
+                "ORDER BY id", {"u": user_id, "a": first, "b": last, "d": int(demo), "h": int(household)},
             ).fetchall()
         return [{"uid": r["uid"], "code": r["code"], "source": r["source"], "external_id": r["external_id"], "data": json.loads(r["data"]),
                  "piece_label": r["piece_label"], "piece_grams": r["piece_grams"], "drink": None if r["drink"] is None else bool(r["drink"]),
