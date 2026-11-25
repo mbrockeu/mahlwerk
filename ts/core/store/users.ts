@@ -13,6 +13,11 @@ export interface UserRow { id: number; username: string; display_name: string; h
 /** The user of this name, created on first sight. `household` undefined leaves a known user's flag alone. */
 export async function getOrCreateUser(ctx: Ctx, username: string, displayName: string, household?: boolean): Promise<UserRow> {
   if (isReservedName(username)) throw new HttpError(403, 'reserved user name');
+  // every request asks: a plain read answers when the row is there and nothing changes; the transaction only to create or update it
+  const known = await ctx.db.get('SELECT * FROM user WHERE username = ?', [username]);
+  if (known && known.display_name === displayName && (household === undefined || Boolean(known.household) === household)) {
+    return { id: known.id, username, display_name: displayName, household: household ?? Boolean(known.household), disabled: Boolean(known.disabled) };
+  }
   return ctx.db.tx(async (db) => {
     const row = await db.get('SELECT * FROM user WHERE username = ?', [username]);
     if (!row) {
