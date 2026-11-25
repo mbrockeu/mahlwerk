@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-25
+
 ### Changed
 - **The Docker image and the Compose file run the TypeScript server** (`node:22-slim`, port 8110, user 10001, data in `/data`, health
   check on `/healthz`, clean stop on SIGTERM). The Cookidoo connector is built in (off until switched on) and labels are read by the image
@@ -13,6 +15,9 @@ All notable changes to this project are documented here. The format follows
   `tools`, same volume) runs them: `docker compose run --rm tools mahlwerk.catalog import-bls /data/BLS.xlsx`, `... mahlwerk.yazio ...`.
 - **The TypeScript server migrates schema version 20 to 21 itself** at start (one transaction), so it can take over a Python-era
   database without a detour. Older versions are still refused, with a message that says to start the Python server (the `tools` service) once.
+
+### Fixed
+- CI: the frontend check installs the packages of `ts/` first (the app build imports the shared core, which needs zod).
 
 ## [0.4.0] - 2026-11-25
 
