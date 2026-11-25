@@ -76,6 +76,17 @@ export async function entriesBetween(db: Db, userId: number, first: string, last
   return rows.map(entryRow);
 }
 
+/** What the history adds up of each entry in the range (by day, then id like entriesBetween): the amount and kcal, protein, carbs and
+ * fat per 100 g (one multi-path json_extract: JSON text with the numbers as stored, so the same doubles as parsing the column). */
+export async function macrosBetween(db: Db, userId: number, first: string, last: string): Promise<{ day: string; amount: number; per_100: Record<'kcal' | 'protein' | 'carbs' | 'fat', number | null> }[]> {
+  const rows = await db.all("SELECT day, amount, json_extract(per_100, '$.kcal', '$.protein', '$.carbs', '$.fat') AS v FROM diary_entry "
+    + 'WHERE user_id = ? AND day BETWEEN ? AND ? ORDER BY day, id', [userId, first, last]);
+  return rows.map((r) => {
+    const [kcal, protein, carbs, fat] = JSON.parse(r.v);
+    return { day: r.day, amount: r.amount, per_100: { kcal, protein, carbs, fat } };
+  });
+}
+
 /** Days with at least one entry up to `last`, newest first. */
 export async function loggedDaysUntil(db: Db, userId: number, last: string): Promise<string[]> {
   return (await db.all('SELECT DISTINCT day FROM diary_entry WHERE user_id = ? AND day <= ? ORDER BY day DESC', [userId, last])).map((r) => r.day);

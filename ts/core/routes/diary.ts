@@ -9,9 +9,9 @@ import { MEALS, type Meal } from '../models/common.ts';
 import { copyIn, entryIn, entryPatch, type Day, type Entry, type HistoryDay } from '../models/diary.ts';
 import { pyInt } from '../models/common.ts';
 import * as nutrients from '../nutrients.ts';
-import { PER_100_KEYS, r1, scale, total, type Scaled } from '../nutrition.ts';
+import { PER_100_KEYS, r1, scale, total, type Per100, type Scaled } from '../nutrition.ts';
 import { pySum, roundHalfEven } from '../num.ts';
-import { drinkEntries, addEntries, addEntry, deleteEntry, entriesBetween, entriesOn, getEntries, getEntry, loggedDaysUntil, updateEntry, type EntryRow, type Snapshot } from '../store/diary.ts';
+import { drinkEntries, addEntries, addEntry, deleteEntry, entriesBetween, entriesOn, getEntries, getEntry, loggedDaysUntil, macrosBetween, updateEntry, type EntryRow, type Snapshot } from '../store/diary.ts';
 import { getFood } from '../store/foods.ts';
 import { DEFAULT_WATER_GOAL, goalOn } from '../store/goals.ts';
 import { getSettings } from '../store/settings.ts';
@@ -187,8 +187,8 @@ export const routes: Route[] = [
     const uid = req.user!.id;
     const last = today();
     const first = addDays(last, -(days - 1));
-    const byDay = new Map<string, Scaled[]>();
-    for (const row of await entriesBetween(db, uid, first, last)) byDay.set(row.day, [...(byDay.get(row.day) ?? []), scaled(row)]);
+    const byDay = new Map<string, Scaled[]>(); // only the four values the history shows travel (scale gives null for the rest)
+    for (const row of await macrosBetween(db, uid, first, last)) byDay.set(row.day, [...(byDay.get(row.day) ?? []), scale(row.per_100 as Per100, row.amount)]);
     const water = await waterBetween(db, uid, first, last);
     const drinks = waterDrinksOn(await getSettings(db, uid)) ? drinksByDay(await drinkEntries(db, uid, first, last)) : {};
     const result: HistoryDay[] = [];
