@@ -276,9 +276,10 @@ database and no route for an admin to take other people's data: the caller is al
   hex digits, fixed for the life of the row, schema v21). Diary entries and the items of templates and recipes name their food by
   `food_uid` and `food_code` (barcode; both null without a link); diary entries and workouts carry `external_id` (Yazio, Apple Health), weight
   rows `health`, `body_fat_health`, `lean_health` and water rows `health` (where a value came from, so that a later Health sync behaves the
-  same after an import). A recipe carries `uid` and `food_uid` (its calculated food). `recipe_groups`: the groups the user made
+  same after an import). A recipe carries `uid` and `food_uid` (its calculated food) and, like a food, `drink`, `piece_label` and `piece_grams` (optional: an older file without them leaves those of an existing recipe alone). `recipe_groups`: the groups the user made
   (`uid`, `name`, `position`, `source`, `created_at`, `members` = food uids). `foods`: the products the user made plus those their diary
-  (in the range), templates, own recipes and own groups use, as `{uid, code, source, external_id, data, piece_label, piece_grams, drink,
+  (in the range), templates, own recipes and own groups use (a member of the household also gets the recipes taken over from Cookidoo or a
+  web page: they belong to nobody), as `{uid, code, source, external_id, data, piece_label, piece_grams, drink,
   own, fetched_at}` (`own`: made by this user; `fetched_at`: last change, ISO); never a recipe's calculated food (that is the recipe), a remembered miss, a sample food or a picture.
 - **Never included.** Password hash, sign-in sessions, access keys, webhook secrets and addresses beyond the host, stored connector
   secrets, the identity at a sign-in provider, other users' data. Demo rows (test data of the own account) are left out; the demo account

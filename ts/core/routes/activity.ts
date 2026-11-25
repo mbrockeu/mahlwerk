@@ -9,7 +9,7 @@ import { pyInt } from '../models/common.ts';
 import type { DayActivity } from '../models/activity.ts';
 import { weightFor } from '../store/activity.ts';
 import { putActivity, getWorkout, addWorkout, updateWorkout, deleteWorkout, healthSync, type SyncDay } from '../store/workouts.ts';
-import { emit } from '../webhooks.ts';
+import { emit, hooksWanted } from '../webhooks.ts';
 import { parseDay } from './diary.ts';
 
 const activityEvent = (day: string, a: DayActivity) => ({ day, steps: a.steps, active_kcal: a.active_kcal, distance_m: a.distance_m, source: a.source });
@@ -88,12 +88,13 @@ export const routes: Route[] = [
     const uid = req.user!.id;
     const result = await healthSync(db, uid, days, body.overwrite_manual, Math.floor(Date.now() / 1000));
     const { changed } = result;
-    if (changed.activity.length) {
+    // the payloads only when a hook takes the event (a first sync of a year adds hundreds of days and workouts)
+    if (changed.activity.length && await hooksWanted(req, req.user!, 'activity.recorded')) {
       const sorted = [...changed.activity].sort();
       const found = await dayActivities(db, uid, sorted[0], sorted.at(-1)!);
       for (const day of new Set(changed.activity)) emit(req, req.user!, 'activity.recorded', activityEvent(day, found[day]));
     }
-    for (const id of changed.workouts) {
+    for (const id of changed.workouts.length && await hooksWanted(req, req.user!, 'workout.created') ? changed.workouts : []) {
       const row = (await getWorkout(db, uid, id))!;
       emit(req, req.user!, 'workout.created', workoutOut(row, await weightFor(db, uid, row.day)) as unknown as Record<string, unknown>);
     }

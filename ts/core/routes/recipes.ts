@@ -9,7 +9,7 @@ import { PER_100_KEYS, r1, recipeFood, scale } from '../nutrition.ts';
 import * as nutrients from '../nutrients.ts';
 import { pySum } from '../num.ts';
 import { canEdit, needEdit } from '../ownership.ts';
-import { getFood, listFoods } from '../store/foods.ts';
+import { getFood, listOwnFoods } from '../store/foods.ts';
 import { knownCatalog } from '../store/foods.ts';
 import { deleteRecipe, eatenSince, getRecipe, listRecipes, saveRecipe, type RecipeRow } from '../store/recipes.ts';
 import type { ItemIn } from '../store/templates.ts';
@@ -77,7 +77,7 @@ export const routes: Route[] = [
     const { db } = req.ctx;
     const user = req.user!;
     const { lines: parsed, ignored } = ingredients.parseText(body.text);
-    const own = (await listFoods(db, '', null, 100_000, ['recipe', 'cookidoo', 'web'], Boolean(user.is_demo))) as ingredients.OwnFood[];
+    const own: ingredients.OwnFood[] = await listOwnFoods(db, ['recipe', 'cookidoo', 'web'], Boolean(user.is_demo));
     const eaten = body.recent ? await eatenSince(db, user.id, addDays(today(), -(ingredients.RECENT_DAYS - 1))) : null;
     const catalog = req.ctx.services.catalog as ingredients.CatalogSearch | undefined;
     const skip = (hits: ingredients.CatalogHit[]) => knownCatalog(db, hits);

@@ -285,6 +285,12 @@ export class Staging {
 
   releaseHeavy(): void { this.heavy = false; }
 
+  /** How many areas are held (without expiring any). */
+  held(): number { return this.stages.size; }
+
+  /** Drop the areas whose time is up (cheap: called before every request, see dispatch.ts). */
+  sweep(): void { this.expire(); }
+
   private expire(): void {
     const now = this.clock();
     for (const [uid, s] of this.stages) if (s.expires < now && !this.busy.has(uid)) this.stages.delete(uid);

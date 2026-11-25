@@ -18,7 +18,7 @@ import zipfile
 from datetime import datetime
 from urllib.parse import urlsplit
 
-from . import __version__, nutrients
+from . import __version__, nutrients, ownership
 from .db import Store
 from .nutrition import PER_100_KEYS, scale
 
@@ -140,7 +140,8 @@ def recipes(store: Store, user: dict, demo: bool) -> list[dict]:
 
 
 def foods(store: Store, user: dict, first: str, last: str, demo: bool) -> list[dict]:
-    return _with_dates(store.export_foods(user["id"], first, last, demo), "fetched_at")
+    household = ownership.is_household(user) and not demo  # the demo account: its own sample data only
+    return _with_dates(store.export_foods(user["id"], first, last, demo, household), "fetched_at")
 
 
 def recipe_groups(store: Store, user: dict) -> list[dict]:
@@ -252,7 +253,7 @@ def build_zip(store: Store, user: dict, first: str | None, last: str | None, lan
         "workouts.csv": style.render(WORKOUT_COLUMNS, data["workouts"]),
         "water.csv": style.render(WATER_COLUMNS, data["water"]),
         "fasting.csv": style.render(FASTING_COLUMNS, data["fasting"]),
-        "mahlwerk-export.json": json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False).encode("utf-8"),
+        "mahlwerk-export.json": json.dumps(data, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8"),
     }
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:

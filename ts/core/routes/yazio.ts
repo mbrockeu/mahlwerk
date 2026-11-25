@@ -22,6 +22,7 @@ export function yazioOf(ctx: Ctx): YazioState {
   const existing = ctx.services.yazio as YazioState | undefined;
   if (existing) return existing;
   const stage = new Staging(() => ctx.now());
+  ((ctx.services.sweepers ??= []) as (() => void)[]).push(() => stage.sweep());
   const runs = new Runs(ctx, async (userId, files) => {
     if (!(await featureOn(ctx, 'yazio_login.enabled'))) throw new LiveError('cancelled'); // switched off while the run was under way
     try {

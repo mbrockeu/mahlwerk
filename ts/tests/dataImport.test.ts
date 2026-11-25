@@ -6,6 +6,8 @@ import { buildZip } from '../core/zip.ts';
 import { verdict } from '../core/demoAccount.ts';
 import { unzip } from '../core/yazioStage.ts';
 import { makeWorld, type Reply, type World } from './cookidooHarness.ts';
+import { TTL } from '../core/dataImport.ts';
+import { importOf } from '../core/routes/dataImport.ts';
 
 const worlds: World[] = [];
 after(async () => { for (const w of worlds) await w.close(); });
@@ -288,6 +290,11 @@ test('the goal of the file wins also over a later change here, as a change from 
   assert.equal(p.json.modes.merge.counts.goal.changed, 1);
   assert.equal((await confirm(w, 'ann', p.json.token)).status, 200);
   assert.equal((await send(w, 'ann', 'GET', '/api/v1/me')).json.goal.kcal, 2100);
+  // and the later change here is gone: it would win again on its day
+  const history = (await send(w, 'ann', 'GET', '/api/v1/me/goal/history')).json;
+  assert.ok(history.every((h: any) => h.valid_from < '2999-01-01'), JSON.stringify(history));
+  assert.equal(history[0].kcal, 2100);
+  assert.equal((await send(w, 'ann', 'GET', '/api/v1/diary/2999-01-02')).json.goal.kcal, 2100);
 });
 
 test('replace: the products of a removed Yazio batch lose the batch; a guest\'s new products are the guest\'s', async () => {
@@ -477,4 +484,47 @@ test('products of the file: malformed fields are refused, unknown keys dropped, 
   assert.equal((await w.ctx.db.get<any>("SELECT count(*) AS n FROM food WHERE code = '4000000000044'"))!.n, 0);
   const oats = await w.ctx.db.get<any>("SELECT created_by FROM food WHERE json_extract(data, '$.name') = 'Guest oats'");
   assert.equal(oats!.created_by, await idOf(w, 'gast'));
+});
+
+test('a recipe brings its drink flag and its piece along; a file without them leaves those here alone', async () => {
+  const one = await world(), two = await world();
+  const { recipe } = await fill(one, 'ann');
+  assert.equal((await send(one, 'ann', 'PUT', `/api/v1/foods/${recipe.food.id}/drink`, { drink: true })).status, 200);
+  assert.equal((await send(one, 'ann', 'PUT', `/api/v1/foods/${recipe.food.id}/piece`, { label: 'Glas', grams: 250 })).status, 200);
+  const zip = await exportZip(one, 'ann');
+  const data = await jsonOf(zip);
+  assert.deepEqual([data.recipes[0].drink, data.recipes[0].piece_label, data.recipes[0].piece_grams], [true, 'Glas', 250]);
+  const p = await preview(two, 'anna', zip);
+  assert.equal((await confirm(two, 'anna', p.json.token)).status, 200);
+  const there = (await send(two, 'anna', 'GET', '/api/v1/recipes')).json[0].food;
+  assert.deepEqual([there.drink, there.piece], [true, { label: 'Glas', grams: 250 }]);
+  assert.deepEqual(comparable(await jsonOf(await exportZip(two, 'anna'))).recipes, comparable(data).recipes);
+  // the same file again: unchanged; a changed piece is a change and the file wins
+  assert.equal((await preview(two, 'anna', zip)).json.modes.merge.counts.recipes.unchanged, 1);
+  data.recipes[0].piece_grams = 300;
+  data.recipes[0].updated_at = new Date(Date.now() + 60_000).toISOString();
+  let q = await preview(two, 'anna', JSON.stringify(data));
+  assert.equal(q.json.modes.merge.counts.recipes.changed, 1, q.text);
+  assert.equal((await confirm(two, 'anna', q.json.token)).status, 200);
+  assert.equal((await send(two, 'anna', 'GET', '/api/v1/recipes')).json[0].food.piece.grams, 300);
+  // an older file (before these fields): nothing to change, the stored ones stay
+  for (const k of ['drink', 'piece_label', 'piece_grams']) delete data.recipes[0][k];
+  q = await preview(two, 'anna', JSON.stringify(data));
+  assert.equal(q.json.modes.merge.counts.recipes.unchanged, 1, q.text);
+  assert.equal((await confirm(two, 'anna', q.json.token)).status, 200);
+  const kept = (await send(two, 'anna', 'GET', '/api/v1/recipes')).json[0].food;
+  assert.deepEqual([kept.drink, kept.piece], [true, { label: 'Glas', grams: 300 }]);
+});
+
+test('a waiting file goes when its time is up, also when no further import request comes', async () => {
+  const w = await world();
+  await fill(w, 'ann');
+  assert.equal((await preview(w, 'ann', await exportZip(w, 'ann'))).status, 200);
+  const stage = importOf(w.ctx);
+  assert.equal(stage.held(), 1);
+  await send(w, 'ann', 'GET', '/api/v1/me');
+  assert.equal(stage.held(), 1); // not yet due
+  w.clock.now += TTL + 1;
+  await send(w, 'ben', 'GET', '/api/v1/me'); // any request of anybody
+  assert.equal(stage.held(), 0);
 });

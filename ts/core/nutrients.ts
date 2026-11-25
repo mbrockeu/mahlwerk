@@ -77,6 +77,7 @@ export function aggregate(parts: [number, Extra][]): Record<string, { amount: nu
   const known: Record<string, number> = {};
   for (const [kcal, extra] of parts) {
     for (const [key, value] of Object.entries(extra)) {
+      if (!BY_KEY.has(key)) continue; // a key this version does not know (stored by another one)
       sums[key] = (sums[key] ?? 0) + value;
       known[key] = (known[key] ?? 0) + (byEnergy ? kcal : 1);
     }

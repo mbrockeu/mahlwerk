@@ -35,42 +35,57 @@ export const exportFasts = (db: Db, userId: number, first: string, last: string)
 const exportItem = (row: Row) => ({ ...row, per_100: JSON.parse(row.per_100), extra: JSON.parse(row.extra || '{}') });
 
 /** The user's meal templates with their items (oldest first). */
-export async function exportTemplates(db: Db, userId: number) {
-  const rows = await db.all('SELECT id, uid, name, created_at FROM template WHERE user_id = ? ORDER BY id', [userId]);
-  const out = [];
-  for (const row of rows) {
-    const items = await db.all(`SELECT name, brand, amount, unit, per_100, extra, ${foodLink('template_item')} FROM template_item WHERE template_id = ? ORDER BY id`, [row.id]);
-    out.push({ uid: row.uid, name: row.name, created_at: row.created_at, items: items.map(exportItem) });
+/** Rows grouped by `key` (in their order). */
+const groupBy = (rows: Row[], key: string): Map<number, Row[]> => {
+  const out = new Map<number, Row[]>();
+  for (const r of rows) {
+    const list = out.get(r[key]);
+    if (list) list.push(r); else out.set(r[key], [r]);
   }
   return out;
+};
+
+export async function exportTemplates(db: Db, userId: number) {
+  const rows = await db.all('SELECT id, uid, name, created_at FROM template WHERE user_id = ? ORDER BY id', [userId]);
+  // the items of all templates in one query, each template's by id as before
+  const items = groupBy(await db.all(`SELECT template_item.template_id AS owner, name, brand, amount, unit, per_100, extra, ${foodLink('template_item')} FROM template_item `
+    + 'WHERE template_id IN (SELECT id FROM template WHERE user_id = ?) ORDER BY template_item.id', [userId]), 'owner');
+  return rows.map((row) => ({ uid: row.uid, name: row.name, created_at: row.created_at, items: (items.get(row.id) ?? []).map(({ owner: _o, ...i }) => exportItem(i)) }));
 }
 
 /** Recipes this user created (the household shares recipes, but only the author's own are theirs to take away). */
 export async function exportRecipes(db: Db, userId: number, demo: boolean) {
   const hide = demo ? '' : " AND NOT COALESCE(json_extract(food.data, '$.demo') = 1, 0)";
-  const rows = await db.all('SELECT recipe.id, recipe.uid, food.uid AS food_uid, recipe.portions, recipe.total_weight, recipe.updated_at, food.data AS data FROM recipe '
+  const rows = await db.all('SELECT recipe.id, recipe.uid, food.uid AS food_uid, recipe.portions, recipe.total_weight, recipe.updated_at, food.data AS data, '
+    + 'food.drink, food.piece_label, food.piece_grams FROM recipe '
     + `JOIN food ON food.id = recipe.food_id WHERE recipe.created_by = ?${hide} ORDER BY recipe.id`, [userId]);
+  // the items of all these recipes in one query, each recipe's by position (ties by rowid, like the index the single query used)
+  const items = groupBy(await db.all(`SELECT recipe_item.recipe_id AS owner, name, brand, amount, unit, per_100, extra, ${foodLink('recipe_item')} FROM recipe_item `
+    + 'WHERE recipe_id IN (SELECT id FROM recipe WHERE created_by = ?) ORDER BY recipe_item.recipe_id, recipe_item.position, recipe_item.id', [userId]), 'owner');
   const out = [];
   for (const row of rows) {
-    const items = await db.all(`SELECT name, brand, amount, unit, per_100, extra, ${foodLink('recipe_item')} FROM recipe_item WHERE recipe_id = ? ORDER BY position`, [row.id]);
     const data = row.data ? JSON.parse(row.data) : {};
-    out.push({ uid: row.uid, food_uid: row.food_uid, name: data.name ?? null, portions: row.portions, total_weight: row.total_weight, updated_at: row.updated_at, per_100: data.per_100 ?? null, items: items.map(exportItem) });
+    out.push({ uid: row.uid, food_uid: row.food_uid, name: data.name ?? null, portions: row.portions, total_weight: row.total_weight, updated_at: row.updated_at, per_100: data.per_100 ?? null,
+      drink: row.drink === null ? null : Boolean(row.drink), piece_label: row.piece_label, piece_grams: row.piece_grams,
+      items: (items.get(row.id) ?? []).map(({ owner: _o, ...i }) => exportItem(i)) });
   }
   return out;
 }
 
 /** The products this user made, and those their diary (in the range), templates, recipes and groups use: shared with the household,
  * but needed to bring the links and the own products along. Never a recipe's calculated food (that is the recipe), a remembered miss,
- * a sample food or a picture. */
-export async function exportFoods(db: Db, userId: number, first: string, last: string, demo: boolean) {
+ * a sample food or a picture. A member of the household (`household`) also gets the recipes the household took over from Cookidoo or a
+ * web page (they belong to nobody, so a move would lose them); a guest only what they made or use. */
+export async function exportFoods(db: Db, userId: number, first: string, last: string, demo: boolean, household = false) {
   const hide = demo ? '' : ` AND NOT COALESCE(${DEMO_FOOD}, 0) AND NOT COALESCE(${DEMO_ACCOUNT_FOOD}, 0)`;
   const rows = await db.all('SELECT uid, code, source, external_id, data, piece_label, piece_grams, drink, created_by, fetched_at FROM food '
     + `WHERE found = 1 AND source <> 'recipe'${hide} AND (created_by = :u `
+    + "OR (:h AND created_by IS NULL AND source IN ('cookidoo', 'web')) "
     + 'OR id IN (SELECT food_id FROM diary_entry WHERE user_id = :u AND day BETWEEN :a AND :b AND (:d OR demo = 0)) '
     + 'OR id IN (SELECT i.food_id FROM template_item i JOIN template t ON t.id = i.template_id WHERE t.user_id = :u) '
     + 'OR id IN (SELECT i.food_id FROM recipe_item i JOIN recipe r ON r.id = i.recipe_id WHERE r.created_by = :u) '
     + 'OR id IN (SELECT i.food_id FROM recipe_group_item i JOIN recipe_group g ON g.id = i.group_id WHERE g.created_by = :u)) '
-    + 'ORDER BY id', { u: userId, a: first, b: last, d: demo ? 1 : 0 });
+    + 'ORDER BY id', { u: userId, a: first, b: last, d: demo ? 1 : 0, h: household ? 1 : 0 });
   return rows.map((r) => ({
     uid: r.uid, code: r.code, source: r.source, external_id: r.external_id, data: JSON.parse(r.data), piece_label: r.piece_label,
     piece_grams: r.piece_grams, drink: r.drink === null ? null : Boolean(r.drink), own: r.created_by === userId, fetched_at: r.fetched_at,
@@ -80,12 +95,9 @@ export async function exportFoods(db: Db, userId: number, first: string, last: s
 /** The recipe groups this user made, with their members as the stable ids of the foods (own and taken-over recipes). */
 export async function exportRecipeGroups(db: Db, userId: number) {
   const rows = await db.all('SELECT id, uid, name, position, source, created_at FROM recipe_group WHERE created_by = ? ORDER BY position, id', [userId]);
-  const out = [];
-  for (const row of rows) {
-    const members = await db.all('SELECT f.uid FROM recipe_group_item i JOIN food f ON f.id = i.food_id WHERE i.group_id = ? ORDER BY f.id', [row.id]);
-    out.push({ uid: row.uid, name: row.name, position: row.position, source: row.source, created_at: row.created_at, members: members.map((m) => m.uid) });
-  }
-  return out;
+  const members = groupBy(await db.all('SELECT i.group_id, f.uid FROM recipe_group_item i JOIN food f ON f.id = i.food_id '
+    + 'WHERE i.group_id IN (SELECT id FROM recipe_group WHERE created_by = ?) ORDER BY i.group_id, f.id', [userId]), 'group_id');
+  return rows.map((row) => ({ uid: row.uid, name: row.name, position: row.position, source: row.source, created_at: row.created_at, members: (members.get(row.id) ?? []).map((m) => m.uid) }));
 }
 
 export async function exportBadges(db: Db, userId: number, demo: boolean) {

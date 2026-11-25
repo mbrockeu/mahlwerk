@@ -61,27 +61,55 @@ export async function getFoodByCode(db: Db, code: string): Promise<FoodRow | und
   return row ? foodRow(row) : undefined;
 }
 
+/** The WHERE of the product list: known foods (no remembered misses, no empty shells), without the demo account's sample foods unless
+ * the caller is the demo account, with `source` only that source, never one of `exclude`. Empty shell = no name and no value per 100 g
+ * (upstream knows the barcode but nothing else). */
+function listWhere(source: string | null, exclude: string[], demoAccount: boolean): [string, string[]] {
+  const args: string[] = [];
+  let where = 'food.found = 1';
+  if (!demoAccount) where += ` AND NOT COALESCE(${DEMO_ACCOUNT_FOOD}, 0)`;
+  if (source) { where += ' AND food.source = ?'; args.push(source); }
+  if (exclude.length) { where += ` AND food.source NOT IN (${exclude.map(() => '?').join(', ')})`; args.push(...exclude); }
+  where += " AND NOT (json_extract(food.data, '$.name') IS NULL AND NOT EXISTS (SELECT 1 FROM json_each(food.data, '$.per_100') WHERE type <> 'null'))";
+  return [where, args];
+}
+
 /** Known products, newest first. The search looks at name, brand and barcode; `exclude` leaves out sources. The foods of the
- * demo account are listed only for the demo account itself. */
+ * demo account are listed only for the demo account itself. The filters run in SQL and the search on a slim list (id, barcode, name,
+ * brand); only the rows that are returned are read in full. */
 export async function listFoods(db: Db, query = '', source: string | null = null, limit = 50, exclude: string[] = [], demoAccount = false): Promise<FoodRow[]> {
-  const hide = demoAccount ? '' : ` AND NOT COALESCE(${DEMO_ACCOUNT_FOOD}, 0)`;
-  const rows = await db.all(`${FOOD_SELECT} WHERE food.found = 1${hide} ORDER BY food.fetched_at DESC, food.id DESC`);
+  const [where, args] = listWhere(source, exclude, demoAccount);
   // with a search, the better matches first (matchRank), newest first among equally good ones
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const result: FoodRow[] = [];
-  for (const row of rows) {
-    const food = foodRow(row);
-    const data = food.data!;
-    if (source && food.source !== source) continue;
-    if (exclude.includes(food.source)) continue;
-    if (data.name == null && Object.values(data.per_100).every((v) => v == null)) continue; // empty shell
-    const haystack = [food.code, data.name, data.brand].filter(Boolean).join(' ').toLowerCase();
-    if (words.every((w) => haystack.includes(w))) result.push(food);
-    if (!words.length && result.length >= limit) break;
+  // name and brand as one JSON text (json_extract with several paths): exactly the values JSON.parse of the column gives
+  const rows = await db.all(`SELECT food.id, food.code, json_extract(food.data, '$.name', '$.brand') AS nb FROM food WHERE ${where} `
+    + `ORDER BY food.fetched_at DESC, food.id DESC${words.length ? '' : ' LIMIT ?'}`, words.length ? args : [...args, limit]);
+  let ids: number[];
+  if (!words.length) ids = rows.map((r) => r.id);
+  else {
+    const hits: { id: number; haystack: string }[] = [];
+    for (const row of rows) {
+      const [name, brand] = JSON.parse(row.nb);
+      const haystack = [row.code, name, brand].filter(Boolean).join(' ').toLowerCase();
+      if (words.every((w) => haystack.includes(w))) hits.push({ id: row.id, haystack });
+    }
+    const ranks = hits.map((h) => matchRank(words, h.haystack));
+    ids = hits.map((h, i) => [h, i] as const).sort((a, b) => ranks[a[1]]! - ranks[b[1]]! || a[1] - b[1]).slice(0, limit).map(([h]) => h.id);
   }
-  if (!words.length) return result;
-  const ranks = result.map((f) => matchRank(words, [f.code, f.data!.name, f.data!.brand].filter(Boolean).join(' ').toLowerCase()));
-  return result.map((f, i) => [f, i] as const).sort((a, b) => ranks[a[1]]! - ranks[b[1]]! || a[1] - b[1]).slice(0, limit).map(([f]) => f);
+  const full = await getFoods(db, ids, demoAccount);
+  return ids.map((id) => full.get(id)).filter((f): f is FoodRow => f !== undefined); // one deleted between the two reads is left out
+}
+
+/** The household's products for the ingredient finder (ingredients.ts OwnFood): what `listFoods` lists without a search, newest first,
+ * with only the fields the finder reads. */
+export async function listOwnFoods(db: Db, exclude: string[], demoAccount: boolean) {
+  const [where, args] = listWhere(null, exclude, demoAccount);
+  const rows = await db.all(`SELECT food.id, food.code, food.source, json_extract(food.data, '$.name', '$.brand', '$.unit', '$.per_100') AS d FROM food WHERE ${where} `
+    + 'ORDER BY food.fetched_at DESC, food.id DESC LIMIT 100000', args);
+  return rows.map((r) => {
+    const [name, brand, unit, per_100] = JSON.parse(r.d);
+    return { id: r.id as number, code: r.code as string | null, source: r.source as string, data: { name, brand, unit, per_100 } };
+  });
 }
 
 /** How well a product matches the search words (lower case; every word occurs in `haystack`), db.py `match_rank`: per word 0 for a

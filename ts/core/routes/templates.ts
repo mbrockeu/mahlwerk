@@ -3,7 +3,7 @@ import { HttpError, parse, pathInt, route, type Req, type Route } from '../http.
 import { templateApply, templateIn, templatePatch, type Template } from '../models/recipe.ts';
 import { r1, scale } from '../nutrition.ts';
 import { pySum } from '../num.ts';
-import { addEntries, entriesOn, getEntry } from '../store/diary.ts';
+import { addEntries, entriesOn, getEntries, getEntry } from '../store/diary.ts';
 import { createTemplate, deleteTemplate, getTemplate, listTemplates, renameTemplate, type ItemIn, type TemplateRow } from '../store/templates.ts';
 import { emitEntries, entriesOut, foodCopy, parseDay, snapshot } from './diary.ts';
 
@@ -66,7 +66,8 @@ export const routes: Route[] = [
     const { db } = req.ctx;
     const uid = req.user!.id;
     const ids = await addEntries(db, uid, body.day, row.items.map((i) => snapshot(i as any, body.meal)));
-    await emitEntries(req, await Promise.all(ids.map(async (i) => (await getEntry(db, uid, i))!)));
-    return entriesOut(req, ids);
+    const added = await getEntries(db, uid, ids);
+    await emitEntries(req, added);
+    return entriesOut(added);
   }, { status: 201 }),
 ];

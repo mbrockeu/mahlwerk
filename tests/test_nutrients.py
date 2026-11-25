@@ -276,6 +276,16 @@ def test_insights_micros_null_percent_without_nrv_and_empty_without_data(client)
     assert client.get(f"/api/v1/insights?from={d(10)}&to={d(12)}").json()["micros"] == []
 
 
+def test_insights_leave_out_a_stored_nutrient_this_version_does_not_know(client, tmp_path):
+    juice = make_food(client, "Juice", extra={"vitamin_c": 40}, kcal=100)
+    log(client, juice, 200, d(0))
+    with sqlite3.connect(tmp_path / "test.db") as con:  # stored by another version (or an old import)
+        con.execute("""UPDATE diary_entry SET extra = json_set(extra, '$.unobtainium', 3)""")
+    r = client.get(f"/api/v1/insights?from={d(0)}&to={d(1)}")
+    assert r.status_code == 200, r.text
+    assert [m["key"] for m in r.json()["micros"]] == ["vitamin_c"]
+
+
 # catalogue import and lookups
 
 def test_catalog_import_converts_and_drops(tmp_path):

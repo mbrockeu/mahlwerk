@@ -260,6 +260,7 @@ tests/test_export.py::test_the_export_holds_nothing_of_other_users
 tests/test_export.py::test_demo_rows_of_the_own_account_are_left_out
 tests/test_export.py::test_format_2_carries_stable_ids_food_links_the_used_products_and_the_groups
 tests/test_export.py::test_the_products_of_other_people_come_only_when_used
+tests/test_export.py::test_a_recipe_carries_its_drink_flag_and_piece
 tests/test_fasting.py::test_nothing_running_at_first
 tests/test_fasting.py::test_start_stop_and_history
 tests/test_fasting.py::test_start_without_body_uses_now_and_the_setting
@@ -273,6 +274,7 @@ tests/test_fasting.py::test_delete
 tests/test_fasting.py::test_recent_keeps_the_latest_14_finished_fasts_newest_first
 tests/test_fasting.py::test_other_users_fasts_are_not_visible_and_not_changeable
 tests/test_fasting.py::test_settings_default_patch_and_validation
+tests/test_goal_history.py::test_a_save_removes_the_rows_of_later_days
 tests/test_hardening.py::test_a_webhook_cannot_target_the_inside_or_unknown_names[http://127.0.0.1/]
 tests/test_hardening.py::test_a_webhook_cannot_target_the_inside_or_unknown_names[http://127.0.0.1:8123/api]
 tests/test_hardening.py::test_a_webhook_cannot_target_the_inside_or_unknown_names[http://0x7f000001/]
@@ -319,6 +321,7 @@ tests/test_household.py::test_barcode_rule_for_guests
 tests/test_household.py::test_a_guest_cannot_overwrite_a_guest
 tests/test_household.py::test_everybody_is_household_without_the_variable
 tests/test_household.py::test_a_token_of_a_guest_stays_a_guest
+tests/test_household.py::test_a_member_exports_the_recipes_the_household_took_over_a_guest_only_what_they_use
 tests/test_hydration.py::test_coffee_counts_with_its_water_share
 tests/test_hydration.py::test_what_is_no_drink_does_not_count[Oliven\xf6l-spec0]
 tests/test_hydration.py::test_what_is_no_drink_does_not_count[K\xfcrbissuppe-spec1]
@@ -438,6 +441,9 @@ tests/test_insights.py::test_validation
 tests/test_insights.py::test_default_is_last_30_days_ending_today
 tests/test_insights.py::test_users_are_separated
 tests/test_insights.py::test_requires_authentication
+tests/test_insights.py::test_a_range_at_the_edge_of_the_calendar_is_422_not_500[/api/v1/insights?from=9999-12-25&to=9999-12-31]
+tests/test_insights.py::test_a_range_at_the_edge_of_the_calendar_is_422_not_500[/api/v1/insights?from=0001-01-01&to=0001-01-05&compare=previous]
+tests/test_insights.py::test_a_range_at_the_edge_of_the_calendar_is_422_not_500[/api/v1/review?week=9999-W52]
 tests/test_insights_long.py::test_range_number_and_bad_values
 tests/test_insights_long.py::test_ten_years_are_the_limit
 tests/test_insights_long.py::test_users_are_separated
@@ -489,6 +495,7 @@ tests/test_nutrients.py::test_coverage_is_the_energy_share_of_entries_that_state
 tests/test_nutrients.py::test_coverage_falls_back_to_entry_share_without_energy
 tests/test_nutrients.py::test_insights_micros
 tests/test_nutrients.py::test_insights_micros_null_percent_without_nrv_and_empty_without_data
+tests/test_nutrients.py::test_insights_leave_out_a_stored_nutrient_this_version_does_not_know
 tests/test_nutrients.py::test_catalog_search_adopt_and_barcode_pass_extra_through
 tests/test_nutrients.py::test_barcode_route_takes_extra_from_the_catalogue
 tests/test_nutrients.py::test_demo_data_shows_micros_with_partial_coverage

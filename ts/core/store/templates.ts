@@ -40,7 +40,11 @@ export async function getTemplate(db: Db, userId: number, templateId: number): P
 /** The user's templates, most recently created first. */
 export async function listTemplates(db: Db, userId: number): Promise<TemplateRow[]> {
   const rows = await db.all('SELECT * FROM template WHERE user_id = ? ORDER BY id DESC', [userId]);
-  return Promise.all(rows.map((r) => withItems(db, r)));
+  const items = new Map<number, TemplateItemRow[]>(); // all items in one query, each template's in the order of their id
+  for (const it of await db.all('SELECT i.* FROM template_item i JOIN template t ON t.id = i.template_id WHERE t.user_id = ? ORDER BY i.id', [userId])) {
+    items.set(it.template_id, [...(items.get(it.template_id) ?? []), itemRow(it)]);
+  }
+  return rows.map((r) => ({ ...r, items: items.get(r.id) ?? [] }) as TemplateRow);
 }
 
 export async function renameTemplate(db: Db, userId: number, templateId: number, name: string): Promise<boolean> {

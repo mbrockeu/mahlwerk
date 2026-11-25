@@ -15,8 +15,15 @@ export function dayToDate(day: string): Date | null {
 
 export const dateToDay = (d: Date): string => d.toISOString().slice(0, 10);
 
+/** A day before 0001-01-01 or after 9999-12-31 (Python: OverflowError "date value out of range"); the hosts answer 422. */
+export class DateOutOfRange extends RangeError {}
+
 export function addDays(day: string, n: number): string {
-  return dateToDay(new Date(dayToDate(day)!.getTime() + n * DAY_MS));
+  const start = dayToDate(day);
+  const out = start && new Date(start.getTime() + n * DAY_MS);
+  const year = out ? out.getUTCFullYear() : Number.NaN;
+  if (!(year >= 1 && year <= 9999)) throw new DateOutOfRange('date value out of range');
+  return dateToDay(out!);
 }
 
 /** Whole days from `a` to `b` (b - a). */

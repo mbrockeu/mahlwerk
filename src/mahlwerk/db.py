@@ -688,7 +688,8 @@ class Store:
 
     def set_goal(self, user_id: int, goal: dict, valid_from: str | None = None) -> None:
         """Set the current goal and record it in the history from `valid_from` on (the caller's today; default the server's).
-        Earlier days keep the goal they had; a second save on the same day overwrites that day's row."""
+        Earlier days keep the goal they had; a second save on the same day overwrites that day's row. Rows from a later day (saved
+        where it was already tomorrow, or a clock that was ahead) go: the goal saved now is the goal from `valid_from` on."""
         values = {"user_id": user_id, "water_ml": DEFAULT_WATER_GOAL, "steps": activity.DEFAULT_STEPS_GOAL, **goal,
                   "valid_from": valid_from or date.today().isoformat(), "changed_at": int(time.time())}
         with self._connect() as con:
@@ -700,6 +701,7 @@ class Store:
                 "import_id = NULL",
                 values,
             )
+            con.execute("DELETE FROM goal_history WHERE user_id = :user_id AND valid_from > :valid_from", values)
             self._record_goal(con, values)
 
     @staticmethod
@@ -2290,7 +2292,8 @@ class Store:
         """Everything the badges look at: all entries and weights (with their demo flag) and the recipe count."""
         with self._connect() as con:
             entries = con.execute(
-                "SELECT day, meal, food_id, name, brand, amount, per_100, demo FROM diary_entry WHERE user_id = ?",
+                # the order the index on (user_id, food_id) gives anyway, written out: the day sums add up in this order on both servers
+                "SELECT day, meal, food_id, name, brand, amount, per_100, demo FROM diary_entry WHERE user_id = ? ORDER BY food_id, id",
                 (user_id,),
             ).fetchall()
             weights = con.execute("SELECT day, demo FROM weight WHERE user_id = ?", (user_id,)).fetchall()
@@ -2667,8 +2670,8 @@ class Store:
         hide = "" if demo else " AND NOT COALESCE(json_extract(food.data, '$.demo') = 1, 0)"
         with self._connect() as con:
             rows = con.execute(
-                "SELECT recipe.id, recipe.uid, food.uid AS food_uid, recipe.portions, recipe.total_weight, recipe.updated_at, food.data AS data "
-                "FROM recipe "
+                "SELECT recipe.id, recipe.uid, food.uid AS food_uid, recipe.portions, recipe.total_weight, recipe.updated_at, food.data AS data, "
+                "food.drink, food.piece_label, food.piece_grams FROM recipe "
                 f"JOIN food ON food.id = recipe.food_id WHERE recipe.created_by = ?{hide} ORDER BY recipe.id", (user_id,)
             ).fetchall()
             out = []
@@ -2681,23 +2684,26 @@ class Store:
                 out.append({"uid": row["uid"], "food_uid": row["food_uid"], "name": data.get("name"), "portions": row["portions"],
                             "total_weight": row["total_weight"],
                             "updated_at": row["updated_at"], "per_100": data.get("per_100"),
-                            "items": [self._export_item(i) for i in items]})
+                            "drink": None if row["drink"] is None else bool(row["drink"]), "piece_label": row["piece_label"],
+                            "piece_grams": row["piece_grams"], "items": [self._export_item(i) for i in items]})
         return out
 
-    def export_foods(self, user_id: int, first: str, last: str, demo: bool) -> list[dict]:
+    def export_foods(self, user_id: int, first: str, last: str, demo: bool, household: bool = False) -> list[dict]:
         """The products this user made, and those their diary (in the range), templates, recipes and groups use: shared with the
         household, but needed to bring the links and the own products along. Never a recipe's calculated food (that is the recipe),
-        a remembered miss, a sample food or a picture."""
+        a remembered miss, a sample food or a picture. A member of the household (`household`) also gets the recipes the household
+        took over from Cookidoo or a web page (they belong to nobody, so a move would lose them); a guest only what they made or use."""
         hide = "" if demo else f" AND NOT COALESCE({DEMO_FOOD}, 0) AND NOT COALESCE({DEMO_ACCOUNT_FOOD}, 0)"
         with self._connect() as con:
             rows = con.execute(
                 "SELECT uid, code, source, external_id, data, piece_label, piece_grams, drink, created_by, fetched_at FROM food "
                 f"WHERE found = 1 AND source <> 'recipe'{hide} AND (created_by = :u "
+                "OR (:h AND created_by IS NULL AND source IN ('cookidoo', 'web')) "
                 "OR id IN (SELECT food_id FROM diary_entry WHERE user_id = :u AND day BETWEEN :a AND :b AND (:d OR demo = 0)) "
                 "OR id IN (SELECT i.food_id FROM template_item i JOIN template t ON t.id = i.template_id WHERE t.user_id = :u) "
                 "OR id IN (SELECT i.food_id FROM recipe_item i JOIN recipe r ON r.id = i.recipe_id WHERE r.created_by = :u) "
                 "OR id IN (SELECT i.food_id FROM recipe_group_item i JOIN recipe_group g ON g.id = i.group_id WHERE g.created_by = :u)) "
-                "ORDER BY id", {"u": user_id, "a": first, "b": last, "d": int(demo)},
+                "ORDER BY id", {"u": user_id, "a": first, "b": last, "d": int(demo), "h": int(household)},
             ).fetchall()
         return [{"uid": r["uid"], "code": r["code"], "source": r["source"], "external_id": r["external_id"], "data": json.loads(r["data"]),
                  "piece_label": r["piece_label"], "piece_grams": r["piece_grams"], "drink": None if r["drink"] is None else bool(r["drink"]),

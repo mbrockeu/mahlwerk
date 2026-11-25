@@ -4,6 +4,25 @@
  * ties go to the even neighbour (round(0.125, 2) == 0.12, round(2.5) == 2). */
 export function roundHalfEven(x: number, digits = 0): number {
   if (!Number.isFinite(x) || Math.abs(x) >= 1e21) return x;
+  // fast path: |x| * 10^digits is below 1e9, so the product is within 1.2e-7 of the exact one; when its fraction is farther than
+  // 1e-6 from .5, rounding the product gives the same integer as rounding the exact value (near an integer both ways end on it).
+  // Only values that are (almost) a tie take the exact way below. tests/num.test.ts compares both on millions of values.
+  if (digits >= 0 && digits <= 15) {
+    const p = Math.abs(x) * 10 ** digits;
+    if (p < 1e9) {
+      const floor = Math.floor(p);
+      const f = p - floor;
+      if (Math.abs(f - 0.5) > 1e-6) {
+        const out = (f > 0.5 ? floor + 1 : floor) / 10 ** digits;
+        return x < 0 ? -out || 0 : out;
+      }
+    }
+  }
+  return exactRound(x, digits);
+}
+
+/** The exact way: the decimal digits of the binary value. */
+export function exactRound(x: number, digits: number): number {
   const s = Math.abs(x).toFixed(Math.min(100, digits + 40)); // enough exact decimals of the binary value
   const [int, frac] = s.split('.');
   const keep = int + frac.slice(0, digits);

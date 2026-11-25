@@ -19,6 +19,7 @@ export function importOf(ctx: Ctx): ImportStage {
   if (existing) return existing;
   const stage = new ImportStage(() => ctx.now());
   ctx.services.dataImport = stage;
+  ((ctx.services.sweepers ??= []) as (() => void)[]).push(() => stage.sweep());
   const ended = ctx.services.userEnded as ((id: number) => Promise<void> | void) | undefined;
   ctx.services.userEnded = async (id: number) => {
     await ended?.(id);

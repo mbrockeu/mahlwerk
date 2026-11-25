@@ -9,14 +9,14 @@ import { MEALS, type Meal } from '../models/common.ts';
 import { copyIn, entryIn, entryPatch, type Day, type Entry, type HistoryDay } from '../models/diary.ts';
 import { pyInt } from '../models/common.ts';
 import * as nutrients from '../nutrients.ts';
-import { PER_100_KEYS, r1, scale, total, type Scaled } from '../nutrition.ts';
+import { PER_100_KEYS, r1, scale, total, type Per100, type Scaled } from '../nutrition.ts';
 import { pySum, roundHalfEven } from '../num.ts';
-import { drinkEntries, addEntries, addEntry, deleteEntry, entriesBetween, entriesOn, getEntry, loggedDaysUntil, updateEntry, type EntryRow, type Snapshot } from '../store/diary.ts';
+import { drinkEntries, addEntries, addEntry, deleteEntry, entriesBetween, entriesOn, getEntries, getEntry, loggedDaysUntil, macrosBetween, updateEntry, type EntryRow, type Snapshot } from '../store/diary.ts';
 import { getFood } from '../store/foods.ts';
 import { DEFAULT_WATER_GOAL, goalOn } from '../store/goals.ts';
 import { getSettings } from '../store/settings.ts';
 import { getWater, waterBetween } from '../store/water.ts';
-import { emit } from '../webhooks.ts';
+import { emit, hooksWanted } from '../webhooks.ts';
 
 export function parseDay(day: string): string {
   if (dayToDate(day) === null) throw new HttpError(422, 'day must be a date like 2025-01-31');
@@ -41,10 +41,12 @@ export const snapshot = (row: EntryRow, meal?: string | null) => ({
   per_100: row.per_100, extra: row.extra,
 });
 
-/** The payload of the entry webhooks: the entry in short and the energy of its day so far. */
-async function entryEvent(req: Req, row: EntryRow) {
+/** The payload of the entry webhooks: the entry in short and the energy of its day so far (`days` keeps the day sums of one batch:
+ * all its entries are written before the first event is built, so the sum of a day is the same for each). */
+async function entryEvent(req: Req, row: EntryRow, days = new Map<string, number>()) {
   const entry = entryOut(row);
-  const dayKcal = pySum((await entriesOn(req.ctx.db, req.user!.id, row.day)).map(kcalOf));
+  if (!days.has(row.day)) days.set(row.day, pySum((await entriesOn(req.ctx.db, req.user!.id, row.day)).map(kcalOf)));
+  const dayKcal = days.get(row.day)!;
   return {
     entry: { id: entry.id, name: entry.name, brand: entry.brand, amount: entry.amount, unit: entry.unit, kcal: entry.kcal, meal: entry.meal, day: row.day },
     day: row.day,
@@ -52,8 +54,11 @@ async function entryEvent(req: Req, row: EntryRow) {
   };
 }
 
+/** The `entry.created` events of new entries; nothing is built when no hook takes them. */
 export async function emitEntries(req: Req, rows: EntryRow[]): Promise<void> {
-  for (const row of rows) emit(req, req.user!, 'entry.created', await entryEvent(req, row));
+  if (!rows.length || !(await hooksWanted(req, req.user!, 'entry.created'))) return;
+  const days = new Map<string, number>();
+  for (const row of rows) emit(req, req.user!, 'entry.created', await entryEvent(req, row, days));
 }
 
 /** The food an entry is booked from and the snapshot the entry keeps of it (404 for an unknown food). */
@@ -124,9 +129,7 @@ async function getDay(req: Req): Promise<Day> {
   };
 }
 
-export const entriesOut = async (req: Req, ids: number[]) => ({
-  entries: await Promise.all(ids.map(async (i) => entryOut((await getEntry(req.ctx.db, req.user!.id, i))!))),
-});
+export const entriesOut = (rows: EntryRow[]) => ({ entries: rows.map(entryOut) });
 
 export const routes: Route[] = [
   route('GET', '/api/v1/diary/{day}', getDay),
@@ -151,8 +154,9 @@ export const routes: Route[] = [
     const rows = await entriesOn(req.ctx.db, req.user!.id, body.from_day, body.meal);
     if (!rows.length) throw new HttpError(404, 'nothing to copy');
     const ids = await addEntries(req.ctx.db, req.user!.id, day, rows.map((r) => snapshot(r, body.to_meal || r.meal)));
-    await emitEntries(req, await Promise.all(ids.map(async (i) => (await getEntry(req.ctx.db, req.user!.id, i))!)));
-    return entriesOut(req, ids);
+    const added = await getEntries(req.ctx.db, req.user!.id, ids);
+    await emitEntries(req, added);
+    return entriesOut(added);
   }, { status: 201 }),
 
   route('PATCH', '/api/v1/diary/entries/{entry_id}', async (req) => {
@@ -183,8 +187,8 @@ export const routes: Route[] = [
     const uid = req.user!.id;
     const last = today();
     const first = addDays(last, -(days - 1));
-    const byDay = new Map<string, Scaled[]>();
-    for (const row of await entriesBetween(db, uid, first, last)) byDay.set(row.day, [...(byDay.get(row.day) ?? []), scaled(row)]);
+    const byDay = new Map<string, Scaled[]>(); // only the four values the history shows travel (scale gives null for the rest)
+    for (const row of await macrosBetween(db, uid, first, last)) byDay.set(row.day, [...(byDay.get(row.day) ?? []), scale(row.per_100 as Per100, row.amount)]);
     const water = await waterBetween(db, uid, first, last);
     const drinks = waterDrinksOn(await getSettings(db, uid)) ? drinksByDay(await drinkEntries(db, uid, first, last)) : {};
     const result: HistoryDay[] = [];

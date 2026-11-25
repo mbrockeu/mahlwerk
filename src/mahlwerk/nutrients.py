@@ -215,7 +215,7 @@ def aggregate(parts: Iterable[tuple[float, dict]]) -> dict[str, dict]:
     `parts` are (kcal, scaled extra) per diary entry. Returns {key: {"amount", "coverage"}} for the keys at least
     one entry knows. `coverage` (0..1) is the share of the entries' kcal that come from entries with a value for
     the key; when no entry has any kcal it is the share of entries instead. A missing value is not a zero: it only
-    lowers the coverage.
+    lowers the coverage. A key this version does not know (stored by another one) is left out.
     """
     parts = list(parts)
     kcal_total = sum(kcal for kcal, _ in parts)
@@ -225,6 +225,8 @@ def aggregate(parts: Iterable[tuple[float, dict]]) -> dict[str, dict]:
     known: dict[str, float] = {}
     for kcal, extra in parts:
         for key, value in extra.items():
+            if key not in BY_KEY:
+                continue
             sums[key] = sums.get(key, 0.0) + value
             known[key] = known.get(key, 0.0) + (kcal if by_energy else 1)
     return {

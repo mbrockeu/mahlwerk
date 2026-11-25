@@ -88,7 +88,9 @@ def test_the_csv_files_hold_the_data_with_the_nutrients_for_the_amount(full):
 
 
 def test_the_json_file_holds_everything_else_too(full):
-    data = json.loads(open_zip(full.get(EXPORT))["mahlwerk-export.json"])
+    raw = open_zip(full.get(EXPORT))["mahlwerk-export.json"]
+    assert b"\n" not in raw and b'":' in raw  # compact: no indentation, no spaces (the file is read by programs, not people)
+    data = json.loads(raw)
     assert data["format_version"] == 2 and data["range"] == {"from": None, "to": None}
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d", data["exported_at"]) and data["app_version"]
     assert data["account"]["username"] == "me" and data["account"]["created_at"]
@@ -129,6 +131,17 @@ def test_format_2_carries_stable_ids_food_links_the_used_products_and_the_groups
     assert all(f["source"] != "recipe" for f in data["foods"])  # a recipe comes as a recipe, not as its calculated food
     assert [(g["name"], g["members"], g["source"]) for g in data["recipe_groups"]] == [("Breakfast", [porridge["food_uid"]], None)]
     assert data["workouts"][0]["external_id"] is None
+
+
+def test_a_recipe_carries_its_drink_flag_and_piece(full):
+    recipe = full.get("/api/v1/recipes").json()[0]
+    recipe_food = recipe["food"]["id"]
+    data = json.loads(open_zip(full.get(EXPORT))["mahlwerk-export.json"])
+    assert [(r["drink"], r["piece_label"], r["piece_grams"]) for r in data["recipes"]] == [(None, None, None)]
+    assert full.put(f"/api/v1/foods/{recipe_food}/drink", json={"drink": True}).status_code == 200
+    assert full.put(f"/api/v1/foods/{recipe_food}/piece", json={"label": "Glas", "grams": 250}).status_code == 200
+    data = json.loads(open_zip(full.get(EXPORT))["mahlwerk-export.json"])
+    assert [(r["drink"], r["piece_label"], r["piece_grams"]) for r in data["recipes"]] == [(True, "Glas", 250)]
 
 
 def test_the_products_of_other_people_come_only_when_used(duo):

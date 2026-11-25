@@ -39,13 +39,15 @@ export async function goalOn(db: Db, userId: number, day: string): Promise<GoalV
 }
 
 /** Set the current goal and record it in the history from `validFrom` on (the caller's today). Earlier days keep the goal
- * they had; a second save on the same day overwrites that day's row. */
+ * they had; a second save on the same day overwrites that day's row. Rows from a later day (saved where it was already tomorrow, or a
+ * clock that was ahead) go: the goal saved now is the goal from `validFrom` on. */
 export async function setGoal(db: Db, userId: number, goal: GoalValues, validFrom: string, changedAt: number): Promise<void> {
   const v = [userId, goal.kcal, goal.protein, goal.carbs, goal.fat, goal.water_ml, goal.steps];
   await db.tx(async (tx) => {
     await tx.run('INSERT INTO goal (user_id, kcal, protein, carbs, fat, water_ml, steps) VALUES (?, ?, ?, ?, ?, ?, ?) '
       + 'ON CONFLICT(user_id) DO UPDATE SET kcal = excluded.kcal, protein = excluded.protein, carbs = excluded.carbs, '
       + 'fat = excluded.fat, water_ml = excluded.water_ml, steps = excluded.steps, import_id = NULL', v);
+    await tx.run('DELETE FROM goal_history WHERE user_id = ? AND valid_from > ?', [userId, validFrom]);
     await tx.run('INSERT INTO goal_history (user_id, valid_from, kcal, protein, carbs, fat, water_ml, steps, changed_at) '
       + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, valid_from) DO UPDATE SET kcal = excluded.kcal, '
       + 'protein = excluded.protein, carbs = excluded.carbs, fat = excluded.fat, water_ml = excluded.water_ml, '

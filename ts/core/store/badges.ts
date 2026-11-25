@@ -2,15 +2,25 @@
 import type { Db } from '../db.ts';
 import type { Per100 } from '../nutrition.ts';
 
-export interface BadgeEntry { day: string; meal: string; food_id: number | null; name: string; brand: string | null; amount: number; per_100: Per100; demo: number }
+/** What the badges read of an entry: `per_100` holds only kcal, protein and fiber; name and brand only without a food link (they tell
+ * entries without a food apart). */
+export interface BadgeEntry { day: string; meal: string; food_id: number | null; name: string | null; brand: string | null; amount: number; per_100: Pick<Per100, 'kcal' | 'protein' | 'fiber'>; demo: number }
 export interface BadgeRow { code: string; earned_at: number; seen: number; demo: number }
 
-/** Everything the badges look at: all entries and weights (with their demo flag) and the recipe count. */
+/** Everything the badges look at: all entries and weights (with their demo flag) and the recipe count. Only the three values per 100 g
+ * the badges add up travel (the whole diary is read after every change): a multi-path json_extract gives them as JSON text with the
+ * numbers as stored, so JSON.parse yields the same doubles as parsing the whole column (a plain json_extract is parsed by SQLite, which
+ * is not correctly rounded at extreme exponents). The order is the one the index on (user_id, food_id) gives, as before, so that the day
+ * sums add up in the same order as in Python. */
 export async function badgeInputs(db: Db, userId: number): Promise<[BadgeEntry[], { day: string; demo: number }[], number]> {
-  const entries = await db.all('SELECT day, meal, food_id, name, brand, amount, per_100, demo FROM diary_entry WHERE user_id = ?', [userId]);
+  const entries = await db.all('SELECT day, meal, food_id, CASE WHEN food_id IS NULL THEN name END AS name, CASE WHEN food_id IS NULL THEN brand END AS brand, '
+    + "amount, json_extract(per_100, '$.kcal', '$.protein', '$.fiber') AS v, demo FROM diary_entry WHERE user_id = ? ORDER BY food_id, id", [userId]);
   const weights = await db.all('SELECT day, demo FROM weight WHERE user_id = ?', [userId]);
   const recipes = (await db.get('SELECT count(*) AS n FROM recipe WHERE created_by = ?', [userId]))!.n;
-  return [entries.map((r) => ({ ...r, per_100: JSON.parse(r.per_100) }) as BadgeEntry), weights as any, recipes];
+  return [entries.map((r) => {
+    const [kcal, protein, fiber] = JSON.parse(r.v);
+    return { day: r.day, meal: r.meal, food_id: r.food_id, name: r.name, brand: r.brand, amount: r.amount, per_100: { kcal, protein, fiber }, demo: r.demo };
+  }), weights as any, recipes];
 }
 
 export const badgesEarned = (db: Db, userId: number): Promise<BadgeRow[]> =>
@@ -19,6 +29,9 @@ export const badgesEarned = (db: Db, userId: number): Promise<BadgeRow[]> =>
 /** Remember newly reached badges. A badge that real data alone does not reach is marked as demo-only; once real data reaches
  * it too, the mark goes away. */
 export async function recordBadges(db: Db, userId: number, reached: Set<string>, byRealData: Set<string>, now: number): Promise<void> {
+  // usually nothing is new: a plain read decides whether the transaction is needed (it reads again inside)
+  const seen = new Map((await db.all('SELECT code, demo FROM badge_earned WHERE user_id = ?', [userId])).map((r) => [r.code, r.demo]));
+  if ([...reached].every((code) => seen.has(code) && !(seen.get(code) && byRealData.has(code)))) return;
   await db.tx(async (tx) => {
     const known = new Map((await tx.all('SELECT code, demo FROM badge_earned WHERE user_id = ?', [userId])).map((r) => [r.code, r.demo]));
     for (const code of [...reached].sort()) {

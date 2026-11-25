@@ -46,6 +46,14 @@ export async function getEntry(db: Db, userId: number, entryId: number): Promise
   return row ? entryRow(row) : undefined;
 }
 
+/** Several entries of the user at once, in the order of `ids` (all must exist). */
+export async function getEntries(db: Db, userId: number, ids: number[]): Promise<EntryRow[]> {
+  if (!ids.length) return [];
+  const rows = await db.all('SELECT * FROM diary_entry WHERE user_id = ? AND id IN (SELECT value FROM json_each(?))', [userId, JSON.stringify(ids)]);
+  const byId = new Map(rows.map((r) => [r.id as number, r]));
+  return ids.map((i) => entryRow(byId.get(i)!));
+}
+
 /** Change amount and meal; with `foodId` and its snapshot `copy` the entry becomes that food (day and created_at stay). */
 export async function updateEntry(db: Db, userId: number, entryId: number, amount: number | null, meal: string | null, foodId: number | null = null, copy: Snapshot | null = null): Promise<boolean> {
   return db.tx(async (tx) => {
@@ -66,6 +74,31 @@ export async function deleteEntry(db: Db, userId: number, entryId: number): Prom
 export async function entriesBetween(db: Db, userId: number, first: string, last: string): Promise<EntryRow[]> {
   const rows = await db.all('SELECT * FROM diary_entry WHERE user_id = ? AND day BETWEEN ? AND ? ORDER BY day, id', [userId, first, last]);
   return rows.map(entryRow);
+}
+
+/** What the history adds up of each entry in the range (by day, then id like entriesBetween): the amount and kcal, protein, carbs and
+ * fat per 100 g (one multi-path json_extract: JSON text with the numbers as stored, so the same doubles as parsing the column). */
+export async function macrosBetween(db: Db, userId: number, first: string, last: string): Promise<{ day: string; amount: number; per_100: Record<'kcal' | 'protein' | 'carbs' | 'fat', number | null> }[]> {
+  const rows = await db.all("SELECT day, amount, json_extract(per_100, '$.kcal', '$.protein', '$.carbs', '$.fat') AS v FROM diary_entry "
+    + 'WHERE user_id = ? AND day BETWEEN ? AND ? ORDER BY day, id', [userId, first, last]);
+  return rows.map((r) => {
+    const [kcal, protein, carbs, fat] = JSON.parse(r.v);
+    return { day: r.day, amount: r.amount, per_100: { kcal, protein, carbs, fat } };
+  });
+}
+
+/** What the curve of one nutrient (`key`, a known key) reads of each entry in the range (by day, then id): the amount, kcal and the
+ * value per 100 g (`per_100` holds kcal and `key`) and the further nutrient `key` (`extra` holds it only where the entry has it,
+ * also as null). Multi-path json_extract: JSON text with the numbers as stored, so the same doubles as parsing the columns. */
+export async function curveBetween(db: Db, userId: number, first: string, last: string, key: string) {
+  const path = `$.${key}`;
+  const rows = await db.all("SELECT day, amount, json_extract(per_100, '$.kcal', ?) AS p, json_extract(COALESCE(NULLIF(extra, ''), '{}'), ?, ?) AS e, "
+    + "json_type(COALESCE(NULLIF(extra, ''), '{}'), ?) IS NOT NULL AS has FROM diary_entry WHERE user_id = ? AND day BETWEEN ? AND ? ORDER BY day, id",
+  [path, path, path, path, userId, first, last]);
+  return rows.map((r) => {
+    const [kcal, value] = JSON.parse(r.p);
+    return { day: r.day as string, amount: r.amount as number, per_100: { kcal, [key]: value } as Per100, extra: r.has ? { [key]: JSON.parse(r.e)[0] } : {} };
+  });
 }
 
 /** Days with at least one entry up to `last`, newest first. */
