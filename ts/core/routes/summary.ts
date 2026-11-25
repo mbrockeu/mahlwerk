@@ -37,7 +37,8 @@ export const routes: Route[] = [
       day,
       kcal_eaten: r1(sums.kcal),
       kcal_goal: kcalGoal,
-      kcal_left: goal ? r1(kcalGoal! - sums.kcal) : null,
+      // whole kcal, as the day view shows it: the goal minus the eaten kcal rounded half up (Math.round in the interface)
+      kcal_left: goal ? kcalGoal! - Math.floor(sums.kcal + 0.5) : null,
       kcal_goal_bonus: todayActivity.bonus_kcal,
       steps: todayActivity.steps,
       steps_goal: todayActivity.steps_goal,

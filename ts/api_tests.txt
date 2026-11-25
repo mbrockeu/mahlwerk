@@ -31,6 +31,7 @@ tests/test_activity.py::test_sync_with_access_tokens
 tests/test_activity.py::test_sync_of_one_user_does_not_reach_another
 tests/test_activity.py::test_the_setting_defaults_to_off_and_is_kept_per_user
 tests/test_activity.py::test_day_and_summary_goal_with_and_without_active_energy
+tests/test_activity.py::test_summary_kcal_left_is_whole_like_the_day_view
 tests/test_activity.py::test_day_without_a_goal_has_no_effective_goal
 tests/test_activity.py::test_insights_adherence_follows_the_effective_goal
 tests/test_activity.py::test_insights_activity_fields

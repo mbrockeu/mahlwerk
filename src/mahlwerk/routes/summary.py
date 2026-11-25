@@ -1,5 +1,6 @@
 """A compact read-only summary for home automation (and an access token with scope `read` is enough)."""
 
+import math
 import time
 
 from fastapi import APIRouter, Depends
@@ -43,7 +44,8 @@ def summary_today(user: dict = Depends(current_user), store: Store = Depends(get
         "day": day,
         "kcal_eaten": eaten,
         "kcal_goal": kcal_goal,
-        "kcal_left": r1(kcal_goal - sums["kcal"]) if goal else None,
+        # whole kcal, as the day view shows it: the goal minus the eaten kcal rounded half up (Math.round in the interface)
+        "kcal_left": kcal_goal - math.floor(sums["kcal"] + 0.5) if goal else None,
         "kcal_goal_bonus": today_activity.bonus_kcal,
         "steps": today_activity.steps,
         "steps_goal": today_activity.steps_goal,
