@@ -46,7 +46,10 @@ variable; `/healthz` is exempt. Default: `single` mode only `localhost`, `127.0.
 check. `*` allows everything.
 
 **Size.** A request body over 1 MB (8 MB for `POST /label-scans` and `POST /health/sync`, 24 MB for `PUT /me/yazio/files/{name}`)
-gets `413`, checked on `Content-Length` and on streamed bytes. **Validation errors (422) never echo the offending input**
+gets `413`, checked on `Content-Length` and on streamed bytes. The TS server reads a body only once the route and the caller are known:
+a request it refuses (401/403, host, CSRF header, unknown route) is answered without reading the body, and a body over 64 KB (or
+of unknown size) ends the connection; at most two bodies that may be larger than 1 MB are read at the same time (one more gets
+`429` with `Retry-After`). **Validation errors (422) never echo the offending input**
 (FastAPI's `input` and `ctx` members are left out), so a password sent in a wrong shape does not come back.
 
 **Brake.** Failed sign-ins (and wrong "current password" in `POST /auth/password`, wrong setup codes) are counted per
