@@ -687,3 +687,12 @@ def test_real_activity_stays_when_the_demo_data_is_removed(demo_client):
     assert day_of(c, today)["activity"]["steps"] == 1234 and len(day_of(c, today)["activity"]["workouts"]) == 1
     c.delete(DEMO)
     assert day_of(c, today)["activity"]["steps"] == 1234 and len(day_of(c, today)["activity"]["workouts"]) == 1
+
+
+def test_summary_kcal_left_is_whole_like_the_day_view(client, dense):
+    """The widget shows kcal_left: the goal minus the eaten kcal rounded half up, as the day view counts (1900 - 1159)."""
+    client.put("/api/v1/me/goal", json={"kcal": 1900, "protein": 100, "carbs": 250, "fat": 70})
+    today = date.today().isoformat()
+    log(client, dense, today, 579.25)  # 1158.5 kcal
+    s = client.get("/api/v1/summary/today").json()
+    assert (s["kcal_eaten"], s["kcal_goal"], s["kcal_left"]) == (1158.5, 1900, 741)
