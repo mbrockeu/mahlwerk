@@ -2,12 +2,18 @@
 
 // str.isspace() characters: JS \s lacks \x1c-\x1f and \x85 and has the BOM.
 const PY_SPACE = '\\t\\n\\v\\f\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000';
-const STRIP = new RegExp(`^[${PY_SPACE}]+|[${PY_SPACE}]+$`, 'g');
+const SPACE = new RegExp(`[${PY_SPACE}]`); // one character (all of them are in the BMP, so a code unit is a character)
 const SPLIT = new RegExp(`[${PY_SPACE}]+`);
 const LINES = new RegExp('\\r\\n|[\\n\\r\\v\\f\\x1c\\x1d\\x1e\\x85\\u2028\\u2029]');
 
-/** str.strip(). */
-export const pyStrip = (s: string): string => s.replace(STRIP, '');
+/** str.strip(). Scans from both ends: a pattern like `[ ]+$` would be tried at every blank of a long inner run (quadratic). */
+export function pyStrip(s: string): string {
+  let i = 0;
+  let j = s.length;
+  while (i < j && SPACE.test(s[i]!)) i++;
+  while (j > i && SPACE.test(s[j - 1]!)) j--;
+  return i === 0 && j === s.length ? s : s.slice(i, j);
+}
 
 /** str.split() without arguments: words between whitespace, no empty ones. */
 export const pySplit = (s: string): string[] => pyStrip(s).split(SPLIT).filter((w) => w !== '');
