@@ -48,13 +48,15 @@ export async function exportTemplates(db: Db, userId: number) {
 /** Recipes this user created (the household shares recipes, but only the author's own are theirs to take away). */
 export async function exportRecipes(db: Db, userId: number, demo: boolean) {
   const hide = demo ? '' : " AND NOT COALESCE(json_extract(food.data, '$.demo') = 1, 0)";
-  const rows = await db.all('SELECT recipe.id, recipe.uid, food.uid AS food_uid, recipe.portions, recipe.total_weight, recipe.updated_at, food.data AS data FROM recipe '
+  const rows = await db.all('SELECT recipe.id, recipe.uid, food.uid AS food_uid, recipe.portions, recipe.total_weight, recipe.updated_at, food.data AS data, '
+    + 'food.drink, food.piece_label, food.piece_grams FROM recipe '
     + `JOIN food ON food.id = recipe.food_id WHERE recipe.created_by = ?${hide} ORDER BY recipe.id`, [userId]);
   const out = [];
   for (const row of rows) {
     const items = await db.all(`SELECT name, brand, amount, unit, per_100, extra, ${foodLink('recipe_item')} FROM recipe_item WHERE recipe_id = ? ORDER BY position`, [row.id]);
     const data = row.data ? JSON.parse(row.data) : {};
-    out.push({ uid: row.uid, food_uid: row.food_uid, name: data.name ?? null, portions: row.portions, total_weight: row.total_weight, updated_at: row.updated_at, per_100: data.per_100 ?? null, items: items.map(exportItem) });
+    out.push({ uid: row.uid, food_uid: row.food_uid, name: data.name ?? null, portions: row.portions, total_weight: row.total_weight, updated_at: row.updated_at, per_100: data.per_100 ?? null,
+      drink: row.drink === null ? null : Boolean(row.drink), piece_label: row.piece_label, piece_grams: row.piece_grams, items: items.map(exportItem) });
   }
   return out;
 }

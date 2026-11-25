@@ -133,6 +133,17 @@ def test_format_2_carries_stable_ids_food_links_the_used_products_and_the_groups
     assert data["workouts"][0]["external_id"] is None
 
 
+def test_a_recipe_carries_its_drink_flag_and_piece(full):
+    recipe = full.get("/api/v1/recipes").json()[0]
+    recipe_food = recipe["food"]["id"]
+    data = json.loads(open_zip(full.get(EXPORT))["mahlwerk-export.json"])
+    assert [(r["drink"], r["piece_label"], r["piece_grams"]) for r in data["recipes"]] == [(None, None, None)]
+    assert full.put(f"/api/v1/foods/{recipe_food}/drink", json={"drink": True}).status_code == 200
+    assert full.put(f"/api/v1/foods/{recipe_food}/piece", json={"label": "Glas", "grams": 250}).status_code == 200
+    data = json.loads(open_zip(full.get(EXPORT))["mahlwerk-export.json"])
+    assert [(r["drink"], r["piece_label"], r["piece_grams"]) for r in data["recipes"]] == [(True, "Glas", 250)]
+
+
 def test_the_products_of_other_people_come_only_when_used(duo):
     ann, ben = duo
     oats = {"name": "Oats", "per_100": {"kcal": 200, "protein": 10, "carbs": 30, "fat": 4}}

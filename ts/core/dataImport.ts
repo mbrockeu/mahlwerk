@@ -118,6 +118,7 @@ const fileSchema = z.object({
   recipes: z.array(z.object({
     uid: uid.optional(), food_uid: uid.optional(), name: text(NAME).nullable(), portions: z.number().gt(0).max(10000), total_weight: z.number().gt(0).max(1e6).nullable().optional(),
     updated_at: iso.nullable().optional(), items: z.array(item).max(500),
+    drink: z.boolean().nullable().optional(), piece_label: text(60).nullable().optional(), piece_grams: z.number().gt(0).max(100000).nullable().optional(),
   })).default([]),
   recipe_groups: z.array(z.object({ uid, name: text(200).min(1), source: text(200).nullable().optional(), created_at: iso.nullable().optional(), members: z.array(uid).max(10000) })).default([]),
   foods: z.array(z.object({
@@ -407,9 +408,14 @@ async function writeItems(db: Db, table: 'template_item' | 'recipe_item', parent
 }
 
 /** Recipes: by uid (format 1: an own recipe of the same name). The calculated food is made again from the items, like the edit route does. */
+/** Drink flag and piece of a recipe's food, as far as the file names them (an older file without them leaves the stored ones alone). */
+const RECIPE_FOOD_KEYS = ['drink', 'piece_label', 'piece_grams'] as const;
+const recipeFoodGiven = (x: Record<string, unknown>) => RECIPE_FOOD_KEYS.filter((k) => x[k] !== undefined);
+
 async function importRecipes(r: Run, m: Foods): Promise<void> {
   const { db, f, user } = r;
-  const rows = await db.all('SELECT r.id, r.uid, r.food_id, r.portions, r.total_weight, r.created_by, r.updated_at, fo.uid AS food_uid, fo.data, fo.created_by AS food_owner '
+  const rows = await db.all('SELECT r.id, r.uid, r.food_id, r.portions, r.total_weight, r.created_by, r.updated_at, fo.uid AS food_uid, fo.data, fo.created_by AS food_owner, '
+    + 'fo.drink, fo.piece_label, fo.piece_grams '
     + 'FROM recipe r JOIN food fo ON fo.id = r.food_id WHERE r.uid IN (SELECT value FROM json_each(?)) OR r.created_by = ?', [json(f.recipes.map((x) => x.uid)), user.id]);
   const byUid = new Map(rows.filter((x) => x.uid).map((x) => [x.uid as string, x]));
   const byName = new Map(rows.filter((x) => x.created_by === user.id).map((x) => [asciiLower(String(parseJson(x.data).name ?? '')), x]));
@@ -426,15 +432,20 @@ async function importRecipes(r: Run, m: Foods): Promise<void> {
     const updated = seconds(x.updated_at) ?? r.now;
     if (row) {
       if (x.food_uid) m.byUid.set(x.food_uid, row.food_id);
-      const have = { name: parseJson(row.data).name ?? null, portions: row.portions, total_weight: row.total_weight, items: (items.get(row.id) ?? []).map(localItem) };
-      const want = { name: x.name, portions: x.portions, total_weight: x.total_weight ?? null, items: x.items.map(itemView) };
+      const given = recipeFoodGiven(x);
+      const local: Record<string, unknown> = { drink: row.drink === null ? null : Boolean(row.drink), piece_label: row.piece_label, piece_grams: row.piece_grams };
+      const have = { name: parseJson(row.data).name ?? null, portions: row.portions, total_weight: row.total_weight, items: (items.get(row.id) ?? []).map(localItem),
+        ...Object.fromEntries(given.map((k) => [k, local[k]])) };
+      const want = { name: x.name, portions: x.portions, total_weight: x.total_weight ?? null, items: x.items.map(itemView), ...Object.fromEntries(given.map((k) => [k, x[k]])) };
       if (isSample(parseJson(row.data))) { skip(r, 'recipes', 'demo'); continue; }
       if (same(have, want)) { count(r, 'recipes', 'unchanged'); continue; }
       if (!canEdit(user, row.food_owner ?? row.created_by)) { skip(r, 'recipes', 'not_editable'); continue; }
       if (row.updated_at > (seconds(x.updated_at) ?? 0)) { skip(r, 'recipes', 'newer_here'); continue; } // changed here after the file's version
       count(r, 'recipes', 'changed');
       if (r.write) {
-        await db.run('UPDATE food SET data = ?, fetched_at = ? WHERE id = ?', [toJson(data), updated, row.food_id]);
+        const sets = given.map((k) => `, ${k} = ?`).join('');
+        await db.run(`UPDATE food SET data = ?, fetched_at = ?${sets} WHERE id = ?`,
+          [toJson(data), updated, ...given.map((k) => (k === 'drink' ? (x.drink === null ? null : flag(x.drink)) : x[k]) as string | number | null), row.food_id]);
         await db.run('UPDATE recipe SET portions = ?, total_weight = ?, updated_at = ? WHERE id = ?', [x.portions, x.total_weight ?? null, updated, row.id]);
         await db.run('DELETE FROM recipe_item WHERE recipe_id = ?', [row.id]);
         await writeItems(db, 'recipe_item', row.id, fileItems);
@@ -445,7 +456,8 @@ async function importRecipes(r: Run, m: Foods): Promise<void> {
     let foodId = m.nextFake--;
     const foodUid = x.food_uid && !m.takenUids.has(x.food_uid) ? x.food_uid : null;
     if (r.write) {
-      foodId = (await db.run("INSERT INTO food (uid, code, source, found, data, fetched_at, created_by) VALUES (?, NULL, 'recipe', 1, ?, ?, ?)", [foodUid, toJson(data), updated, user.id])).lastId;
+      foodId = (await db.run("INSERT INTO food (uid, code, source, found, data, fetched_at, created_by, drink, piece_label, piece_grams) VALUES (?, NULL, 'recipe', 1, ?, ?, ?, ?, ?, ?)",
+        [foodUid, toJson(data), updated, user.id, x.drink == null ? null : flag(x.drink), x.piece_label ?? null, x.piece_grams ?? null])).lastId;
       const recipeUid = x.uid && !takenRecipeUids.has(x.uid) ? x.uid : null;
       const recipeId = (await db.run('INSERT INTO recipe (uid, food_id, portions, total_weight, created_by, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
         [recipeUid, foodId, x.portions, x.total_weight ?? null, user.id, updated])).lastId;

@@ -2667,8 +2667,8 @@ class Store:
         hide = "" if demo else " AND NOT COALESCE(json_extract(food.data, '$.demo') = 1, 0)"
         with self._connect() as con:
             rows = con.execute(
-                "SELECT recipe.id, recipe.uid, food.uid AS food_uid, recipe.portions, recipe.total_weight, recipe.updated_at, food.data AS data "
-                "FROM recipe "
+                "SELECT recipe.id, recipe.uid, food.uid AS food_uid, recipe.portions, recipe.total_weight, recipe.updated_at, food.data AS data, "
+                "food.drink, food.piece_label, food.piece_grams FROM recipe "
                 f"JOIN food ON food.id = recipe.food_id WHERE recipe.created_by = ?{hide} ORDER BY recipe.id", (user_id,)
             ).fetchall()
             out = []
@@ -2681,7 +2681,8 @@ class Store:
                 out.append({"uid": row["uid"], "food_uid": row["food_uid"], "name": data.get("name"), "portions": row["portions"],
                             "total_weight": row["total_weight"],
                             "updated_at": row["updated_at"], "per_100": data.get("per_100"),
-                            "items": [self._export_item(i) for i in items]})
+                            "drink": None if row["drink"] is None else bool(row["drink"]), "piece_label": row["piece_label"],
+                            "piece_grams": row["piece_grams"], "items": [self._export_item(i) for i in items]})
         return out
 
     def export_foods(self, user_id: int, first: str, last: str, demo: bool, household: bool = False) -> list[dict]:

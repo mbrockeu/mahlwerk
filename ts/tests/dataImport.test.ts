@@ -478,3 +478,33 @@ test('products of the file: malformed fields are refused, unknown keys dropped, 
   const oats = await w.ctx.db.get<any>("SELECT created_by FROM food WHERE json_extract(data, '$.name') = 'Guest oats'");
   assert.equal(oats!.created_by, await idOf(w, 'gast'));
 });
+
+test('a recipe brings its drink flag and its piece along; a file without them leaves those here alone', async () => {
+  const one = await world(), two = await world();
+  const { recipe } = await fill(one, 'ann');
+  assert.equal((await send(one, 'ann', 'PUT', `/api/v1/foods/${recipe.food.id}/drink`, { drink: true })).status, 200);
+  assert.equal((await send(one, 'ann', 'PUT', `/api/v1/foods/${recipe.food.id}/piece`, { label: 'Glas', grams: 250 })).status, 200);
+  const zip = await exportZip(one, 'ann');
+  const data = await jsonOf(zip);
+  assert.deepEqual([data.recipes[0].drink, data.recipes[0].piece_label, data.recipes[0].piece_grams], [true, 'Glas', 250]);
+  const p = await preview(two, 'anna', zip);
+  assert.equal((await confirm(two, 'anna', p.json.token)).status, 200);
+  const there = (await send(two, 'anna', 'GET', '/api/v1/recipes')).json[0].food;
+  assert.deepEqual([there.drink, there.piece], [true, { label: 'Glas', grams: 250 }]);
+  assert.deepEqual(comparable(await jsonOf(await exportZip(two, 'anna'))).recipes, comparable(data).recipes);
+  // the same file again: unchanged; a changed piece is a change and the file wins
+  assert.equal((await preview(two, 'anna', zip)).json.modes.merge.counts.recipes.unchanged, 1);
+  data.recipes[0].piece_grams = 300;
+  data.recipes[0].updated_at = new Date(Date.now() + 60_000).toISOString();
+  let q = await preview(two, 'anna', JSON.stringify(data));
+  assert.equal(q.json.modes.merge.counts.recipes.changed, 1, q.text);
+  assert.equal((await confirm(two, 'anna', q.json.token)).status, 200);
+  assert.equal((await send(two, 'anna', 'GET', '/api/v1/recipes')).json[0].food.piece.grams, 300);
+  // an older file (before these fields): nothing to change, the stored ones stay
+  for (const k of ['drink', 'piece_label', 'piece_grams']) delete data.recipes[0][k];
+  q = await preview(two, 'anna', JSON.stringify(data));
+  assert.equal(q.json.modes.merge.counts.recipes.unchanged, 1, q.text);
+  assert.equal((await confirm(two, 'anna', q.json.token)).status, 200);
+  const kept = (await send(two, 'anna', 'GET', '/api/v1/recipes')).json[0].food;
+  assert.deepEqual([kept.drink, kept.piece], [true, { label: 'Glas', grams: 300 }]);
+});
