@@ -201,6 +201,17 @@ export function dispatcher(ctx: Ctx): Dispatcher {
   return (ctx.services.webhooks ??= new Dispatcher(ctx)) as Dispatcher;
 }
 
+/** Whether an `event` of `user` would reach a hook now (what `fanOut` checks: not the demo account, webhooks on, an enabled hook
+ * that takes the event). The routes ask before they build a costly payload; an error counts as yes (the payload is built as before). */
+export async function hooksWanted(req: Req, user: User, event: string): Promise<boolean> {
+  if (user.is_demo) return false;
+  try {
+    return (await featureOn(req.ctx, 'webhooks.enabled')) && (await hooksForEvent(req.ctx.db, user.id, event)).length > 0;
+  } catch {
+    return true;
+  }
+}
+
 /** Called by the routes after a change. Never throws. The demo account never sends anything out. */
 export function emit(req: Req, user: User, event: string, data: Record<string, unknown>): void {
   if (user.is_demo) return;
