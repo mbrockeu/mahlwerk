@@ -21,8 +21,8 @@ All notable changes to this project are documented here. The format follows
   with the same answers; the Python test suite is the contract (`ts/api-tests.sh`) and a Playwright suite (`e2e/`) runs the interface
   against either server. It is now the main server. The Python server stays as a fallback: same API, same database, same settings, and
   you can switch back and forth. Start it with `cd ts && npm ci && npm start` (`MAHLWERK_PORT`, default 8120, and `MAHLWERK_HOST`, default
-  `127.0.0.1`; all other `MAHLWERK_*` variables as before). The TS server expects schema version 21 (since the next release it also migrates 20 itself, see Unreleased) and
-  refuses older versions (start the Python server once on an older file). Not available on the Python server: the data import, see below.
+  `127.0.0.1`; all other `MAHLWERK_*` variables as before). The TS server never migrates the database: it expects schema version 21 and
+  refuses any other (start the Python server once on an older file). Not available on the Python server: the data import, see below.
 - **The app without a server.** The interface also builds as an app (`cd frontend && npm run build:app`): the same interface and
   the same core run in the iOS app's web view, with the data in SQLite on the phone, a bridge to the native side for SQL, HTTP, the
   keychain and file downloads, and the Health sync, the history and the day summary answered in the app. Yazio file import, import of
