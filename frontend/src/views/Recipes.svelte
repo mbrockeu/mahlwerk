@@ -378,6 +378,7 @@
   .row-pill.thumbed { padding-left: 6px; min-height: 56px; }
   .row-pill.thumbed .t { flex: 1; }
   @media (max-width: 400px) { .row-pill.thumbed { gap: 10px; padding-right: 14px; } .row-pill.thumbed :global(.thumb) { width: 40px; height: 40px; } }
+  @media (max-width: 299px) { .row-pill.thumbed .t { flex: 1 1 80px; } .tag { overflow-wrap: normal; } }
   .row-pill.selected { box-shadow: inset 0 0 0 2px var(--green-text); }
   .add { background: var(--paper); border: 2px solid var(--field-line); }
   .per { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }

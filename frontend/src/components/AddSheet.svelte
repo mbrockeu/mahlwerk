@@ -281,6 +281,13 @@
   .meals .chip { justify-content: center; }
   .tabs { display: flex; background: var(--paper); border-radius: 26px; padding: 4px; gap: 2px; flex-shrink: 0; }
   .tabs button { flex: 1; min-width: 0; min-height: 44px; padding: 0 4px; border-radius: 22px; font-weight: 600; font-size: 14px; color: var(--quiet); white-space: nowrap; }
+  /* very narrow (200 % zoom): meal chips and tabs wrap onto several lines, no label is cut */
+  @media (max-width: 299px) {
+    .meals { display: flex; flex-wrap: wrap; }
+    .meals .chip { flex: 1 1 auto; padding: 0 12px; }
+    .tabs { flex-wrap: wrap; border-radius: 22px; }
+    .tabs button, .tabs.five button { flex: 1 1 auto; padding: 0 10px; font-size: 13px; }
+  }
   .tabs.five button { font-size: 12.5px; padding: 0 2px; }
   .tabs button.on { background: var(--sel-bg); color: var(--sel-fg); }
   .panel { display: flex; flex-direction: column; gap: 12px; }
