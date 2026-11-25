@@ -796,6 +796,7 @@
   .g i { display: block; width: 100%; height: 100%; background: var(--green-tick); }
   .btns { display: flex; gap: 8px; }
   .btns button { min-height: 44px; border-radius: 22px 22px 22px 8px; font-weight: 600; font-size: 14px; white-space: nowrap; --focus: var(--focus-base); }
+  @media (max-width: 299px) { .btns { flex-wrap: wrap; } .btns button { white-space: normal; padding-left: 10px; padding-right: 10px; } }
   .btns .add { flex: 1; background: var(--deep); color: var(--on-deep); }
   .btns .minus { padding: 0 18px; border: 2px solid var(--hairline); font-family: var(--f-mono); font-size: 13px; }
   .btns button:active { transform: scale(0.97); }

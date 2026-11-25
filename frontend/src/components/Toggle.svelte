@@ -11,6 +11,8 @@
 <style>
   .sw { width: 100%; min-height: 56px; padding: 6px 4px 6px 16px; border-radius: 20px 20px 20px 8px; background: var(--stone); display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; font-weight: 600; font-size: 15px; }
   .txt { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+  /* very narrow: the label keeps a readable width, the switch drops under it when they do not fit side by side */
+  @media (max-width: 299px) { .sw:not(.bare) { flex-wrap: wrap; justify-content: flex-start; padding-left: 12px; } .txt { flex: 1 1 100px; } }
   small { font-family: var(--f-mono); font-size: 12px; font-weight: 500; color: var(--quiet); }
   .track { width: 60px; height: 40px; border-radius: 20px; background: var(--paper); border: 2px solid var(--quiet); position: relative; flex-shrink: 0; transition: background 160ms, border-color 160ms; margin-right: 4px; }
   .knob { position: absolute; top: 4px; left: 4px; width: 28px; height: 28px; border-radius: 14px; background: var(--quiet); transition: transform 200ms cubic-bezier(0.2, 0.9, 0.3, 1.2), background 160ms; }
