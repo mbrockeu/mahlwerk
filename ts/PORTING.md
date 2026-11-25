@@ -39,7 +39,8 @@ Security code (auth, sessions, tokens, OIDC, vault, netguard/SSRF, upload checks
 
 ## Tests
 - The Python API tests are the contract: `ts/api-tests.sh <file filter>` runs the in-scope tests (ts/api_tests.txt) against the
-  TS server. `MAHLWERK_TS_TB=short MAHLWERK_TS_LINES=60 ts/api-tests.sh test_diary` shows failures.
+  TS server. `MAHLWERK_TS_TB=short MAHLWERK_TS_LINES=60 ts/api-tests.sh test_diary` shows failures. `MAHLWERK_PY` names the Python
+  with the test dependencies (default `python3`; e.g. `MAHLWERK_PY=.venv/bin/python`), the same for `ts/crosscheck/run.sh` and `e2e/run.sh python`.
 - Run only your own files while working. The full list (`ts/api-tests.sh`) once at the end.
 - Never change a Python test to make TS pass. If a test checks Python internals it is not in the list; that is fine.
 - Typecheck: `cd ts && PATH=/opt/node22/bin:$PATH npx tsc --noEmit -p .` must stay clean.

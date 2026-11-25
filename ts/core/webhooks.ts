@@ -20,6 +20,7 @@ const MAX_ATTEMPTS = 3;
 const BACKOFF = [2.0, 10.0]; // seconds to wait before the second and the third try
 const POOL = 4;
 const MAX_URL = 500;
+const MAX_ANSWER = 64 * 1024; // the receiver's answer is not used (only its status); a longer one counts as a failed try
 
 export async function sign(secret: string, body: Uint8Array): Promise<string> {
   const enc = new TextEncoder();
@@ -167,7 +168,7 @@ export class Dispatcher {
           try {
             // one POST; redirects are not followed, environment proxies are not used; the connection goes to the address that was
             // checked, Host and TLS keep the name of the URL
-            status = (await outgoing(this.ctx).fetch('webhook', { method: 'POST', url: hook.url, headers, body, timeout: this.timeout, address })).status;
+            status = (await outgoing(this.ctx).fetch('webhook', { method: 'POST', url: hook.url, headers, body, timeout: this.timeout, address, maxBytes: MAX_ANSWER })).status;
           } catch {
             error = 'delivery failed'; // one text for every network problem: it must not tell a closed port from a filtered one or a timeout
           }

@@ -23,7 +23,9 @@ import { SINCE_START } from './goals.ts';
 import type { User } from './http.ts';
 import { MEALS } from './models/common.ts';
 import * as nutrients from './nutrients.ts';
-import { recipeFood } from './nutrition.ts';
+import { foodIn } from './models/food.ts';
+import { recipeFood, validGtin } from './nutrition.ts';
+import { pyLen } from './text.ts';
 import { canEdit } from './ownership.ts';
 import { SETTINGS, SETTING_KEYS } from './routes/profile.ts';
 import { goalOf } from './store/goals.ts';
@@ -82,7 +84,12 @@ const item = z.object({ name: text(NAME), brand: text(NAME).nullable().optional(
 const storable = (v: unknown, max: number): boolean => { try { return toJson(v).length <= max; } catch { return false; } };
 const ACTIVITY_SOURCES = ['manual', 'health', 'yazio', 'demo'] as const;
 const FOOD_SOURCES = ['own', 'openfoodfacts', 'recipe', 'yazio', 'bls', 'cookidoo', 'web'] as const;
-const foodData = z.looseObject({ name: text(NAME).nullable().optional(), per_100: per100 }).refine((d) => storable(d, 200_000), 'too large or not a number');
+/** The keys a food's data has (own products, Open Food Facts, the catalogue, Yazio, Cookidoo, web recipes, sample foods); any other key
+ * of the file is dropped. The types are checked per row (`foodProblem`). */
+const FOOD_KEYS = new Set(['name', 'brand', 'quantity', 'serving_size', 'serving_quantity', 'unit', 'per_100', 'extra', 'complete', 'portions', 'url',
+  'region', 'whole', 'demo', 'demo_account']);
+const foodData = z.looseObject({ name: text(NAME).nullable().optional(), per_100: per100 }).refine((d) => storable(d, 200_000), 'too large or not a number')
+  .transform((d) => Object.fromEntries(Object.entries(d).filter(([k]) => FOOD_KEYS.has(k))) as { name?: string | null; per_100: Record<string, number | null>; [k: string]: unknown });
 
 const fileSchema = z.object({
   format_version: z.number(),
@@ -277,6 +284,11 @@ async function importFoods(r: Run): Promise<Foods> {
     if (x.source === 'recipe') { skip(r, 'foods', 'recipe_food'); continue; } // a recipe comes with its recipe
     // sample foods (of the test data or the demo account) never become real products: skipped, their entries keep their values
     if (isSample(x.data)) { skip(r, 'foods', 'demo'); continue; }
+    const problem = foodProblem(x);
+    if (problem) { skip(r, 'foods', problem); continue; } // its entries keep their values, without the link
+    // a guest brings in only own products: a product of a provider is shared (the household's), which a guest cannot create or turn
+    // an own one into (the routes give a guest's lookup to the household too)
+    const sharedByGuest = x.source !== 'own' && !user.household;
     const data = foodView(x.data);
     const changedAt = seconds(x.fetched_at) ?? r.now;
     const want = { source: x.source, data, piece_label: x.piece_label ?? null, piece_grams: x.piece_grams ?? null, drink: x.drink ?? null };
@@ -288,6 +300,7 @@ async function importFoods(r: Run): Promise<Foods> {
       if (row.found && isSample(stored)) { skip(r, 'foods', 'demo'); continue; } // a sample food here is never overwritten
       const have = { source: row.source, data: foodView(stored), piece_label: row.piece_label, piece_grams: row.piece_grams, drink: row.drink === null ? null : Boolean(row.drink) };
       if (row.found && same(have, want)) { count(r, 'foods', 'unchanged'); continue; }
+      if (sharedByGuest) { skip(r, 'foods', 'guest_shared'); continue; }
       if (row.found && !canEdit(user, row.created_by ?? row.recipe_owner)) { skip(r, 'foods', 'not_editable'); continue; }
       // shared: changed here after the file's version was made, the change here stays (a remembered miss is no change)
       if (row.found && (x.fetched_at ? row.fetched_at > changedAt : true)) { skip(r, 'foods', 'newer_here'); continue; }
@@ -296,14 +309,13 @@ async function importFoods(r: Run): Promise<Foods> {
       if (r.write) {
         await db.run('UPDATE food SET source = ?, found = 1, data = ?, fetched_at = ?, import_id = NULL, piece_label = ?, piece_grams = ?, drink = ?, '
           + 'created_by = CASE WHEN found = 0 THEN ? ELSE created_by END WHERE id = ?',
-        [x.source, toJson(data), changedAt, want.piece_label, want.piece_grams, want.drink === null ? null : flag(want.drink), x.own || !user.household ? user.id : null, row.id]);
+        [x.source, toJson(data), changedAt, want.piece_label, want.piece_grams, want.drink === null ? null : flag(want.drink), ownerOf(x, user), row.id]);
       }
       continue;
     }
+    if (sharedByGuest) { skip(r, 'foods', 'guest_shared'); continue; }
     count(r, 'foods', 'new');
-    // own products of the file are the importer's; others belong to the household, like a product looked up by barcode, except for a
-    // guest: what a guest brings in is theirs (the routes give a guest's new product to the guest too)
-    const owner = x.own || !user.household ? user.id : null;
+    const owner = ownerOf(x, user);
     const newUid = m.takenUids.has(x.uid) ? null : x.uid;
     let id = m.nextFake--;
     if (r.write) {
@@ -317,6 +329,41 @@ async function importFoods(r: Run): Promise<Foods> {
   }
   return m;
 }
+
+const isText = (v: unknown, max: number) => v === null || (typeof v === 'string' && v.length <= max);
+const isNumber = (v: unknown, min: number, max: number) => v === null || (typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max);
+/** The source id a product of each source carries (an own product keeps the one of the source it was made from). */
+const EXTERNAL: Record<string, RegExp | null> = {
+  own: /^(?:cookidoo|web|bls|yazio):/, openfoodfacts: null, bls: /^bls:/, cookidoo: /^cookidoo:r\d{3,10}$/, web: /^web:/, yazio: /^yazio:/,
+};
+type FileFood = z.output<typeof fileSchema>['foods'][number];
+
+/** Why a product of the file is not taken (`invalid`), else null: every field of the data has the type the stores write (a brand that is
+ * no text, a unit that is not g/ml …), an own product passes the checks of the food input (FoodIn: lengths, value ranges), the barcode is
+ * a valid EAN/UPC (a Yazio product: digits only, as its import keeps them) and the source id fits the source. */
+function foodProblem(x: FileFood): string | null {
+  const d = x.data as Record<string, unknown>;
+  const has = (k: string) => k in d && d[k] !== undefined;
+  for (const k of ['brand', 'quantity', 'serving_size', 'url']) if (has(k) && !isText(d[k], NAME)) return 'invalid';
+  if (has('serving_quantity') && !isNumber(d.serving_quantity, 0, 1e6)) return 'invalid';
+  if (has('portions') && !isNumber(d.portions, 0, 10_000)) return 'invalid';
+  if (has('unit') && d.unit !== null && d.unit !== 'g' && d.unit !== 'ml') return 'invalid';
+  for (const k of ['complete', 'whole']) if (has(k) && typeof d[k] !== 'boolean') return 'invalid';
+  if (has('region') && d.region !== null && !(Array.isArray(d.region) && d.region.length === 2 && d.region.every((v) => typeof v === 'string' && v.length <= 20))) return 'invalid';
+  if (x.code && !(validGtin(x.code) || (x.source === 'yazio' && /^\p{Nd}+$/u.test(x.code) && pyLen(x.code) <= 14))) return 'invalid';
+  const ext = EXTERNAL[x.source];
+  if (x.external_id && !(ext && ext.test(x.external_id))) return 'invalid';
+  if (x.source === 'own') {
+    const own = foodIn.safeParse({ name: d.name, brand: d.brand, quantity: d.quantity, serving_size: d.serving_size, serving_quantity: d.serving_quantity,
+      unit: d.unit ?? undefined, per_100: d.per_100, extra: {} });
+    if (!own.success) return 'invalid';
+  }
+  return null;
+}
+
+/** Who a product the import creates belongs to: an own product of the file is the importer's (a guest's own product always is); any
+ * other source belongs to the household (created_by NULL), like a product looked up by barcode or taken over from a recipe page. */
+const ownerOf = (x: FileFood, user: User): number | null => (x.source === 'own' && (x.own || !user.household) ? user.id : null);
 
 /** A sample food: the test data of an own account (`demo`) or the demo account (`demo_account`). */
 const isSample = (data: unknown): boolean => {

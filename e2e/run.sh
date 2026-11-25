@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: e2e/run.sh <python|ts|app> [test-file-glob...]
+# Usage: e2e/run.sh <python|ts|app> [test-file-glob...]   (MAHLWERK_PY: the Python of the python target, default python3)
 # One fresh server + temp DB per test file; files named *.local.test.mjs run with MAHLWERK_AUTH=local, the rest with =single.
 # app: the app build (web/dist-app, `cd frontend && npm run build:app`) with the fake native side of e2e/app/ (SQLite WASM in a
 # SharedWorker, fresh per test file); the API is answered in the page. *.local.test.mjs are skipped: the app has no sign-in.
@@ -32,7 +32,7 @@ for f in "${files[@]}"; do
   if [ "$target" = app ]; then
     node --experimental-strip-types --disable-warning=ExperimentalWarning "$here/app/server.mjs" "$port" >"$tmp/server.log" 2>&1 &
   elif [ "$target" = python ]; then
-    PYTHONPATH=$root/src /root/mahlwerk/.venv/bin/python -m uvicorn mahlwerk.main:app --factory --host 127.0.0.1 --port "$port" >"$tmp/server.log" 2>&1 &
+    PYTHONPATH=$root/src "${MAHLWERK_PY:-python3}" -m uvicorn mahlwerk.main:app --factory --host 127.0.0.1 --port "$port" >"$tmp/server.log" 2>&1 &
   else
     MAHLWERK_PORT=$port MAHLWERK_HOST=127.0.0.1 node --experimental-strip-types --disable-warning=ExperimentalWarning "$root/ts/server/main.ts" >"$tmp/server.log" 2>&1 &
   fi

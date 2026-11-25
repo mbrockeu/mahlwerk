@@ -41,10 +41,12 @@ function mergeOut(req: Req, res: Res): Res {
 }
 
 /** The router: the answer of the first route that matches, else `{ pathMatched }` (a route with this path but another method
- * exists: 405, not 404). HttpError and every other error are thrown; `errorRes` turns them into the answer. */
+ * exists: 405, not 404). HttpError and every other error are thrown; `errorRes` turns them into the answer. `beforeHandler` runs once
+ * the route and the caller are known, right before the handler: the server reads the body there, so nobody who may not call the route
+ * can make it read (and hold) a large body. */
 export function makeRouter(routes: Route[]) {
   const table = compile(routes);
-  return async function routeRequest(req: Req, body: () => unknown): Promise<Res | { pathMatched: boolean }> {
+  return async function routeRequest(req: Req, body: () => unknown, beforeHandler?: () => Promise<void>): Promise<Res | { pathMatched: boolean }> {
     // the body is parsed when a handler first reads it, i.e. after the dependencies of the route (a 401 beats a 422)
     let parsed: { value: unknown } | undefined;
     Object.defineProperty(req, 'body', { configurable: true, enumerable: true, get() { return (parsed ??= { value: body() }).value; } });
@@ -58,6 +60,7 @@ export function makeRouter(routes: Route[]) {
       req.params = Object.fromEntries(names.map((n, i) => [n, m[i + 1]!]));
       req.route = route.path;
       if (route.auth !== false) req.user = await currentUser(req);
+      if (beforeHandler) await beforeHandler();
       const out = await route.handler(req);
       const res: Res = isRes(out) ? out : { status: route.status ?? 200, body: out };
       return mergeOut(req, res);

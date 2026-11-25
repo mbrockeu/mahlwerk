@@ -130,6 +130,33 @@ const jsonContent = (r: OutResponse): boolean => /^application\/(?:[\w.+-]+?\+)?
 
 const form = (data: Record<string, string>): string => new URLSearchParams(data).toString();
 
+const NAME_REQUEST_ID = /name=["']requestId["']/;
+const ANY_VALUE = /value=["']([^"']+)["']/;
+const UUID_VALUE = /value=["']([0-9a-f-]{36})["']/;
+const MAX_INPUT_TAG = 4096; // characters between `<input` and `>`; a real one has a few dozen
+
+/** The request id of the login form: the `value` of the `<input>` named `requestId` (value after the name, or a UUID before it).
+ * The tags are found with `indexOf`, one at a time: `<input[^>]*name=…[^>]*value=…` on the whole page is quadratic on many `<input`
+ * without `>` (seconds for a few hundred KB). */
+export function requestIdOf(html: string): string | null {
+  let at = 0;
+  for (;;) {
+    const start = html.indexOf('<input', at);
+    if (start === -1) return null;
+    const end = html.indexOf('>', start + 6);
+    if (end === -1) return null; // no tag can end any more
+    at = end + 1;
+    if (end - start > MAX_INPUT_TAG) continue;
+    const tag = html.slice(start + 6, end);
+    const name = NAME_REQUEST_ID.exec(tag);
+    if (name === null) continue;
+    const after = ANY_VALUE.exec(tag.slice(name.index + name[0].length));
+    if (after) return after[1]!;
+    const before = UUID_VALUE.exec(tag.slice(0, name.index));
+    if (before) return before[1]!;
+  }
+}
+
 /** The real client. One instance is one signed-in session (cookies, tokens, discovered paths); `close()` forgets all of it. */
 export class LibraryClient implements CookidooClient {
   private settings: Settings;
@@ -221,9 +248,9 @@ export class LibraryClient implements CookidooClient {
     if (page.status !== 200) throw new CookidooError('auth');
     // step 3: the request id of the form, then the credentials; step 4: the code from the redirect to the app's address
     const html = textOf(page);
-    const id = /<input[^>]*name=["']requestId["'][^>]*value=["']([^"']+)["']/.exec(html) ?? /<input[^>]*value=["']([0-9a-f-]{36})["'][^>]*name=["']requestId["']/.exec(html);
-    if (!id) throw new CookidooError('unexpected');
-    const code = await this.submitCredentials(id[1]!, state);
+    const id = requestIdOf(html);
+    if (id === null) throw new CookidooError('unexpected');
+    const code = await this.submitCredentials(id, state);
     // step 5: the code for the tokens
     const r = await this.send('POST', oidc.token_endpoint, { 'user-agent': LOGIN_UA, accept: '*/*', 'content-type': 'application/x-www-form-urlencoded' },
       form({ grant_type: 'authorization_code', code, redirect_uri: OAUTH_REDIRECT_URI, code_verifier: verifier, client_id: OAUTH_CLIENT_ID }), false);
