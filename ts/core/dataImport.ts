@@ -828,6 +828,12 @@ export class ImportStage {
   private clock: () => number;
   constructor(clock: () => number) { this.clock = clock; }
 
+  /** How many areas are held (without expiring any). */
+  held(): number { return this.items.size; }
+
+  /** Drop the areas whose time is up (cheap: called before every request, see dispatch.ts). */
+  sweep(): void { this.expire(); }
+
   private expire(): void {
     const now = this.clock();
     for (const [u, s] of this.items) if (s.expires < now && !this.busy.has(u)) this.items.delete(u);

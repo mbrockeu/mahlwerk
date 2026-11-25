@@ -48,6 +48,8 @@ function mergeOut(req: Req, res: Res): Res {
 export function makeRouter(routes: Route[]) {
   const table = compile(routes);
   return async function routeRequest(req: Req, body: () => unknown, beforeHandler?: () => Promise<void>): Promise<Res | { pathMatched: boolean }> {
+    // what waits in memory with a time limit (staged uploads) goes when it is due, not only at the next use of that area
+    for (const sweep of (req.ctx.services.sweepers as (() => void)[] | undefined) ?? []) sweep();
     // the body is parsed when a handler first reads it, i.e. after the dependencies of the route (a 401 beats a 422)
     let parsed: { value: unknown } | undefined;
     Object.defineProperty(req, 'body', { configurable: true, enumerable: true, get() { return (parsed ??= { value: body() }).value; } });

@@ -6,6 +6,8 @@ import { buildZip } from '../core/zip.ts';
 import { verdict } from '../core/demoAccount.ts';
 import { unzip } from '../core/yazioStage.ts';
 import { makeWorld, type Reply, type World } from './cookidooHarness.ts';
+import { TTL } from '../core/dataImport.ts';
+import { importOf } from '../core/routes/dataImport.ts';
 
 const worlds: World[] = [];
 after(async () => { for (const w of worlds) await w.close(); });
@@ -512,4 +514,17 @@ test('a recipe brings its drink flag and its piece along; a file without them le
   assert.equal((await confirm(two, 'anna', q.json.token)).status, 200);
   const kept = (await send(two, 'anna', 'GET', '/api/v1/recipes')).json[0].food;
   assert.deepEqual([kept.drink, kept.piece], [true, { label: 'Glas', grams: 300 }]);
+});
+
+test('a waiting file goes when its time is up, also when no further import request comes', async () => {
+  const w = await world();
+  await fill(w, 'ann');
+  assert.equal((await preview(w, 'ann', await exportZip(w, 'ann'))).status, 200);
+  const stage = importOf(w.ctx);
+  assert.equal(stage.held(), 1);
+  await send(w, 'ann', 'GET', '/api/v1/me');
+  assert.equal(stage.held(), 1); // not yet due
+  w.clock.now += TTL + 1;
+  await send(w, 'ben', 'GET', '/api/v1/me'); // any request of anybody
+  assert.equal(stage.held(), 0);
 });
