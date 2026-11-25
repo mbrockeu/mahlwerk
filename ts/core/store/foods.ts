@@ -97,7 +97,7 @@ export async function listFoods(db: Db, query = '', source: string | null = null
     ids = hits.map((h, i) => [h, i] as const).sort((a, b) => ranks[a[1]]! - ranks[b[1]]! || a[1] - b[1]).slice(0, limit).map(([h]) => h.id);
   }
   const full = await getFoods(db, ids, demoAccount);
-  return ids.map((id) => full.get(id)!);
+  return ids.map((id) => full.get(id)).filter((f): f is FoodRow => f !== undefined); // one deleted between the two reads is left out
 }
 
 /** The household's products for the ingredient finder (ingredients.ts OwnFood): what `listFoods` lists without a search, newest first,
