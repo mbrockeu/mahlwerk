@@ -673,6 +673,7 @@
   .sw { width: 16px; height: 16px; border-radius: 6px 6px 6px 3px; flex-shrink: 0; }
   .nm { font-weight: 600; flex: 1; }
   .vl { font-size: 13px; font-weight: 600; white-space: nowrap; }
+  @media (max-width: 299px) { .vl { white-space: normal; text-align: right; } }
 
   .seg-ctl { display: flex; flex-wrap: wrap; gap: 6px; }
   .seg-ctl .chip { min-height: 40px; padding: 0 14px; font-size: 13px; }
