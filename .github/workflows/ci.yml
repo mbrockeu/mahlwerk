@@ -42,8 +42,13 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: |
+            frontend/package-lock.json
+            ts/package-lock.json
       - run: npm ci
+      # the app build and its type check import the shared core in ../ts, which needs its own packages (zod)
+      - run: npm ci --ignore-scripts
+        working-directory: ts
       - run: npm run check
       - run: npm test
       - run: npm run build
