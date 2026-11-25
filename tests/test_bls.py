@@ -341,6 +341,43 @@ def test_search_route_with_source_filter_and_known_items_left_out(client, tmp_pa
     assert [i["code"] for i in client.get("/api/v1/catalog", params={"q": "zauberapfel"}).json()] == ["X100100", "X100200"]
 
 
+def alias_catalog(tmp_path, bls_path):
+    rows = [food("M206300", "Milchmischgetränk 3,5 % Fett, mit Kakao/Schokolade, gesüßt", "Milk drink with cocoa", ENERCC="80"),
+            food("M206200", "Milchmischgetränk 1,5 % Fett, mit Kakao/Schokolade, gesüßt", "Milk drink with cocoa", ENERCC="65"),
+            food("M206100", "Milchmischgetränk 0,3 % Fett, mit Kakao/Schokolade, gesüßt", "Milk drink with cocoa", ENERCC="55"),
+            food("C1", "Kakaopulver, schwach entölt", "Cocoa powder", ENERCC="350"),
+            food("C2", "Kakao", "Cocoa", ENERCC="360"),
+            food("S1", "Schokolade, Vollmilch", "Chocolate", ENERCC="540"),
+            food("W1", "Weißzucker", "White sugar", ENERCC="400"),
+            food("G1", "Grießbrei", "Semolina porridge", ENERCC="100")]
+    import_bls(bls_path, write_xlsx(tmp_path / "a.xlsx", rows=rows))
+    return Catalog(str(tmp_path / "catalog.db"))
+
+
+def test_everyday_names_list_their_basic_foods_first(tmp_path, bls_path):
+    catalog = alias_catalog(tmp_path, bls_path)
+    drinks = ["M206300", "M206200", "M206100"]
+    for query in ("heiße schokolade", "heisse schokolade", "Heißer Kakao", "heisser kakao", "warmer kakao", "kakaomilch", "kaba",
+                  "trinkschokolade", "kakao getränk", "kakaogetränk", "heiße schok"):
+        assert codes(catalog, query)[:3] == drinks, query
+    assert codes(catalog, "heiße schokolade", source="bls")[:3] == drinks
+    assert codes(catalog, "heiße schokolade", limit=2) == drinks[:2]
+    assert codes(catalog, "heiße schokolade", skip=lambda hits: {("bls", "M206300")})[:2] == drinks[1:]
+    assert codes(catalog, "heiße schokolade", source="openfoodfacts") == []
+    assert len(set(codes(catalog, "heiße schokolade"))) == len(codes(catalog, "heiße schokolade"))
+    # "kakao" alone is the baking cocoa, not the drink; so are other words that merely start alike
+    assert codes(catalog, "kakao")[0] == "C2" and codes(catalog, "kakaomil") == []
+    assert codes(catalog, "schokolade")[0] == "S1"
+
+
+def test_sz_and_ss_are_the_same_in_a_search(tmp_path, bls_path):
+    catalog = alias_catalog(tmp_path, bls_path)
+    assert codes(catalog, "weisszucker") == ["W1"] == codes(catalog, "weißzucker")
+    assert codes(catalog, "weissz") == ["W1"]
+    assert codes(catalog, "griessbrei") == ["G1"] == codes(catalog, "grießbrei")
+    assert codes(catalog, "zucker weiss") == [] and codes(catalog, "weiss zucker") == []
+
+
 # adopt, /me, diary
 
 
@@ -473,3 +510,11 @@ def test_whole_name_written_apart_comes_first_even_with_many_prefix_hits(tmp_pat
     con.close()
     hits = cat.Catalog(str(tmp_path / "off.db"), str(path)).search("haferflocken", source="bls", limit=5)
     assert hits and hits[0]["name"] == "Hafer Flocken"
+
+
+def test_search_route_finds_everyday_names_and_both_spellings_of_sz(client, tmp_path, bls_path):
+    alias_catalog(tmp_path, bls_path)
+    found = [i["code"] for i in client.get("/api/v1/catalog", params={"q": "heisse schokolade"}).json()]
+    assert found[:3] == ["M206300", "M206200", "M206100"]
+    assert [i["code"] for i in client.get("/api/v1/catalog", params={"q": "weisszucker"}).json()] == ["W1"]
+    assert client.get("/api/v1/catalog", params={"q": "kakao"}).json()[0]["code"] == "C2"
