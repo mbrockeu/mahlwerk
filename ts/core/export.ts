@@ -128,7 +128,7 @@ const diaryRows = (rows: Json[], lang: string): Json[] => rows.map((r) => ({ ...
 const jsonText = (value: unknown): Uint8Array => new TextEncoder().encode(JSON.stringify(value, (_k, v) => {
   if (typeof v === 'number' && !Number.isFinite(v)) throw new RangeError('NaN or infinity cannot be exported');
   return v;
-}, 2));
+}));
 
 // the archive ------------------------------------------------------------------------------------------------------------
 

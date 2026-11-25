@@ -253,7 +253,7 @@ def build_zip(store: Store, user: dict, first: str | None, last: str | None, lan
         "workouts.csv": style.render(WORKOUT_COLUMNS, data["workouts"]),
         "water.csv": style.render(WATER_COLUMNS, data["water"]),
         "fasting.csv": style.render(FASTING_COLUMNS, data["fasting"]),
-        "mahlwerk-export.json": json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False).encode("utf-8"),
+        "mahlwerk-export.json": json.dumps(data, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8"),
     }
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:

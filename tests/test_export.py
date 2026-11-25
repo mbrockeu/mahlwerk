@@ -88,7 +88,9 @@ def test_the_csv_files_hold_the_data_with_the_nutrients_for_the_amount(full):
 
 
 def test_the_json_file_holds_everything_else_too(full):
-    data = json.loads(open_zip(full.get(EXPORT))["mahlwerk-export.json"])
+    raw = open_zip(full.get(EXPORT))["mahlwerk-export.json"]
+    assert b"\n" not in raw and b'":' in raw  # compact: no indentation, no spaces (the file is read by programs, not people)
+    data = json.loads(raw)
     assert data["format_version"] == 2 and data["range"] == {"from": None, "to": None}
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d", data["exported_at"]) and data["app_version"]
     assert data["account"]["username"] == "me" and data["account"]["created_at"]
