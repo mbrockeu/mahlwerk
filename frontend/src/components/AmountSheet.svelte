@@ -4,6 +4,7 @@
   import { fmt, inputNumber, parseNumber, t } from '../lib/i18n';
   import { checkPiece, gramsToPieces, isHalfMultiple, MAX_LABEL, piecesToGrams, splitGrams } from '../lib/piece';
   import { isPortionEntry, isPortionFood, PORTION_GRAMS } from '../lib/portion';
+  import { isPending, resolveFood } from '../lib/pending';
   import { backToAdd, changed, openSwap, toast, ui, type AmountRequest } from '../lib/store.svelte';
   import { MEALS, type FoodPiece, type Meal } from '../lib/types';
   import Sheet from './Sheet.svelte';
@@ -24,7 +25,12 @@
   const byPortion = isPortionFood(food) || isPortionEntry(entry);
   const scale = byPortion ? PORTION_GRAMS : 1;
   // a piece ("slice" = 25 g) of the food, if a person defined one: the field then counts pieces and the diary still gets grams
-  const foodId = food?.id ?? entry?.food_id ?? null;
+  // a product only looked at in the catalogue has no id yet: whatever needs one (saving, a piece, the drink setting) adopts it first
+  let foodId = $state<number | null>(isPending(food) ? null : (food?.id ?? entry?.food_id ?? null));
+  async function ensureFood(): Promise<number | null> {
+    if (food && isPending(food)) { await resolveFood(food, api.adoptCatalogItem); foodId = food.id; }
+    return foodId;
+  }
   // svelte-ignore state_referenced_locally
   let piece = $state<FoodPiece | null>(byPortion ? null : (food?.piece ?? null));
   let inPieces = $state(false);
@@ -75,11 +81,13 @@
     { value: null, label: () => t('drinkAuto') }, { value: true, label: () => t('drinkYes') }, { value: false, label: () => t('drinkNo') },
   ];
   async function setDrink(next: boolean | null) {
-    if (foodId == null || drinkBusy || next === drink) return;
+    if (drinkBusy || next === drink) return;
     drinkBusy = true;
     error = '';
     try {
-      drink = (await api.setFoodDrink(foodId, next)).drink ?? null;
+      const id = await ensureFood();
+      if (id == null) return;
+      drink = (await api.setFoodDrink(id, next)).drink ?? null;
       if (food) food.drink = drink;
     } catch (err) {
       error = failMsg(err);
@@ -98,7 +106,7 @@
     if (!food && entry && foodId != null && !byPortion) {
       api.food(foodId).then((f) => { editable = f.can_edit !== false; drink = f.drink ?? null; if (f.piece && !piece) usePiece(f.piece); }).catch(() => {});
     }
-    if (!food || last != null) return;
+    if (!food || isPending(food) || last != null) return;
     try {
       const recent = await api.recent(50);
       const found = recent.find((r) => r.food.id === food.id)?.last_amount;
@@ -170,11 +178,13 @@
   async function savePiece() {
     const draft = checkPiece(formLabel, parseNumber(formGrams));
     if (!draft) { formError = t('pieceBad'); return; }
-    if (foodId == null) return;
+    if (foodId == null && !isPending(food)) return;
     formBusy = true;
     formError = '';
     try {
-      const saved = (await api.setFoodPiece(foodId, draft)).piece ?? draft;
+      const id = await ensureFood();
+      if (id == null) return;
+      const saved = (await api.setFoodPiece(id, draft)).piece ?? draft;
       const first = !piece;
       touched = true;
       piece = saved;
@@ -244,9 +254,11 @@
         await api.patchEntry(entry.id, { amount: toBooked(amount as number), meal });
         toast(t('changed'));
       } else if (food && replace) {
+        await ensureFood();
         await api.patchEntry(replace.id, { food_id: food.id, amount: toBooked(amount as number), meal });
         toast(t('swapped', { name: title }));
       } else if (food) {
+        await ensureFood();
         await api.addEntry(req.day, { food_id: food.id, meal, amount: toBooked(amount as number) });
         toast(t('added', { name: title }));
       }
@@ -320,7 +332,7 @@
     {#if !byPortion && !splitOpen}
       <button class="chip quiet" onclick={openSplit}>{t('splitOpen')}</button>
     {/if}
-    {#if editable && !piece && !byPortion && foodId != null && !formOpen}
+    {#if editable && !piece && !byPortion && (foodId != null || isPending(food)) && !formOpen}
       <button class="chip quiet" onclick={openForm}>{t('pieceSet')}</button>
     {/if}
   </div>
@@ -381,7 +393,7 @@
     </div>
   {/if}
 
-  {#if unit === 'ml' && !byPortion && foodId != null && (editable || drink != null)}
+  {#if unit === 'ml' && !byPortion && (foodId != null || isPending(food)) && (editable || drink != null)}
     <div class="unitrow" role="group" aria-label={t('drinkLabel')}>
       <span class="note">{t('drinkLabel')}:</span>
       {#each drinkChoices as c (c.label())}

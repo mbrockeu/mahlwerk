@@ -3,13 +3,16 @@
   import { api, ApiError } from '../lib/api';
   import { t } from '../lib/i18n';
   import { loadMe, ui } from '../lib/store.svelte';
+  import { provisionalFood } from '../lib/pending';
   import type { CatalogItem, Food } from '../lib/types';
   import FoodRow from './FoodRow.svelte';
   import SearchField from './SearchField.svelte';
 
   // The search shared by the add sheet and the recipe editor: products stored here, then the basic foods (BLS) and packaged products of the local catalogue.
-  let { onpick, onnew, active = true, query = $bindable('') }:
-    { onpick: (food: Food) => void; onnew?: () => void; active?: boolean; query?: string } = $props();
+  // `defer`: a catalogue product is handed over as a not yet stored food (`pending`); whoever saves something adopts it then.
+  // Without it the pick itself is the decision (an ingredient is added at once), so the product is adopted right away.
+  let { onpick, onnew, active = true, defer = false, query = $bindable('') }:
+    { onpick: (food: Food) => void; onnew?: () => void; active?: boolean; defer?: boolean; query?: string } = $props();
 
   let results = $state<Food[]>([]);
   // the stored products first, but not so many that the basic foods below are out of reach: the best 15, the rest on request
@@ -44,6 +47,7 @@
   }
 
   async function pickCatalog(item: CatalogItem) {
+    if (defer) { onpick(provisionalFood(item)); return; }
     if (adopting) return;
     adopting = true;
     try {
@@ -89,7 +93,7 @@
 {#if searchError}<p class="note warn">{searchError}</p>{/if}
 {#if results.length}
   {#if catalogItems.length}<h2 class="micro quiet">{t('yourProducts')}</h2>{/if}
-  <ul class="rows">{#each shown as food (food.id)}<FoodRow {food} onpick={onpick} />{/each}</ul>
+  <ul class="rows search-list">{#each shown as food (food.id)}<FoodRow {food} onpick={onpick} />{/each}</ul>
   {#if results.length > shown.length}
     <button type="button" class="btn quiet-btn" onclick={() => (showAll = true)}>{t('showMoreResults', { n: results.length - shown.length })}</button>
   {/if}
@@ -98,7 +102,7 @@
 {/if}
 {#if basics.length}
   <h2 class="micro quiet">{t('basicFoods')}</h2>
-  <ul class="rows" aria-busy={adopting}>
+  <ul class="rows search-list" aria-busy={adopting}>
     {#each basics as item (item.source + item.code)}
       <FoodRow food={item} extra="" onpick={pickCatalog} />
     {/each}
@@ -106,7 +110,7 @@
 {/if}
 {#if packaged.length}
   <h2 class="micro quiet">{t('moreProducts')}</h2>
-  <ul class="rows" aria-busy={adopting}>
+  <ul class="rows search-list" aria-busy={adopting}>
     {#each packaged as item (item.source + item.code)}
       <FoodRow food={item} extra={item.quantity ?? ''} onpick={pickCatalog} />
     {/each}
