@@ -77,6 +77,10 @@ export interface Food {
   piece?: FoodPiece | null;
   /** Counts towards the daily fluid total: true always, false never, null decides automatically (only for foods in ml). */
   drink?: boolean | null;
+  /** English name (basic foods). */
+  name_en?: string | null;
+  /** A catalogue product that is only looked at: not stored yet (id 0), adopted when something is saved (see lib/pending.ts). */
+  pending?: { source: 'openfoodfacts' | 'bls'; code: string };
 }
 
 /** A packaged product (Open Food Facts) or basic food (BLS) of the local catalogue; it gets an id once it is adopted as a Food. */
