@@ -384,6 +384,7 @@ const en = {
   displayNote: 'Both settings are kept on this device only. Automatic follows your device.',
 
   // admin area
+  admCardText_app: 'Overview and connectors of the app.', sgSettingText_app: 'A small card under the meals with recipes that fit what is left of the day. It is worked out on this iPhone from diary, goals and recipes; nothing is sent out.', pasteIntro_app: 'One ingredient per line, in German or English. Mahlwerk matches each line to a food and works out the grams itself – no AI, nothing leaves this iPhone.', remove_app: 'Remove from the app', confirmRemove_app: 'Remove this product from the app? Past diary entries stay.', cookidooShared_app: 'Your Cookidoo account. Taken-over recipes appear on the Recipes page.', ckaTextOwn_app: 'Your Cookidoo account: meal plan, collections and recipe lookups. The password is stored encrypted on this iPhone and is never shown again.',
   navAdmin: 'Admin area', admLoading: 'Loading …', admTitle: 'Admin', admOpen: 'Open admin area', admCardText: 'Overview, users and connectors of this server.',
   admNoAccess: 'This area is for admins only.',
   admOverview: 'Overview', admAuth: 'Sign-in', admAuthSingle: 'one local user', admAuthProxy: 'reverse proxy',
@@ -1151,6 +1152,7 @@ const de: Record<Key, string> = {
   displayNote: 'Beide Einstellungen gelten nur für dieses Gerät. Automatisch folgt deinem Gerät.',
 
   // Adminbereich
+  admCardText_app: 'Übersicht und Konnektoren der App.', sgSettingText_app: 'Eine kleine Karte unter den Mahlzeiten mit Rezepten, die zum Rest des Tages passen. Sie wird auf diesem iPhone aus Tagebuch, Zielen und Rezepten berechnet; nichts wird nach außen gesendet.', pasteIntro_app: 'Eine Zutat pro Zeile, deutsch oder englisch. Mahlwerk ordnet jede Zeile einem Lebensmittel zu und rechnet die Gramm selbst aus – ohne KI, nichts verlässt dieses iPhone.', remove_app: 'Aus der App entfernen', confirmRemove_app: 'Dieses Produkt aus der App entfernen? Frühere Tagebuch-Einträge bleiben.', cookidooShared_app: 'Dein Cookidoo-Konto. Übernommene Rezepte erscheinen auf der Seite Rezepte.', ckaTextOwn_app: 'Dein Cookidoo-Konto für Wochenplan, Sammlungen und Rezeptabruf. Das Passwort liegt verschlüsselt auf diesem iPhone und wird nie wieder angezeigt.',
   navAdmin: 'Adminbereich', admLoading: 'Lädt …', admTitle: 'Admin', admOpen: 'Adminbereich öffnen', admCardText: 'Übersicht, Benutzer und Konnektoren dieses Servers.',
   admNoAccess: 'Dieser Bereich ist nur für Admins.',
   admOverview: 'Übersicht', admAuth: 'Anmeldung', admAuthSingle: 'ein lokaler Benutzer', admAuthProxy: 'Reverse-Proxy',
@@ -1566,7 +1568,9 @@ export function setLangPref(pref: LangPref) {
 const dict: Record<Lang, Record<string, string>> = { en, de };
 
 export function t(key: Key | `homeCard_${string}` | `w_${string}` | `hint_${string}` | `hintT_${string}` | `n_${string}` | `rev_${string}` | `badge_${string}` | `badgeCond_${string}` | `badgeProg_${string}` | `adm_${string}` | `cn_${string}` | `cnD_${string}` | `ev_${string}` | `wk_${string}` | `cbCnt_${string}` | `cbErr_${string}` | `cbReason_${string}`, vars: Record<string, string | number> = {}): string {
-  const text = dict[lang][key] ?? dict.en[key] ?? key;
+  // in the app without a server (window.mahlwerkLocal) a text may have its own wording: `<key>_app` ("on this iPhone" instead of "this server")
+  const own = (globalThis as { mahlwerkLocal?: unknown }).mahlwerkLocal ? `${key}_app` : null;
+  const text = (own && (dict[lang][own] ?? dict.en[own])) ?? dict[lang][key] ?? dict.en[key] ?? key;
   return text.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ''));
 }
 

@@ -118,7 +118,7 @@
       {#if view && !view.allowed}
         <p class="note warn" role="alert">{t(`imNotAllowed_${view.reason}` as 'imNotAllowed_ranged')}</p>
       {:else if view && totals}
-        <table class="counts">
+        <div class="scroll"><table class="counts">
           <thead><tr><th></th><th>{t('imColNew')}</th><th>{t('imColChanged')}</th><th>{t('imColSame')}</th><th>{t('imColSkipped')}</th></tr></thead>
           <tbody>
             {#each rows as r (r.kind)}
@@ -129,7 +129,7 @@
               </tr>
             {/each}
           </tbody>
-        </table>
+        </table></div>
         {#if rows.some((r) => r.count.skipped)}
           <ul class="reasons">
             {#each rows.filter((r) => r.count.skipped) as r (r.kind)}
@@ -171,8 +171,9 @@
   .pv h3 { color: var(--green-text); }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .chip { border-radius: 22px 22px 22px 8px; }
+  .scroll { overflow-x: auto; max-width: 100%; }
   .counts { width: 100%; border-collapse: collapse; font-size: 13.5px; background: var(--paper); border-radius: 16px 16px 16px 6px; overflow: hidden; }
-  .counts th, .counts td { padding: 6px 8px; text-align: right; font-variant-numeric: tabular-nums; }
+  .counts th, .counts td { padding: 6px 5px; text-align: right; font-variant-numeric: tabular-nums; }
   .counts th[scope='row'], .counts thead th:first-child { text-align: left; font-weight: 500; }
   .counts thead th { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--quiet); font-weight: 400; }
   .counts tbody tr + tr { border-top: 1px solid var(--hairline); }
