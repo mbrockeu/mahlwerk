@@ -77,5 +77,11 @@
   .val small { font-size: 12px; letter-spacing: 0; font-weight: 500; }
   .invite { background: transparent; box-shadow: inset 0 0 0 2px var(--field-line); color: var(--quiet); }
   .invite .when { white-space: normal; }
+  @media (max-width: 299px) {
+    .wt { flex-direction: column; align-items: flex-start; padding: 10px 12px; gap: 6px; }
+    .t { flex: none; align-self: stretch; }
+    .when { white-space: normal; overflow-wrap: anywhere; }
+    .val { white-space: normal; }
+  }
   @media (min-width: 900px) { .wt { min-height: 72px; padding-left: 16px; padding-right: 24px; } .val { font-size: 34px; } }
 </style>

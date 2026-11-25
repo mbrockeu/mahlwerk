@@ -160,5 +160,17 @@
   .nums { font-size: 12px; font-weight: 600; }
   .why { font-size: 13px; color: var(--text); line-height: 1.3; }
   .then { font-size: 11px; color: var(--quiet); }
+  @media (max-width: 299px) {
+    .sg { padding: 2px 4px 6px; }
+    .head { padding: 4px 4px 4px 8px; }
+    .body { padding: 0 2px 4px; }
+    .main { flex-direction: column; align-items: flex-start; gap: 6px; padding: 8px 10px; }
+    .tx { align-self: stretch; }
+    .top { flex-wrap: wrap; gap: 2px 8px; }
+    .top strong { white-space: normal; overflow-wrap: anywhere; }
+    .tag { white-space: normal; max-width: 100%; overflow-wrap: anywhere; }
+    .nums, .why, .then { overflow-wrap: anywhere; }
+    .foci { flex-wrap: wrap; overflow: visible; }
+  }
   .add { align-self: center; background: var(--stone); border: 2px solid var(--hairline); }
 </style>

@@ -96,5 +96,12 @@
   .minus { padding: 0 14px; border: 2px solid var(--field-line); color: var(--text); font-family: var(--f-mono); font-size: 13px; }
   .btns button:active:not([disabled]) { transform: scale(0.97); }
   .btns button[disabled] { opacity: 0.45; cursor: default; }
+  @media (max-width: 299px) {
+    .water { padding: 12px 10px 12px 12px; }
+    .top { flex-wrap: wrap; gap: 2px 10px; }
+    .amt { white-space: normal; }
+    .btns { flex-wrap: wrap; }
+    .btns button { white-space: normal; flex: 1 1 auto; padding: 4px 10px; overflow-wrap: anywhere; }
+  }
   @media (min-width: 900px) { .water { justify-content: center; gap: 16px; padding: 18px 18px 18px 22px; } .glasses { height: 56px; } }
 </style>

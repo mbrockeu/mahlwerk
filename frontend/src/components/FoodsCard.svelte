@@ -205,6 +205,12 @@
   .share { grid-area: share; display: flex; align-items: center; gap: 8px; justify-self: end; width: 150px; }
   .share :global(svg) { flex: 1; min-width: 0; }
   .share small { font-size: 11px; color: var(--quiet); min-width: 34px; text-align: right; }
+  @media (max-width: 299px) {
+    .frow { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'nm' 'kcal' 'times' 'share'; padding: 10px 12px; }
+    .kcal { text-align: left; }
+    .share { width: auto; justify-self: stretch; }
+    .nm small { white-space: normal; }
+  }
   .pager { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .btns { display: flex; gap: 6px; }
   .round[disabled] { opacity: 0.4; cursor: default; }

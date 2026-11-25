@@ -138,4 +138,5 @@
   .tools { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 8px; }
   form { display: flex; gap: 8px; align-items: flex-end; }
   form .field { flex: 1; }
+  @media (max-width: 299px) { form { flex-wrap: wrap; } form .field { flex: 1 1 100%; } }
 </style>

@@ -290,6 +290,18 @@
   .dl { font-size: 13px; font-weight: 500; min-width: 3ch; text-align: right; }
   .kgv { min-width: 7ch; text-align: right; }
   .row-pill .t strong { font-size: 14px; }
+  /* very narrow (200 % zoom): fields and figures wrap onto their own lines */
+  @media (max-width: 299px) {
+    .entry .field, .body .field { flex: 1 1 100%; }
+    .body { flex-wrap: wrap; }
+    .card { padding: 16px 14px; }
+    .kpi { flex-wrap: wrap; }
+    .val { font-size: 36px; }
+    .tiles, .stats { grid-template-columns: minmax(0, 1fr); }
+    .tv { white-space: normal; overflow-wrap: anywhere; }
+    .bv { white-space: normal; }
+    .row-pill .v { flex-wrap: wrap; gap: 2px 12px; }
+  }
   @media (min-width: 1280px) {
     .cols { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(340px, 1fr); gap: 28px; align-items: start; }
     .card { padding: 26px 30px; border-radius: 44px 44px 44px 14px; }

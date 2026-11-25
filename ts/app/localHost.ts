@@ -28,6 +28,7 @@ import { yazioOf } from '../core/routes/yazio.ts';
 import { WRITE_METHODS, limitFor } from '../core/security.ts';
 import { hostLabel, safeLink } from '../core/webrecipes.ts';
 import type { Bridge } from './bridge.ts';
+import { BACKUP_ROUTES } from './backup.ts';
 import { bridgeCatalog } from './catalog.ts';
 import { AppCatalogRefresh } from './catalogDownload.ts';
 import type { Catalog } from '../core/catalog.ts';
@@ -44,7 +45,7 @@ export const APP_ENV: Record<string, string> = {
 };
 
 /** The routes of the app: all of core (the direct Yazio sign-in answers "switched off" like a server without it). */
-export const APP_ROUTES: Route[] = ROUTES;
+export const APP_ROUTES: Route[] = [...ROUTES, ...BACKUP_ROUTES]; // plus the iCloud file backup (backup.ts), app only
 
 export interface LocalAnswer { status: number; headers: Record<string, string>; body: Uint8Array | null }
 export type Dispatch = (method: string, path: string, query: string, headers: Record<string, string>, body?: Uint8Array | null) => Promise<LocalAnswer>;

@@ -6,5 +6,4 @@ import { initTheme } from './lib/theme.svelte';
 initTheme();
 mount(App, { target: document.getElementById('app')! });
 
-// iOS Safari ignores user-scalable=no; its pinch gesture is cancelled here instead.
-document.addEventListener('gesturestart', (event) => event.preventDefault());
+// Pinch zoom stays allowed (WCAG 1.4.4: text can be enlarged; in the iOS app there is no other way to zoom).
