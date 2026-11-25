@@ -2,7 +2,7 @@
 // (db.py: save_recipe, get_recipe, list_recipes, delete_recipe, the recipe_group functions, recipe_foods, last_eaten, eaten_since, known_catalog).
 import type { Db, Row } from '../db.ts';
 import { toJson } from '../db.ts';
-import { getFood, type FoodData, type FoodRow } from './foods.ts';
+import { getFood, getFoods, type FoodData, type FoodRow } from './foods.ts';
 import { itemRow, type ItemIn, type TemplateItemRow } from './templates.ts';
 
 export interface RecipeRow { id: number; food_id: number; portions: number; total_weight: number | null; created_by: number | null; updated_at: number; food: FoodRow; items: TemplateItemRow[] }
@@ -45,7 +45,11 @@ export async function getRecipe(db: Db, recipeId: number): Promise<RecipeRow | u
 /** All recipes, most recently changed first. */
 export async function listRecipes(db: Db): Promise<RecipeRow[]> {
   const rows = await db.all('SELECT * FROM recipe ORDER BY updated_at DESC, id DESC');
-  return Promise.all(rows.map((r) => withParts(db, r)));
+  // the items of all recipes in one query (each recipe's by position, ties in the order of the index), the foods in one more
+  const items = new Map<number, TemplateItemRow[]>();
+  for (const it of await db.all('SELECT * FROM recipe_item ORDER BY recipe_id, position, id')) items.set(it.recipe_id, [...(items.get(it.recipe_id) ?? []), itemRow(it)]);
+  const foods = await getFoods(db, rows.map((r) => r.food_id), true);
+  return rows.map((r) => ({ ...r, food: foods.get(r.food_id)!, items: items.get(r.id) ?? [] }) as RecipeRow);
 }
 
 /** Remove the recipe and its calculated food; diary entries and templates keep their copies. */
