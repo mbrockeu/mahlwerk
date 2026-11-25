@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { defineConfig, loadEnv } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 
@@ -39,9 +38,11 @@ export default defineConfig(({ mode }) => {
         name: 'mahlwerk-app-csp',
         transformIndexHtml: {
           order: 'post' as const,
-          handler: (html: string) => {
-            const hashes = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)]
-              .map((m) => `'sha256-${createHash('sha256').update(m[1]!).digest('base64')}'`);
+          handler: async (html: string) => {
+            // Web Crypto (global in Node and typed by the DOM lib; this config has no Node types)
+            const sha256 = async (text: string) => btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))));
+            const hashes = await Promise.all([...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)]
+              .map(async (m) => `'sha256-${await sha256(m[1]!)}'`));
             const self = "'self' mahlwerk-app:";
             const csp = [`default-src ${self}`, `script-src ${self} 'wasm-unsafe-eval' ${hashes.join(' ')}`, `style-src ${self} 'unsafe-inline'`,
               `img-src ${self} data: blob: https:`, `font-src ${self}`, `connect-src ${self}`, "frame-src 'none'", "object-src 'none'",
