@@ -1,11 +1,11 @@
 {
   "name": "mahlwerk-ts",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "description": "Mahlwerk backend in TypeScript: core (no node imports, shared with a later app) and the Node server.",
   "engines": {
-    "node": ">=22.5"
+    "node": ">=22.6"
   },
   "scripts": {
     "start": "node --experimental-strip-types --disable-warning=ExperimentalWarning server/main.ts",
