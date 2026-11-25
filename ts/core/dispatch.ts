@@ -3,6 +3,7 @@
 // collected, and an HttpError as `{"detail": ...}`. What only a network server needs (body limit, host check, CSRF header, the
 // static files, the security headers) stays with that host.
 import { currentUser } from './auth.ts';
+import { DateOutOfRange } from './dates.ts';
 import { HttpError, RES, type Req, type Res, type Route } from './http.ts';
 
 interface Compiled { route: Route; re: RegExp; names: string[] }
@@ -72,6 +73,7 @@ export function makeRouter(routes: Route[]) {
 /** The answer for an error: an HttpError as `{"detail": ...}` with its status and headers, anything else a 500 (logged). */
 export function errorRes(e: unknown): Res {
   if (e instanceof HttpError) return { status: e.status, body: { detail: e.detail }, headers: e.headers };
+  if (e instanceof DateOutOfRange) return { status: 422, body: { detail: 'date out of range' } }; // a range at the edge of the calendar
   console.error(e);
   return { status: 500, body: 'Internal Server Error' };
 }

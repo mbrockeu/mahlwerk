@@ -403,3 +403,12 @@ def test_requires_authentication(monkeypatch, tmp_path):
     monkeypatch.setenv("MAHLWERK_TRUSTED_PROXIES", "10.0.0.5")
     stranger = TestClient(create_app(str(tmp_path / "a.db")), client=("203.0.113.9", 1))
     assert stranger.get("/api/v1/insights").status_code == 401
+
+
+@pytest.mark.parametrize("path", [
+    "/api/v1/insights?from=9999-12-25&to=9999-12-31", "/api/v1/insights?from=0001-01-01&to=0001-01-05&compare=previous",
+    "/api/v1/review?week=9999-W52",
+])
+def test_a_range_at_the_edge_of_the_calendar_is_422_not_500(client, path):
+    r = client.get(path)
+    assert r.status_code == 422 and r.json() == {"detail": "date out of range"}

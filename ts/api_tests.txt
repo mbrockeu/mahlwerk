@@ -441,6 +441,9 @@ tests/test_insights.py::test_validation
 tests/test_insights.py::test_default_is_last_30_days_ending_today
 tests/test_insights.py::test_users_are_separated
 tests/test_insights.py::test_requires_authentication
+tests/test_insights.py::test_a_range_at_the_edge_of_the_calendar_is_422_not_500[/api/v1/insights?from=9999-12-25&to=9999-12-31]
+tests/test_insights.py::test_a_range_at_the_edge_of_the_calendar_is_422_not_500[/api/v1/insights?from=0001-01-01&to=0001-01-05&compare=previous]
+tests/test_insights.py::test_a_range_at_the_edge_of_the_calendar_is_422_not_500[/api/v1/review?week=9999-W52]
 tests/test_insights_long.py::test_range_number_and_bad_values
 tests/test_insights_long.py::test_ten_years_are_the_limit
 tests/test_insights_long.py::test_users_are_separated

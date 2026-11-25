@@ -172,6 +172,13 @@ def create_app(
                   "; ".join(f"{'.'.join(str(p) for p in e.get('loc', ()))} {e.get('type')}" for e in errors[:5]))
         return JSONResponse({"detail": jsonable_encoder(errors)}, status_code=422)
 
+    @app.exception_handler(OverflowError)
+    async def date_out_of_range(request, exc: OverflowError):
+        """A range at the edge of the calendar (a day before 0001-01-01 or after 9999-12-31): the request's fault, not the server's."""
+        if "date value out of range" not in str(exc):
+            raise exc
+        return JSONResponse({"detail": "date out of range"}, status_code=422)
+
     @app.get("/healthz")
     def healthz() -> dict:
         return {"status": "ok", "version": __version__}
