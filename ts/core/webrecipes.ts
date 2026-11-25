@@ -40,7 +40,9 @@ const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_IMAGE_BYTES = 6 * 1024 * 1024; // a picture, as sent (a compressed answer is counted decompressed)
 const MAX_BLOCKS = 40; // JSON-LD blocks read per page
 const MAX_BLOCK_BYTES = 1024 * 1024;
+const MAX_TAGS = 20_000; // script tags and comments looked at per page (a real page has a few hundred)
 const MAX_NODES = 3000; // objects looked at while searching for the recipe
+const MAX_QUEUE = 100_000; // values (objects, lists, everything else) taken from the queue while searching
 const MAX_DEPTH = 6;
 const MAX_INGREDIENTS = 100;
 export const MAX_NAME = 200;
@@ -67,7 +69,8 @@ export class FetchFailed extends Error {
 }
 
 const chars = (s: string): string[] => Array.from(s);
-const cut = (s: string, n: number): string => chars(s).slice(0, n).join('');
+/** The first `n` code points (only the head is split: 2n code units hold at least n code points). */
+const cut = (s: string, n: number): string => (s.length <= n ? s : chars(s.slice(0, 2 * n)).slice(0, n).join(''));
 const isDigits = (s: string): boolean => /^[0-9]+$/.test(s);
 const cmp = (a: string, b: string): number => { // Python compares by code point
   const x = chars(a), y = chars(b);
@@ -281,7 +284,9 @@ export function blockedHosts(env: Record<string, string | undefined>): string[] 
 }
 
 export function isBlocked(host: string, blocked: string[]): boolean {
-  const h = host.toLowerCase().replace(/\.+$/, '');
+  let end = host.length;
+  while (end && host[end - 1] === '.') end--; // trailing dots, without a `\.+$` scan from every dot of a long name
+  const h = host.slice(0, end).toLowerCase();
   return blocked.some((b) => h === b || h.endsWith('.' + b));
 }
 
@@ -377,20 +382,32 @@ export class Fetcher {
 // ---- reading the page ----
 
 /** The text of `<script type="application/ld+json">` blocks; everything else is ignored. Comments are skipped, so a block that is
- * commented out is not read. */
+ * commented out is not read. The page is scanned once with `indexOf` and quantifier-free patterns: a page is untrusted, and a pattern
+ * like `<script\b([^>]*)>` is quadratic on many `<script` without `>` (seconds of a blocked process for a few hundred KB). At most
+ * MAX_TAGS tags (scripts and comments) are looked at. */
 function ldScripts(page: string): string[] {
   const blocks: string[] = [];
-  const tag = /<!--[\s\S]*?(?:-->|$)|<script\b([^>]*)>/gi;
+  const open = /<!--|<script\b/gi;
+  const close = /<\/script\b/gi;
+  let tags = 0;
   let m: RegExpExecArray | null;
-  while (blocks.length < MAX_BLOCKS && (m = tag.exec(page)) !== null) {
-    if (m[0].startsWith('<!--') || m[1] === undefined) continue;
-    const type = /(?:^|\s)type\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/i.exec(m[1]);
+  while (blocks.length < MAX_BLOCKS && tags++ < MAX_TAGS && (m = open.exec(page)) !== null) {
+    if (m[0] === '<!--') {
+      const end = page.indexOf('-->', m.index + 4);
+      if (end === -1) break; // an open comment runs to the end of the page
+      open.lastIndex = end + 3;
+      continue;
+    }
+    const gt = page.indexOf('>', m.index + m[0].length);
+    if (gt === -1) break; // no tag can end any more
+    const type = /(?:^|\s)type\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/i.exec(page.slice(m.index + m[0].length, gt));
     const kind = (type?.[1] ?? type?.[2] ?? type?.[3] ?? '').split(';')[0]!.trim().toLowerCase();
-    const start = tag.lastIndex;
-    const end = page.slice(start).search(/<\/script\b/i);
-    const body = end === -1 ? page.slice(start) : page.slice(start, start + end);
-    tag.lastIndex = end === -1 ? page.length : start + end;
-    if (kind === 'application/ld+json' && body.length <= MAX_BLOCK_BYTES) blocks.push(body);
+    const start = gt + 1;
+    close.lastIndex = start;
+    const c = close.exec(page);
+    const end = c === null ? page.length : c.index;
+    open.lastIndex = end;
+    if (kind === 'application/ld+json' && end - start <= MAX_BLOCK_BYTES) blocks.push(page.slice(start, end));
   }
   return blocks;
 }
@@ -436,10 +453,11 @@ export function findRecipes(values: unknown[]): Obj[] {
   const found: Obj[] = [];
   const queue: [unknown, number][] = values.map((v) => [v, 0]);
   let seen = 0;
-  while (queue.length && seen < MAX_NODES) {
-    const [node, depth] = queue.shift()!;
+  // a read index instead of queue.shift() (which copies a long queue: quadratic on a page of big lists); every value taken counts
+  for (let next = 0; next < queue.length && next < MAX_QUEUE && seen < MAX_NODES; next++) {
+    const [node, depth] = queue[next]!;
     if (Array.isArray(node)) {
-      if (depth < MAX_DEPTH) queue.push(...node.slice(0, 500).map((n): [unknown, number] => [n, depth + 1]));
+      if (depth < MAX_DEPTH && queue.length < MAX_QUEUE) queue.push(...node.slice(0, 500).map((n): [unknown, number] => [n, depth + 1]));
       continue;
     }
     if (!isObj(node)) continue;
