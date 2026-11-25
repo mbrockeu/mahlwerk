@@ -1,7 +1,7 @@
 // The iCloud file backup of the app (the native side keeps the files in the app's iCloud folder; see ts/PORTING.md "App-Host"):
 // three routes that exist only in the app host, never in the server, reached through window.mahlwerkHost.request.
 // - GET  /api/v1/me/backup          -> {filename, zip_base64, counts, empty}: the same ZIP as GET /me/export (format 2, everything)
-// - GET  /api/v1/me/backup/state    -> {empty}: true for a fresh database (asked at every start, so it is cheap)
+// - GET  /api/v1/me/backup/state    -> {empty, counts}: empty = nothing of the person's own yet (Health values do not count)
 // - POST /api/v1/me/backup/restore  {zip_base64} -> like "replace" of the import, as one transaction; 422 for a broken file
 // The body is text on the native side, hence base64. Stored secrets (the Cookidoo account) are never part of an export.
 import { z } from 'zod';
@@ -17,10 +17,13 @@ import { fromB64, toB64 } from './bridge.ts';
 
 const restoreIn = z.object({ zip_base64: z.string().min(1) });
 
+/** A fresh database as far as the person's own entries go: no diary entry, own recipe, template, own product or goal. Weight,
+ * activity, sleep, workouts and water do not count: the Health sync fills them right after a new install, before the app asks
+ * whether to restore a backup. */
 async function isEmpty(db: Db, userId: number): Promise<boolean> {
   const row = await db.get(`SELECT
-      EXISTS (SELECT 1 FROM diary_entry WHERE user_id = ?) OR EXISTS (SELECT 1 FROM weight WHERE user_id = ?)
-      OR EXISTS (SELECT 1 FROM template WHERE user_id = ?) OR EXISTS (SELECT 1 FROM recipe WHERE created_by = ?)
+      EXISTS (SELECT 1 FROM diary_entry WHERE user_id = ?) OR EXISTS (SELECT 1 FROM template WHERE user_id = ?)
+      OR EXISTS (SELECT 1 FROM recipe WHERE created_by = ?) OR EXISTS (SELECT 1 FROM food WHERE created_by = ? AND source = 'own' AND found = 1)
       OR EXISTS (SELECT 1 FROM goal WHERE user_id = ?) AS has`, [userId, userId, userId, userId, userId]);
   return !row?.has;
 }
@@ -34,7 +37,7 @@ export const BACKUP_ROUTES: Route[] = [
 
   route('GET', '/api/v1/me/backup/state', async (req) => {
     const user = await sessionUser(req);
-    return { empty: await isEmpty(req.ctx.db, user.id) };
+    return { empty: await isEmpty(req.ctx.db, user.id), counts: await ownCounts(req.ctx.db, user.id) };
   }),
 
   route('POST', '/api/v1/me/backup/restore', async (req) => {
