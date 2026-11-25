@@ -34,6 +34,9 @@ All notable changes to this project are documented here. The format follows
   the admin area, checks the sha256, unpacks, verifies and swaps the file atomically. `scripts/build-catalog-release.sh` builds it by hand.
 - Search: the best matches come first (a whole word before the end of a compound before the start of a longer word), and the stored
   products are listed 15 at a time.
+- Search: `ß` and `ss` are the same ("heisse" finds "heiße"), and everyday names find basic foods whose official BLS name differs
+  ("heiße Schokolade", "Kakaomilch", "Kaba" find the BLS cocoa milk drinks).
+- Project site: a section on the iPhone app (coming soon to the App Store) with its two modes, and the page brought up to this version.
 - Photo recognition on the TS server also reads nutrition labels with the image model (the Python server uses the local OCR, if installed).
 - CI also checks the TS side (type check and tests).
 
@@ -42,6 +45,9 @@ All notable changes to this project are documented here. The format follows
   sheet, weight, recipes, calendar and page headings wrap instead of overflowing; a heading shrinks rather than breaking inside a word;
   action menus fit beside their trigger). Pinch zoom is allowed again, over the charts too.
 - Insights on phones: the header is one line; period, detail, compare and help moved into a sheet.
+- Search results show long names on up to two lines, and a catalogue product is only stored as a food when you log it (looking at it
+  and going back leaves "Your products" as it was).
+- `GET /summary/today`: `kcal_left` is whole kcal, the goal minus the eaten kcal rounded half up, as the day view counts.
 - App texts no longer say "this server"; the import table scrolls; the sheet leaves room for the focus ring at its sides.
 - A restore from a backup counts the introduction tour as seen, and a fresh state means nothing of the person's own yet.
 - Admin technical notes no longer show Python-only command lines.
