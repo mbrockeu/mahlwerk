@@ -2292,7 +2292,8 @@ class Store:
         """Everything the badges look at: all entries and weights (with their demo flag) and the recipe count."""
         with self._connect() as con:
             entries = con.execute(
-                "SELECT day, meal, food_id, name, brand, amount, per_100, demo FROM diary_entry WHERE user_id = ?",
+                # the order the index on (user_id, food_id) gives anyway, written out: the day sums add up in this order on both servers
+                "SELECT day, meal, food_id, name, brand, amount, per_100, demo FROM diary_entry WHERE user_id = ? ORDER BY food_id, id",
                 (user_id,),
             ).fetchall()
             weights = con.execute("SELECT day, demo FROM weight WHERE user_id = ?", (user_id,)).fetchall()

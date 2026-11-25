@@ -7,7 +7,6 @@ import { adherenceClass } from './analysis.ts';
 import { toOrdinal, weekday } from './dates.ts';
 import { asTimeline, goalOn, kcalOn, type GoalValues, type Timeline } from './goals.ts';
 import { goalBonuses } from './activityViews.ts';
-import { scale } from './nutrition.ts';
 import type { Db } from './db.ts';
 import { badgeInputs, badgesEarned, recordBadges, type BadgeEntry, type BadgeRow } from './store/badges.ts';
 import { workoutsForBadges } from './store/workouts.ts';
@@ -31,10 +30,12 @@ class Data {
 
   constructor(entries: BadgeEntry[], weightDays: string[], recipes: number, goal: Timeline | GoalValues | null, bonus: Record<string, number>, workouts: { day: string; minutes: number | null }[]) {
     for (const e of entries) {
-      const values = scale(e.per_100, e.amount);
       let day = this.days.get(e.day);
       if (!day) this.days.set(e.day, (day = { kcal: 0.0, protein: 0.0, fiber: 0.0, meals: new Set() }));
-      for (const key of ['kcal', 'protein', 'fiber'] as const) day[key] += values[key] || 0.0;
+      for (const key of ['kcal', 'protein', 'fiber'] as const) {
+        const v = e.per_100[key];
+        day[key] += (v == null ? null : (v * e.amount) / 100) || 0.0; // nutrition.scale for the three keys
+      }
       day.meals.add(e.meal);
       this.foods.add(e.food_id !== null ? JSON.stringify(['id', e.food_id]) : JSON.stringify(['name', e.name, e.brand]));
     }
