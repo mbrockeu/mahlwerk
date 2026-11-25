@@ -22,6 +22,8 @@ const LIMIT_PREFIXES: [string, number][] = [['/api/v1/me/yazio/files/', LIMIT_YA
 // 20 MB for the same diary). Unpacked it is limited again (48 MB).
 const LIMIT_IMPORT = 32 * 1024 * 1024;
 LIMITS['/api/v1/me/import/preview'] = LIMIT_IMPORT;
+// the app's backup restore (ts/app/backup.ts): the same ZIP as base64 in JSON (a third larger); the app host only
+LIMITS['/api/v1/me/backup/restore'] = Math.ceil(LIMIT_IMPORT * 4 / 3) + 1024;
 const PICTURE_PATH = /^\/api\/v1\/foods\/\d{1,12}\/image$/; // an own photo for a recipe (the interface shrinks it first)
 
 export function limitFor(path: string): number {

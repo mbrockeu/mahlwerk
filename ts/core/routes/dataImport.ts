@@ -33,7 +33,7 @@ const busy = () => new HttpError(429, 'the server is busy with another upload or
 const confirmIn = z.object({ token: pyStr(1, 64), mode: z.enum(['merge', 'replace']).default('merge') });
 
 /** One heavy job at a time on the whole server, shared with the Yazio import; one preview or import per person. */
-async function heavy<T>(req: Req, userId: number, fn: () => Promise<T>): Promise<T> {
+export async function heavy<T>(req: Req, userId: number, fn: () => Promise<T>): Promise<T> {
   const stage = importOf(req.ctx);
   if (!stage.begin(userId)) throw new HttpError(409, 'an upload, preview or import of yours is still running');
   const lock = yazioOf(req.ctx).stage;
@@ -55,7 +55,7 @@ async function heavy<T>(req: Req, userId: number, fn: () => Promise<T>): Promise
   }
 }
 
-const REASONS: Record<Mode, Record<string, string>> = {
+export const REASONS: Record<Mode, Record<string, string>> = {
   merge: { old_format: 'this file is from before stable ids (format 1): merging would double what is here. Replace, or import into an account without data' },
   replace: { ranged: 'this file holds only the days of a period: replacing would delete everything else. Export everything (no period) to replace' },
 };

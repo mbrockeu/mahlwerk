@@ -419,3 +419,31 @@ test('data import in the app: 15,000 diary entries (about 3 years) over the brid
   assert.ok(confirmOps < 1000, `${confirmOps} bridge ops`);
   target.close();
 });
+
+test('the iCloud backup routes: state, backup as base64, restore as replace (app host only)', async () => {
+  const native = fresh();
+  const { dispatch } = await openLocal({ bridge: native.bridge, schemaSql });
+  const request = hostRequest(dispatch);
+  assert.deepEqual(JSON.parse((await request({ method: 'GET', path: '/api/v1/me/backup/state' })).body!), { empty: true });
+  const day = new Date().toISOString().slice(0, 10);
+  await request({ method: 'POST', path: `/api/v1/water/${day}`, body: { add_ml: 250 } });
+  await request({ method: 'PUT', path: `/api/v1/weights/${day}`, body: { kg: 81.5 } });
+  assert.equal(JSON.parse((await request({ method: 'GET', path: '/api/v1/me/backup/state' })).body!).empty, false);
+  const backup = JSON.parse((await request({ method: 'GET', path: '/api/v1/me/backup' })).body!);
+  assert.match(backup.filename, /^mahlwerk-export-.+-\d{4}-\d{2}-\d{2}\.zip$/);
+  assert.equal(backup.empty, false);
+  assert.equal(backup.counts.weight, 1);
+  // a second, fresh device restores it
+  const other = fresh();
+  const two = await openLocal({ bridge: other.bridge, schemaSql });
+  const req2 = hostRequest(two.dispatch);
+  const restored = await req2({ method: 'POST', path: '/api/v1/me/backup/restore', body: { zip_base64: backup.zip_base64 } });
+  assert.equal(restored.status, 200, restored.body ?? '');
+  assert.equal(JSON.parse(restored.body!).replaced, true);
+  assert.equal(JSON.parse((await req2({ method: 'GET', path: '/api/v1/me/backup/state' })).body!).empty, false);
+  assert.equal(JSON.parse((await req2({ method: 'GET', path: `/api/v1/water/${day}` })).body!).ml ?? 250, 250);
+  // broken input: 422, nothing changed
+  assert.equal((await req2({ method: 'POST', path: '/api/v1/me/backup/restore', body: { zip_base64: 'bm8gemlw' } })).status, 422);
+  assert.equal((await req2({ method: 'POST', path: '/api/v1/me/backup/restore', body: { zip_base64: '***' } })).status, 422);
+  native.close(); other.close();
+});
