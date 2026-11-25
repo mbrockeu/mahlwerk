@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **The Docker image and the Compose file run the TypeScript server** (`node:22-slim`, port 8110, user 10001, data in `/data`, health
+  check on `/healthz`, clean stop on SIGTERM). The Cookidoo connector is built in (off until switched on) and labels are read by the image
+  model, so the build arguments `WITH_LABEL` and `WITH_COOKIDOO` are gone.
+- **The Python image is `Dockerfile.python`**: the fallback server and the command-line tools. The Compose service `tools` (profile
+  `tools`, same volume) runs them: `docker compose run --rm tools mahlwerk.catalog import-bls /data/BLS.xlsx`, `... mahlwerk.yazio ...`.
+- **The TypeScript server migrates schema version 20 to 21 itself** at start (one transaction), so it can take over a Python-era
+  database without a detour. Older versions are still refused, with a message that says to start the Python server (the `tools` service) once.
+
 ## [0.4.0] - 2026-11-25
 
 ### Added

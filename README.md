@@ -42,9 +42,18 @@ docker compose up -d
 
 Then open <http://localhost:8110> and create the first admin account on the setup page (the Compose file starts
 Mahlwerk with its own accounts, `MAHLWERK_AUTH=local`; do this right after starting). The database lives in the named volume `mahlwerk-data` (mounted at `/data` in
-the container). The image does not include the optional label reader; build it in with
-`docker compose build --build-arg WITH_LABEL=1` (about 200 MB more); the optional Cookidoo connector with
-`--build-arg WITH_COOKIDOO=1` (see [Cookidoo](#cookidoo-optional)). **Back up the whole volume**: besides the database
+the container). The image runs the [TypeScript server](#typescript-server) on Node 22; the Cookidoo connector is built in
+and off until you switch it on (see [Cookidoo](#cookidoo-optional)), and labels are read by the image model you set up for
+[photo recognition](docs/integrations.md#photo-recognition). The command-line tools (catalogue import, Yazio) and the Python
+fallback server are in a second image, started through the `tools` profile of the Compose file:
+
+```sh
+docker compose run --rm tools mahlwerk.catalog import-bls /data/BLS.xlsx   # same arguments as without Docker, the file must be in the volume
+docker compose run --rm tools mahlwerk.catalog import-off
+docker compose run --rm -p 127.0.0.1:8110:8110 tools uvicorn mahlwerk.main:app --factory --host 0.0.0.0 --port 8110   # fallback server, stop "mahlwerk" first
+```
+
+**Back up the whole volume**: besides the database
 it holds the key file (`mahlwerk.db.key`) that unlocks stored credentials (see [Stored credentials](#stored-credentials)).
 
 > **Reaching it from other devices.** The Compose file publishes the port on `127.0.0.1` only. Put a reverse proxy
@@ -55,7 +64,7 @@ it holds the key file (`mahlwerk.db.key`) that unlocks stored credentials (see [
 
 ### Without Docker
 
-You need Python 3.11 or newer and Node 20 or newer (the Docker image uses Python 3.13 and Node 22).
+You need Python 3.11 or newer and Node 20 or newer (the Docker images use Node 22 for the server and Python 3.13 for the tools).
 
 ```sh
 cd frontend && npm ci && npm run build && cd ..     # builds the interface into web/dist
@@ -73,8 +82,8 @@ proxy with a valid certificate. Append `?engine=wasm` to the URL to force the bu
 
 `ts/` holds a second implementation of the whole `/api/v1` in TypeScript. It answers like the Python server on the same SQLite
 file (schema version 21) and is the main server from 0.4.0 on. **The Python server stays as a fallback**: same API, same database
-file, same `MAHLWERK_*` settings, so you can stop one and start the other on the same data. The Docker image and Compose file still
-run the Python server.
+file, same `MAHLWERK_*` settings, so you can stop one and start the other on the same data. The Docker image and Compose file run the
+TypeScript server; the Python server and the command-line tools are in `Dockerfile.python` (Compose service `tools`).
 
 Requirements: Node 22.6 or newer (it uses the built-in `node:sqlite` and runs the TypeScript sources directly, no build step) and the
 built interface in `web/dist`.
@@ -88,8 +97,10 @@ npm start                                           # listens on 127.0.0.1:8120
 
 - `MAHLWERK_PORT` (default `8120`) and `MAHLWERK_HOST` (default `127.0.0.1`) set where it listens; every other variable of
   [Configuration](#configuration) is read the same way, including `MAHLWERK_DB` and `MAHLWERK_WEB_DIR`.
-- It never migrates the database: it starts only on schema version 21 and refuses any other. Start the Python server once on an
-  older file to migrate it.
+- It migrates a database of schema version 20 to 21 itself (in one transaction) and refuses older ones: start the Python server
+  once on such a file (in Docker: the `tools` service) to bring it up to date.
+- Docker: `docker compose up -d` runs it (`Dockerfile`: `node:22-slim`, port 8110, user 10001, data in `/data`); the Python tools are the
+  `tools` service (see Quick start).
 - Recipe pictures need `sharp` (installed by `npm ci`); the label reader needs an image model (see
   [Photo recognition](docs/integrations.md#photo-recognition)) instead of the local OCR of the Python server.
 - Only the TS server (and the app) can **import an own export** (see below).
@@ -406,7 +417,7 @@ Mahlwerk makes no connection that you did not switch on or ask for, and has no a
 | Own recipe photos | nobody | – | nothing: the photo goes from your browser to your server only |
 | What still fits today | nobody | – | nothing: it is computed on the server from your own data |
 
-The label reader (OCR) and the barcode detector run on your own machine. The interface loads no fonts, scripts or images from
+The barcode detector runs on your own machine, and so does the label reader of the Python server (OCR); the TypeScript server reads labels with the image model you set up. The interface loads no fonts, scripts or images from
 other sites.
 
 ## Configuration
@@ -475,6 +486,9 @@ once; it is a separate SQLite file that the server only reads:
 .venv/bin/python -m mahlwerk.catalog import-off --source off.csv.gz  # or from a file you downloaded yourself
 ```
 
+With Docker, use the `tools` service instead (same volume, same arguments, file paths as seen inside the container, e.g. `/data/off.csv.gz`):
+`docker compose run --rm tools mahlwerk.catalog import-off`. The admin area's "refresh" does the same without a command line.
+
 The import streams the official Open Food Facts CSV export (about 1.5 GB gzip, nothing is unpacked to disk), keeps
 products of the chosen countries that have a name and an energy value, and drops implausible values. Expect a download of
 1.5 GB, roughly 5 to 15 minutes of CPU time and a catalogue in the order of 100 to 300 MB for a large country;
@@ -507,6 +521,9 @@ then:
 .venv/bin/python -m mahlwerk.catalog import-bls BLS_4_0_Daten_2025_DE.xlsx   # a CSV export of the same table works too
 ```
 
+With Docker: copy the file into the volume and run the tool there, e.g.
+`docker compose run --rm -v "$PWD:/in:ro" tools mahlwerk.catalog import-bls /in/BLS_4_0_Daten_2025_DE.xlsx`.
+
 The import reads the workbook with the standard library only (about 10 seconds), finds the nutrients by the BLS tags
 of the header row, converts units, and prints a summary (rows, kept, discarded with reasons, missing tags). It writes
 its own file (`catalog-bls.db` next to the other one, or `MAHLWERK_CATALOG_BLS_DB`) and replaces it atomically; the
@@ -524,7 +541,7 @@ per portion. **It uses an unofficial interface** (the community package [`cookid
 MIT) that Cookidoo does not offer or support and that can stop working at any time. Using it is your own responsibility;
 check that it is in line with Cookidoo's terms of use for your account.
 
-- **Install:** `pip install "mahlwerk[cookidoo]"` (needs Python 3.12 or newer; Docker: `--build-arg WITH_COOKIDOO=1`).
+- **Install:** `pip install "mahlwerk[cookidoo]"` (needs Python 3.12 or newer; for the Python server only. The TypeScript server, and so the Docker image, has the connector built in).
   Without it Mahlwerk starts as usual and the connector card in the admin area says "Not installed".
 - **Configure the shared household account** in the admin area (card Cookidoo: e-mail address, password, country, language;
   then "Check connection") and switch the connector on. Or set `MAHLWERK_COOKIDOO_EMAIL` and `MAHLWERK_COOKIDOO_PASSWORD`
@@ -654,6 +671,7 @@ stand-in that follows the answers the public clients document, so expect to adju
    `--db FILE` or `MAHLWERK_DB` names the database). The summary lists days, entries by kind, foods created and
    reused, weights, water, the goal, everything skipped with the reason and nutrient keys that are not known.
 4. Run it again whenever you like: entries already imported are recognised and added nothing twice.
+   With Docker: `docker compose run --rm -v "$PWD/yazio-export:/in:ro" tools mahlwerk.yazio import --user NAME --dir /in --dry-run`.
 5. Changed your mind? `python -m mahlwerk.yazio list` shows the batches, `remove --batch ID` (or Profile, Imported data)
    takes one back: what it added and you have not changed since is deleted, everything else stays.
 
