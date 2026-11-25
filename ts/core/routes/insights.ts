@@ -12,7 +12,7 @@ import * as insights from '../insights.ts';
 import { pyInt } from '../models/common.ts';
 import * as review from '../review.ts';
 import { entrySpan, badgesEarned } from '../store/badges.ts';
-import { entriesBetween } from '../store/diary.ts';
+import { curveBetween, entriesBetween } from '../store/diary.ts';
 import { goalTimeline } from '../store/goals.ts';
 import { getSettings } from '../store/settings.ts';
 import { sleepBetween } from '../store/workouts.ts';
@@ -102,7 +102,7 @@ async function getNutrient(req: Req) {
   if (info === null) throw new HttpError(422, 'unknown nutrient key');
   const uid = req.user!.id;
   const [first, last] = await resolvePeriod(req, from, to, undefined);
-  const rows = await entriesBetween(db, uid, first, last);
+  const rows = await curveBetween(db, uid, first, last, key); // only the values the curve adds up
   const resolved = analysis.resolveGranularity(gran, daysBetween(first, last) + 1);
   const tl = await goalTimeline(db, uid);
   const series = analysis.nutrientSeries(rows, key, first, last, resolved);

@@ -87,6 +87,20 @@ export async function macrosBetween(db: Db, userId: number, first: string, last:
   });
 }
 
+/** What the curve of one nutrient (`key`, a known key) reads of each entry in the range (by day, then id): the amount, kcal and the
+ * value per 100 g (`per_100` holds kcal and `key`) and the further nutrient `key` (`extra` holds it only where the entry has it,
+ * also as null). Multi-path json_extract: JSON text with the numbers as stored, so the same doubles as parsing the columns. */
+export async function curveBetween(db: Db, userId: number, first: string, last: string, key: string) {
+  const path = `$.${key}`;
+  const rows = await db.all("SELECT day, amount, json_extract(per_100, '$.kcal', ?) AS p, json_extract(COALESCE(NULLIF(extra, ''), '{}'), ?, ?) AS e, "
+    + "json_type(COALESCE(NULLIF(extra, ''), '{}'), ?) IS NOT NULL AS has FROM diary_entry WHERE user_id = ? AND day BETWEEN ? AND ? ORDER BY day, id",
+  [path, path, path, path, userId, first, last]);
+  return rows.map((r) => {
+    const [kcal, value] = JSON.parse(r.p);
+    return { day: r.day as string, amount: r.amount as number, per_100: { kcal, [key]: value } as Per100, extra: r.has ? { [key]: JSON.parse(r.e)[0] } : {} };
+  });
+}
+
 /** Days with at least one entry up to `last`, newest first. */
 export async function loggedDaysUntil(db: Db, userId: number, last: string): Promise<string[]> {
   return (await db.all('SELECT DISTINCT day FROM diary_entry WHERE user_id = ? AND day <= ? ORDER BY day DESC', [userId, last])).map((r) => r.day);
