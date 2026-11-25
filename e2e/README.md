@@ -10,7 +10,7 @@ meant to decide whether the TypeScript backend (`ts/`) can replace the Python on
 (cd frontend && PATH=/opt/node22/bin:$PATH npm run build)
 (cd e2e && PATH=/opt/node22/bin:$PATH npm install)
 
-e2e/run.sh python            # Python server (uses the worktree's src/, the venv of /root/mahlwerk)
+e2e/run.sh python            # Python server (the src/ of this checkout; MAHLWERK_PY=.venv/bin/python if it is not python3)
 e2e/run.sh ts                # TypeScript server (ts/server/main.ts)
 e2e/run.sh python tests/day.test.mjs     # only some files
 ```
