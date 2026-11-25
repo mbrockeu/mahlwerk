@@ -15,6 +15,8 @@ const NUTRIENTS: Record<Exclude<Per100Key, 'kcal'> | 'kcal', string> = {
   sugars: 'sugars_100g', fiber: 'fiber_100g', protein: 'proteins_100g', salt: 'salt_100g',
 };
 
+const MAX_ANSWER = 2 * 1024 * 1024; // one product with the fields asked for is a few KB; a longer answer is an error (too_large)
+
 /** Open Food Facts could not be reached or answered with an error. */
 export class UpstreamError extends Error {}
 
@@ -54,7 +56,7 @@ export async function fetchProduct(ctx: Ctx, base: string, code: string): Promis
   const url = `${base}/api/v2/product/${code}?${new URLSearchParams({ fields: FIELDS })}`;
   let res;
   try {
-    res = await outgoing(ctx).fetch('off', { url, headers: { 'user-agent': `Mahlwerk/${VERSION} (${contact})`, accept: '*/*' }, timeout: 8 });
+    res = await outgoing(ctx).fetch('off', { url, headers: { 'user-agent': `Mahlwerk/${VERSION} (${contact})`, accept: '*/*' }, timeout: 8, maxBytes: MAX_ANSWER });
   } catch (e) {
     if (e instanceof OutError) throw new UpstreamError(e.message);
     throw e;
