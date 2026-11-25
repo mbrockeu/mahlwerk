@@ -8,7 +8,7 @@ All notable changes to this project are documented here. The format follows
 ## [0.4.0] - 2026-11-25
 
 ### Added
-- **TypeScript server.** `ts/` holds a second implementation of the whole `/api/v1` on Node 22.5 or newer, on the same SQLite file and
+- **TypeScript server.** `ts/` holds a second implementation of the whole `/api/v1` on Node 22.6 or newer, on the same SQLite file and
   with the same answers; the Python test suite is the contract (`ts/api-tests.sh`) and a Playwright suite (`e2e/`) runs the interface
   against either server. It is now the main server. The Python server stays as a fallback: same API, same database, same settings, and
   you can switch back and forth. Start it with `cd ts && npm ci && npm start` (`MAHLWERK_PORT`, default 8120, and `MAHLWERK_HOST`, default
