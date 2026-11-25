@@ -424,14 +424,18 @@ test('the iCloud backup routes: state, backup as base64, restore as replace (app
   const native = fresh();
   const { dispatch } = await openLocal({ bridge: native.bridge, schemaSql });
   const request = hostRequest(dispatch);
-  assert.deepEqual(JSON.parse((await request({ method: 'GET', path: '/api/v1/me/backup/state' })).body!), { empty: true });
+  assert.equal(JSON.parse((await request({ method: 'GET', path: '/api/v1/me/backup/state' })).body!).empty, true);
   const day = new Date().toISOString().slice(0, 10);
   await request({ method: 'POST', path: `/api/v1/water/${day}`, body: { add_ml: 250 } });
   await request({ method: 'PUT', path: `/api/v1/weights/${day}`, body: { kg: 81.5 } });
+  await request({ method: 'POST', path: '/api/v1/health/sync', body: { days: [{ day, steps: 5000 }] } });
+  const healthOnly = JSON.parse((await request({ method: 'GET', path: '/api/v1/me/backup/state' })).body!);
+  assert.equal(healthOnly.empty, true); // weight, water and Health values alone: still "fresh", the backup is offered
+  assert.equal(healthOnly.counts.weight, 1);
+  await request({ method: 'PUT', path: '/api/v1/me/goal', body: { kcal: 2000, protein: 100, carbs: 220, fat: 70 } });
   assert.equal(JSON.parse((await request({ method: 'GET', path: '/api/v1/me/backup/state' })).body!).empty, false);
   const backup = JSON.parse((await request({ method: 'GET', path: '/api/v1/me/backup' })).body!);
   assert.match(backup.filename, /^mahlwerk-export-.+-\d{4}-\d{2}-\d{2}\.zip$/);
-  assert.equal(backup.empty, false);
   assert.equal(backup.counts.weight, 1);
   // a second, fresh device restores it
   const other = fresh();
