@@ -5,7 +5,7 @@ set -e
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 PY=${MAHLWERK_PY:-python3}  # a Python with the test dependencies (pip install -e ".[test]"), e.g. MAHLWERK_PY=.venv/bin/python
-NODE=${MAHLWERK_TS_NODE:-/opt/node22/bin/node}
+NODE=${MAHLWERK_TS_NODE:-node}
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 export PYTHONPATH="$root/src"

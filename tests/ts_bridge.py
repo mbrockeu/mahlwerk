@@ -29,7 +29,7 @@ from pathlib import Path
 import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
-NODE = os.environ.get("MAHLWERK_TS_NODE", "/opt/node22/bin/node")
+NODE = os.environ.get("MAHLWERK_TS_NODE", "node")  # Node 22.6 or newer
 _host: dict = {}
 
 

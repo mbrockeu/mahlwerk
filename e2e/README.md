@@ -7,8 +7,8 @@ meant to decide whether the TypeScript backend (`ts/`) can replace the Python on
 
 ```sh
 # once: the frontend build the server serves (web/dist) and the test dependency
-(cd frontend && PATH=/opt/node22/bin:$PATH npm run build)
-(cd e2e && PATH=/opt/node22/bin:$PATH npm install)
+(cd frontend && npm run build)
+(cd e2e && npm install)
 
 e2e/run.sh python            # Python server (the src/ of this checkout; MAHLWERK_PY=.venv/bin/python if it is not python3)
 e2e/run.sh ts                # TypeScript server (ts/server/main.ts)

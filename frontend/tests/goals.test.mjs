@@ -1,4 +1,4 @@
-// Run: PATH=/opt/node22/bin:$PATH node --experimental-strip-types --test tests/
+// Run: node --experimental-strip-types --test tests/
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as g from '../src/lib/goals.ts';

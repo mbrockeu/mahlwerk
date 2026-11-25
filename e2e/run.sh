@@ -7,7 +7,6 @@ set -u
 target=${1:-}; shift || true
 case "$target" in python|ts|app) ;; *) echo "usage: $0 <python|ts|app> [tests/x.test.mjs ...]" >&2; exit 2;; esac
 here=$(cd "$(dirname "$0")" && pwd); root=$(dirname "$here")
-export PATH=/opt/node22/bin:$PATH
 if [ -z "${MW_WRAPPED:-}" ]; then   # shared machine: serialize, one browser at a time, capped
   MW_WRAPPED=1 exec flock /tmp/mahlwerk-ts-tests.lock systemd-run --scope -q -p CPUQuota=600% -p MemoryMax=4G \
     nice env MW_WRAPPED=1 "$0" "$target" "$@"
