@@ -440,6 +440,7 @@ test('the iCloud backup routes: state, backup as base64, restore as replace (app
   const restored = await req2({ method: 'POST', path: '/api/v1/me/backup/restore', body: { zip_base64: backup.zip_base64 } });
   assert.equal(restored.status, 200, restored.body ?? '');
   assert.equal(JSON.parse(restored.body!).replaced, true);
+  assert.equal(JSON.parse((await req2({ method: 'GET', path: '/api/v1/me' })).body!).settings.tour_seen, true); // no tour after a restore
   assert.equal(JSON.parse((await req2({ method: 'GET', path: '/api/v1/me/backup/state' })).body!).empty, false);
   assert.equal(JSON.parse((await req2({ method: 'GET', path: `/api/v1/water/${day}` })).body!).ml ?? 250, 250);
   // broken input: 422, nothing changed

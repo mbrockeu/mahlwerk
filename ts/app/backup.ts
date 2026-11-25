@@ -12,6 +12,7 @@ import { buildExport, fileName } from '../core/export.ts';
 import type { Db } from '../core/db.ts';
 import { HttpError, parse, route, type Route } from '../core/http.ts';
 import { heavy, REASONS } from '../core/routes/dataImport.ts';
+import { setSetting } from '../core/store/settings.ts';
 import { fromB64, toB64 } from './bridge.ts';
 
 const restoreIn = z.object({ zip_base64: z.string().min(1) });
@@ -46,7 +47,11 @@ export const BACKUP_ROUTES: Route[] = [
       const result = await req.ctx.db.tx(async (tx) => {
         const reason = modesAllowed(file, await ownCounts(tx, user.id)).replace;
         if (reason) throw new HttpError(422, REASONS.replace[reason]!);
-        return runImport(tx, user, file, 'replace', true, req.ctx.now());
+        const done = await runImport(tx, user, file, 'replace', true, req.ctx.now());
+        // whoever restores a backup is no new user: the introduction tour does not start again (a backup made before the tour
+        // was seen, or the demo file, carries no tour_seen)
+        await setSetting(tx, user.id, 'tour_seen', true);
+        return done;
       });
       return { replaced: true, imported: result.counts, deleted: result.deleted };
     });
