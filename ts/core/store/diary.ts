@@ -46,6 +46,14 @@ export async function getEntry(db: Db, userId: number, entryId: number): Promise
   return row ? entryRow(row) : undefined;
 }
 
+/** Several entries of the user at once, in the order of `ids` (all must exist). */
+export async function getEntries(db: Db, userId: number, ids: number[]): Promise<EntryRow[]> {
+  if (!ids.length) return [];
+  const rows = await db.all('SELECT * FROM diary_entry WHERE user_id = ? AND id IN (SELECT value FROM json_each(?))', [userId, JSON.stringify(ids)]);
+  const byId = new Map(rows.map((r) => [r.id as number, r]));
+  return ids.map((i) => entryRow(byId.get(i)!));
+}
+
 /** Change amount and meal; with `foodId` and its snapshot `copy` the entry becomes that food (day and created_at stay). */
 export async function updateEntry(db: Db, userId: number, entryId: number, amount: number | null, meal: string | null, foodId: number | null = null, copy: Snapshot | null = null): Promise<boolean> {
   return db.tx(async (tx) => {
