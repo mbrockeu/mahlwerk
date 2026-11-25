@@ -5,6 +5,62 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-25
+
+### Added
+- **TypeScript server.** `ts/` holds a second implementation of the whole `/api/v1` on Node 22.5 or newer, on the same SQLite file and
+  with the same answers; the Python test suite is the contract (`ts/api-tests.sh`) and a Playwright suite (`e2e/`) runs the interface
+  against either server. It is now the main server. The Python server stays as a fallback: same API, same database, same settings, and
+  you can switch back and forth. Start it with `cd ts && npm ci && npm start` (`MAHLWERK_PORT`, default 8120, and `MAHLWERK_HOST`, default
+  `127.0.0.1`; all other `MAHLWERK_*` variables as before). The TS server never migrates the database: it expects schema version 21 and
+  refuses any other (start the Python server once on an older file). Not available on the Python server: the data import, see below.
+- **The app without a server.** The interface also builds as an app (`cd frontend && npm run build:app`): the same interface and
+  the same core run in the iOS app's web view, with the data in SQLite on the phone, a bridge to the native side for SQL, HTTP, the
+  keychain and file downloads, and the Health sync, the history and the day summary answered in the app. Yazio file import, import of
+  an own export, Cookidoo and the barcode lookup work there; photo recognition, webhooks, access keys and web recipes are off. A phone
+  that had the app before is migrated to schema 21 in one transaction.
+- **Data import.** Profile, "Import my data": take a Mahlwerk export (the ZIP or its `mahlwerk-export.json`) back in, to move between
+  server and app, onto a new device or to bring a backup back. A preview shows per kind what is new, changed, unchanged and skipped (and
+  why); then **merge** (deletes nothing; rows that exist are matched by their stable id, a shared product that is newer here keeps its
+  version, the goal of the file counts from today) or **replace** (with a warning of what goes first). One transaction, the file's
+  rows are checked like every write, nothing is echoed back on an error. Routes `GET /me/import`, `POST /me/import/preview` and
+  `/me/import/confirm`; TS server and app only. The app reminds you to export now and then.
+- **Schema version 21 with stable ids.** Diary entries, workouts, fasts, templates, recipes, recipe groups and foods get a random `uid` that
+  never changes; the migration only adds the column and a trigger. **Export format 2** carries the ids, the links from entries and recipe
+  items to their foods, the products and recipe groups the data uses, and the fields a Health sync needs after an import; format 1 files
+  are still read.
+- **Food catalogue as a monthly release.** A GitHub Actions workflow builds the Open Food Facts catalogue for Germany once a month and
+  publishes it as one SQLite file below the release `catalog`, with a manifest (address, size, sha256). The app loads it with "refresh" in
+  the admin area, checks the sha256, unpacks, verifies and swaps the file atomically. `scripts/build-catalog-release.sh` builds it by hand.
+- Search: the best matches come first (a whole word before the end of a compound before the start of a longer word), and the stored
+  products are listed 15 at a time.
+- Photo recognition on the TS server also reads nutrition labels with the image model (the Python server uses the local OCR, if installed).
+- CI also checks the TS side (type check and tests).
+
+### Changed
+- Accessibility: the interface reflows at 200 % zoom and down to very narrow widths (navigation, Today, Insights, Profile, Badges, the add
+  sheet, weight, recipes, calendar and page headings wrap instead of overflowing; a heading shrinks rather than breaking inside a word;
+  action menus fit beside their trigger). Pinch zoom is allowed again, over the charts too.
+- Insights on phones: the header is one line; period, detail, compare and help moved into a sheet.
+- App texts no longer say "this server"; the import table scrolls; the sheet leaves room for the focus ring at its sides.
+- A restore from a backup counts the introduction tour as seen, and a fresh state means nothing of the person's own yet.
+- Admin technical notes no longer show Python-only command lines.
+
+### Security
+- Web recipe parsing and `strip()` on crafted text (also the Cookidoo login page) run in linear time (ReDoS).
+- The server reads a request body only after the route and the caller are known, so an unauthenticated request cannot make it read or
+  buffer a large body.
+- Import: the products of a file are checked like the food routes; strict limits on size, packed-to-unpacked ratio and number of objects.
+- Answers of Open Food Facts and of webhook targets have a size limit.
+- Staged uploads are dropped when they expire, before every request.
+- Dates at the edge of the calendar answer 422 instead of 500; the insights leave out a stored nutrient this version does not know.
+
+### Performance
+- Health sync reads the synced days up front and writes only the changes; users are looked up without a transaction per request.
+- Product search filters in SQL and reads only the returned rows; badges, the history, the nutrient curve, recipes, templates, diary
+  copy and template apply read only what they need and in fewer queries.
+- Export: faster rounding and CRC, one query per section, no indentation in the JSON.
+
 ## [0.3.0] - 2026-11-24
 
 ### Added
