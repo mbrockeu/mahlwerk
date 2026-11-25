@@ -56,6 +56,7 @@
   .panel { position: relative; max-width: 640px; display: flex; flex-direction: column; gap: 10px; }
   /* the week arrows sit in the card's free top right corner, so the card lines up with its neighbour */
   .picker { position: absolute; top: 16px; right: 16px; z-index: 1; display: flex; gap: 6px; }
+  @media (max-width: 359px) { .picker { position: static; justify-content: flex-end; } }
   .round[disabled] { opacity: 0.4; cursor: default; }
   .skel { height: 300px; border-radius: 44px 14px 44px 44px; background: var(--hairline); opacity: 0.5; }
 </style>

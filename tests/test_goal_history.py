@@ -84,7 +84,7 @@ def test_version_18_database_keeps_its_goal_as_the_goal_since_the_start(tmp_path
     con.commit()
     con.close()
     store = Store(path)
-    assert sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0] == 20
+    assert sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0] == 21
     goal = {"kcal": 2150, "protein": 120, "carbs": 230, "fat": 70, "water_ml": 2000, "steps": 9000}
     assert store.get_goal(1) == goal
     assert store.goal_history(1) == [{"valid_from": goals.SINCE_START, "changed_at": None, **goal}]
@@ -149,6 +149,14 @@ def test_history_endpoint_newest_first(changed, monkeypatch):
     data = changed.get("/api/v1/me/goal/history").json()
     assert [(h["valid_from"], h["kcal"]) for h in data] == [(iso(D2), 1800), (iso(D1), 1000)]
     assert changed.get("/api/v1/me").json()["goal"]["kcal"] == 1800
+
+
+def test_a_save_removes_the_rows_of_later_days(changed, monkeypatch):
+    """Saved where it was already the next day (or with a clock ahead), then again here: the later row must not win on its day."""
+    set_goal(changed, monkeypatch, D1, {**A, "kcal": 1200})
+    data = changed.get("/api/v1/me/goal/history").json()
+    assert [(h["valid_from"], h["kcal"]) for h in data] == [(iso(D1), 1200)]
+    assert changed.get(f"/api/v1/diary/{iso(D2, 3)}").json()["goal"]["kcal"] == 1200
 
 
 def test_insights_judge_each_day_against_its_own_goal(changed):

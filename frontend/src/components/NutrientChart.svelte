@@ -123,7 +123,7 @@
 
 <style>
   .wrap { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-  svg { display: block; touch-action: pan-y; border-radius: 12px; }
+  svg { display: block; touch-action: pan-y pinch-zoom; border-radius: 12px; }
   svg:focus-visible { outline: 3px solid var(--focus-base); outline-offset: 2px; }
   .readout { font-size: 13px; font-weight: 500; min-height: 34px; display: flex; align-items: center; }
   .lab { font-family: var(--f-mono); font-size: 11px; fill: var(--quiet); }

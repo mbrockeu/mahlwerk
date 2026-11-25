@@ -905,6 +905,21 @@ export interface CookidooAccount {
 }
 export type CookidooScope = 'shared' | 'own';
 
+/** The import of an own data export (POST /me/import/preview, /me/import/confirm). */
+export type ImportKind = 'foods' | 'recipes' | 'recipe_groups' | 'diary' | 'templates' | 'weight' | 'water' | 'activity' | 'sleep' | 'workouts' | 'fasting'
+  | 'goal' | 'goal_history' | 'settings' | 'badges' | 'webhooks';
+export type ImportMode = 'merge' | 'replace';
+/** GET /me/import: only the TS server and the app have it (the Python server answers 404: no import offered). */
+export interface ImportInfo { available: boolean; max_bytes: number; max_unpacked_bytes: number; formats: number[] }
+export interface ImportCount { new: number; changed: number; unchanged: number; skipped: number; reasons: Record<string, number> }
+export interface ImportModeView { allowed: boolean; reason: string | null; reason_text: string | null; counts: Record<ImportKind, ImportCount> | null; deleted: Record<string, number> | null }
+export interface ImportPreview {
+  token: string; format_version: number; exported_at: string | null; app_version: string | null;
+  account: { username: string | null; display_name: string | null }; same_account: boolean; range: { from: string | null; to: string | null };
+  mode_allowed: ImportMode[]; modes: Record<ImportMode, ImportModeView>; warnings: { code: string; count: number }[];
+}
+export interface ImportResult { mode: ImportMode; counts: Record<ImportKind, ImportCount>; deleted: Record<string, number> | null; warnings: { code: string; count: number }[] }
+
 /** The Yazio import in the app: files waiting for a preview, and the direct one-time sign-in. */
 interface YazioStage { token: string; source: 'upload' | 'login'; files: Record<string, number> }
 export interface YazioRun { state: 'running' | 'done' | 'error' | 'cancelled'; phase: string; done: number; total: number; requests: number; error: string | null; error_kind: string | null }

@@ -109,6 +109,7 @@
   input[aria-invalid='true'] { border-color: var(--warn); }
   .acts { display: flex; flex-wrap: wrap; gap: 8px; }
   .acts .btn { min-height: 44px; }
+  @media (max-width: 299px) { .who { flex-direction: column; gap: 10px; padding: 14px; } .nm { font-size: 26px; } }
   @media (min-width: 900px) {
     .who { padding: 22px 30px 22px 24px; gap: 22px; }
     .av { width: 84px; height: 84px; font-size: 40px; }

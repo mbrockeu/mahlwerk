@@ -2,8 +2,10 @@
 
 There is deliberately no export of the whole database: every function here takes ONE user and reads only rows of that user
 (Store.export_*, which name their columns). Passwords, sessions, access keys, webhook secrets, stored secrets and the identity
-at a sign-in provider are not part of any table read here. Food records are shared by the household and are not exported as
-such; the diary, templates and recipes carry the copies of the values they were made with.
+at a sign-in provider are not part of any table read here, and neither are pictures. Food records are shared by the household;
+the diary, templates and recipes carry the copies of the values they were made with, and `foods` holds the products the user made
+or uses (so that an import elsewhere can bring them and the links along). Since format 2 every row that has one carries its stable
+id (`uid`) and links name their food by `food_uid` and `food_code`: the import (TS server and app) matches on them.
 
 See docs/api-v1.md (GET /api/v1/me/export).
 """
@@ -16,11 +18,11 @@ import zipfile
 from datetime import datetime
 from urllib.parse import urlsplit
 
-from . import __version__, nutrients
+from . import __version__, nutrients, ownership
 from .db import Store
 from .nutrition import PER_100_KEYS, scale
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 FIRST_DAY, LAST_DAY = "0000-01-01", "9999-12-31"  # an open end of the range
 
 # CSV columns: (key, English header, German header)
@@ -89,10 +91,11 @@ def diary(store: Store, user: dict, first: str, last: str, demo: bool) -> list[d
     for e in store.export_diary(user["id"], first, last, demo):
         values = scale(e["per_100"], e["amount"])
         out.append({
-            "day": e["day"], "meal": e["meal"], "name": e["name"], "brand": e["brand"], "amount": e["amount"], "unit": e["unit"],
+            "uid": e["uid"], "day": e["day"], "meal": e["meal"], "name": e["name"], "brand": e["brand"], "amount": e["amount"], "unit": e["unit"],
             "logged_at": iso_local(e["created_at"]), "per_100": e["per_100"], "extra_per_100": nutrients.clean(e["extra"]),
             "nutrients": {**{k: _round(v) for k, v in values.items()},
                           **{k: _round(v, 3) for k, v in nutrients.scale_extra(nutrients.clean(e["extra"]), e["amount"]).items()}},
+            "external_id": e["external_id"], "food_uid": e["food_uid"], "food_code": e["food_code"],
         })
     return out
 
@@ -119,7 +122,7 @@ def water(store: Store, user: dict, first: str, last: str, demo: bool) -> list[d
 
 def fasting(store: Store, user: dict, first: str, last: str) -> list[dict]:
     return [{
-        "started_at": iso_local(f["started_at"]), "ended_at": iso_local(f["ended_at"]), "target_hours": f["target_hours"],
+        "uid": f["uid"], "started_at": iso_local(f["started_at"]), "ended_at": iso_local(f["ended_at"]), "target_hours": f["target_hours"],
         "hours": None if f["ended_at"] is None else round((f["ended_at"] - f["started_at"]) / 3600, 2),
     } for f in store.export_fasts(user["id"], first, last)]
 
@@ -134,6 +137,15 @@ def templates(store: Store, user: dict) -> list[dict]:
 
 def recipes(store: Store, user: dict, demo: bool) -> list[dict]:
     return _with_dates(store.export_recipes(user["id"], demo), "updated_at")
+
+
+def foods(store: Store, user: dict, first: str, last: str, demo: bool) -> list[dict]:
+    household = ownership.is_household(user) and not demo  # the demo account: its own sample data only
+    return _with_dates(store.export_foods(user["id"], first, last, demo, household), "fetched_at")
+
+
+def recipe_groups(store: Store, user: dict) -> list[dict]:
+    return _with_dates(store.export_recipe_groups(user["id"]), "created_at")
 
 
 def badges(store: Store, user: dict, demo: bool) -> list[dict]:
@@ -229,6 +241,8 @@ def build_zip(store: Store, user: dict, first: str | None, last: str | None, lan
         "fasting": fasting(store, user, a, b),
         "templates": templates(store, user),
         "recipes": recipes(store, user, demo),
+        "recipe_groups": recipe_groups(store, user),
+        "foods": foods(store, user, a, b, demo),
         "badges": badges(store, user, demo),
         "webhooks": webhooks(store, user),
     }
@@ -239,7 +253,7 @@ def build_zip(store: Store, user: dict, first: str | None, last: str | None, lan
         "workouts.csv": style.render(WORKOUT_COLUMNS, data["workouts"]),
         "water.csv": style.render(WATER_COLUMNS, data["water"]),
         "fasting.csv": style.render(FASTING_COLUMNS, data["fasting"]),
-        "mahlwerk-export.json": json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False).encode("utf-8"),
+        "mahlwerk-export.json": json.dumps(data, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8"),
     }
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:

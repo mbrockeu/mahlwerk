@@ -14,7 +14,18 @@
   const id = `am-${Math.random().toString(36).slice(2, 8)}`;
   const entries = () => [...(menu?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
 
+  // not enough room beside the trigger for the full menu (a narrow screen, 200 % zoom): open towards the free side and wrap the entries
+  let place = $state('');
+  function fit() {
+    if (!trigger) return;
+    const r = trigger.getBoundingClientRect();
+    const W = document.documentElement.clientWidth;
+    const fromLeft = r.left + r.width / 2 < W / 2;
+    const room = (fromLeft ? W - r.left : r.right) - 10;
+    place = room >= 240 ? '' : `${fromLeft ? 'left: 0; right: auto; ' : ''}max-width: ${Math.max(room, 120)}px; min-width: 0;`;
+  }
   async function show(last = false) {
+    fit();
     open = true;
     await tick();
     const list = entries();
@@ -54,7 +65,7 @@
     {#if icon === 'down' || (!icon && label)}<span class="chev" class:up={open} aria-hidden="true"><Icon name="down" size={18} stroke={2.4} /></span>{/if}
   </button>
   {#if open}
-    <div class="menu" {id} role="menu" aria-label={aria} tabindex="-1" bind:this={menu} onkeydown={menuKey}>
+    <div class="menu" class:tight={place !== ''} style={place || undefined} {id} role="menu" aria-label={aria} tabindex="-1" bind:this={menu} onkeydown={menuKey}>
       {#each items as item (item.key)}
         <button type="button" role="menuitem" data-testid={`menu-${item.key}`} onclick={() => choose(item)}>
           {#if item.icon}<Icon name={item.icon} size={22} />{/if}<span>{item.label}</span>
@@ -77,6 +88,7 @@
   }
   .menu button { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 16px 0 14px; border-radius: 20px; width: 100%; color: inherit; font-size: 15px; font-weight: 600; text-align: left; white-space: nowrap; }
   .menu button:hover { background: rgba(247, 248, 245, 0.12); }
+  .menu.tight button { white-space: normal; }
   @keyframes unfold { from { opacity: 0; transform: scale(0.88) translateY(-6px); } to { opacity: 1; transform: none; } }
   @media (prefers-reduced-motion: reduce) { .menu { animation: none; } .chev { transition: none; } }
 </style>

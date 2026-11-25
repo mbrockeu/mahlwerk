@@ -130,5 +130,11 @@
   .cell.on { background: var(--paper); border-color: var(--text); }
   .nm { font-size: 12.5px; font-weight: 600; line-height: 1.15; text-align: center; max-width: 11ch; }
   .cell .badge { position: absolute; top: 6px; right: 6px; }
+  @media (max-width: 299px) {
+    .hero { padding: 16px 14px; }
+    .hero svg { max-width: 100%; height: auto; }
+    .detail { flex-direction: column; align-items: flex-start; padding: 14px; }
+    .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
   @media (min-width: 900px) { .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 </style>

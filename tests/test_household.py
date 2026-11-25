@@ -1,7 +1,10 @@
 """Household members and guests: guests read everything shared and create their own foods, recipes and groups, but change or
 delete only what they made. The rules are enforced by the API (403), not by the interface."""
 
+import io
+import json
 import sqlite3
+import zipfile
 
 import httpx
 import pytest
@@ -354,6 +357,29 @@ def test_pictures_of_a_household_web_recipe_are_the_households(server, mum, gues
 # ---- migration ----
 
 
+def test_a_member_exports_the_recipes_the_household_took_over_a_guest_only_what_they_use(mum, guest, tmp_path):
+    """Recipes taken over from Cookidoo or a web page belong to nobody: a move of a household member must bring them along."""
+    mum.get("/api/v1/me")
+    guest.get("/api/v1/me")
+    con = sqlite3.connect(tmp_path / "h.db")
+    per_100 = {"kcal": 50, "protein": 2, "carbs": 8, "fat": 1}
+    for source, name in (("cookidoo", "Cookidoo soup"), ("web", "Web stew")):
+        con.execute("INSERT INTO food (source, found, data, fetched_at, external_id) VALUES (?, 1, ?, 1, ?)",
+                    (source, json.dumps({"name": name, "per_100": per_100}), f"{source}:{name}"))
+    con.commit()
+    soup = con.execute("SELECT id FROM food WHERE source = 'cookidoo'").fetchone()[0]
+    con.close()
+
+    def names(client):
+        with zipfile.ZipFile(io.BytesIO(client.get("/api/v1/me/export").content)) as archive:
+            return sorted(f["data"]["name"] for f in json.loads(archive.read("mahlwerk-export.json"))["foods"])
+
+    assert names(mum) == ["Cookidoo soup", "Web stew"]
+    assert names(guest) == []
+    assert guest.post("/api/v1/diary/2026-03-10/entries", json={"food_id": soup, "meal": "lunch", "amount": 100}).status_code == 201
+    assert names(guest) == ["Cookidoo soup"]
+
+
 def test_version_15_database_gets_household_and_owner_columns(tmp_path):
     path = str(tmp_path / "v15.db")
     Store(path)
@@ -373,7 +399,7 @@ def test_version_15_database_gets_household_and_owner_columns(tmp_path):
     con.close()
     store = Store(path)
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 20
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 21
     assert {r[1] for r in con.execute("PRAGMA table_info(food)")} >= {"created_by"}
     assert [r[0] for r in con.execute("SELECT household FROM user ORDER BY id")] == [1, 1]  # existing users stay household members
     con.close()

@@ -1,5 +1,5 @@
-import { fmt, t } from './i18n';
-import type { Entry, Food } from './types';
+import { fmt, t } from './i18n.ts';
+import type { Entry, Food } from './types.ts';
 
 /** A taken-over Cookidoo or web recipe is stored as a food of 100 g whose "per 100 g" values are those of one portion. The user never
  *  sees that: amounts of such foods are shown and typed as portions. */
@@ -11,10 +11,15 @@ const COOKIDOO_BRAND = 'Cookidoo';
 const WEB_BRAND_PREFIX = 'Web \u00b7 ';
 
 export const isPortionFood = (food: Pick<Food, 'source'> | null | undefined) => food?.source === 'cookidoo' || food?.source === 'web';
+/** The brand as text: whatever else a server or an old import sent (an object, a number) counts as none, never as an error. */
+const brandText = (brand: unknown): string | null => (typeof brand === 'string' ? brand : null);
 export const isPortionEntry = (entry: Pick<Entry, 'brand' | 'unit'> | null | undefined) =>
-  (entry?.brand === COOKIDOO_BRAND || (entry?.brand?.startsWith(WEB_BRAND_PREFIX) ?? false)) && entry?.unit === 'g';
+  (brandText(entry?.brand) === COOKIDOO_BRAND || (brandText(entry?.brand)?.startsWith(WEB_BRAND_PREFIX) ?? false)) && entry?.unit === 'g';
 /** The host of a taken-over web recipe (from its brand), else null. */
-export const webHost = (food: Pick<Food, 'source' | 'brand'>) => (food.source === 'web' && food.brand?.startsWith(WEB_BRAND_PREFIX) ? food.brand.slice(WEB_BRAND_PREFIX.length) : null);
+export const webHost = (food: Pick<Food, 'source' | 'brand'>) => {
+  const brand = brandText(food.brand);
+  return food.source === 'web' && brand?.startsWith(WEB_BRAND_PREFIX) ? brand.slice(WEB_BRAND_PREFIX.length) : null;
+};
 /** The small label of a recipe taken over from elsewhere: "Cookidoo" or the web host; null for an own recipe. */
 export const sourceLabel = (food: Pick<Food, 'source' | 'brand'>) => (food.source === 'cookidoo' ? 'Cookidoo' : webHost(food));
 /** "1 portion", "1.5 portions" */

@@ -17,7 +17,7 @@ def _json(value) -> str:
     """json.dumps that refuses NaN and infinity: such a value in a food would turn every day sum that uses it into null."""
     return json.dumps(value, allow_nan=False)
 
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
 MIN_SLEEP_MINUTES = 60  # a shorter "night" in the Health data means the watch was not worn, not that nobody slept
 
 BASE_TABLES = """
@@ -414,7 +414,57 @@ CREATE TABLE sleep_day (
 );
 """
 
-TABLES = BASE_TABLES + V4_TABLES + V5_TABLES + V6_TABLES + V7_TABLES + V8_TABLES + V9_TABLES + V10_TABLES + V11_TABLES + V12_TABLES + V13_TABLES + V14_TABLES + V15_TABLES + V16_TABLES + V17_TABLES + V18_TABLES + V19_TABLES + V20_TABLES
+# Version 21: a stable id (`uid`, 32 lower-case hex digits) for the rows the data export carries and the import matches on (see
+# export.py; the import lives in the TS server). Every existing row gets a random one; new rows get one from a trigger, whichever
+# code path inserts them (SQLite cannot add a column with an expression default). Per-user rows are unique per user, shared rows
+# (foods, recipes, groups) unique overall. The same text is ts/core/migrations/v21.sql (the app migrates its own database with it;
+# tests/test_db.py checks that both are equal).
+V21_TABLES = """
+ALTER TABLE diary_entry ADD COLUMN uid TEXT;
+ALTER TABLE workout ADD COLUMN uid TEXT;
+ALTER TABLE fast ADD COLUMN uid TEXT;
+ALTER TABLE template ADD COLUMN uid TEXT;
+ALTER TABLE recipe ADD COLUMN uid TEXT;
+ALTER TABLE recipe_group ADD COLUMN uid TEXT;
+ALTER TABLE food ADD COLUMN uid TEXT;
+UPDATE diary_entry SET uid = lower(hex(randomblob(16))) WHERE uid IS NULL;
+UPDATE workout SET uid = lower(hex(randomblob(16))) WHERE uid IS NULL;
+UPDATE fast SET uid = lower(hex(randomblob(16))) WHERE uid IS NULL;
+UPDATE template SET uid = lower(hex(randomblob(16))) WHERE uid IS NULL;
+UPDATE recipe SET uid = lower(hex(randomblob(16))) WHERE uid IS NULL;
+UPDATE recipe_group SET uid = lower(hex(randomblob(16))) WHERE uid IS NULL;
+UPDATE food SET uid = lower(hex(randomblob(16))) WHERE uid IS NULL;
+CREATE UNIQUE INDEX diary_entry_uid ON diary_entry (user_id, uid) WHERE uid IS NOT NULL;
+CREATE UNIQUE INDEX workout_uid ON workout (user_id, uid) WHERE uid IS NOT NULL;
+CREATE UNIQUE INDEX fast_uid ON fast (user_id, uid) WHERE uid IS NOT NULL;
+CREATE UNIQUE INDEX template_uid ON template (user_id, uid) WHERE uid IS NOT NULL;
+CREATE UNIQUE INDEX recipe_uid ON recipe (uid) WHERE uid IS NOT NULL;
+CREATE UNIQUE INDEX recipe_group_uid ON recipe_group (uid) WHERE uid IS NOT NULL;
+CREATE UNIQUE INDEX food_uid ON food (uid) WHERE uid IS NOT NULL;
+CREATE TRIGGER diary_entry_uid_new AFTER INSERT ON diary_entry WHEN NEW.uid IS NULL BEGIN
+    UPDATE diary_entry SET uid = lower(hex(randomblob(16))) WHERE rowid = NEW.rowid;
+END;
+CREATE TRIGGER workout_uid_new AFTER INSERT ON workout WHEN NEW.uid IS NULL BEGIN
+    UPDATE workout SET uid = lower(hex(randomblob(16))) WHERE rowid = NEW.rowid;
+END;
+CREATE TRIGGER fast_uid_new AFTER INSERT ON fast WHEN NEW.uid IS NULL BEGIN
+    UPDATE fast SET uid = lower(hex(randomblob(16))) WHERE rowid = NEW.rowid;
+END;
+CREATE TRIGGER template_uid_new AFTER INSERT ON template WHEN NEW.uid IS NULL BEGIN
+    UPDATE template SET uid = lower(hex(randomblob(16))) WHERE rowid = NEW.rowid;
+END;
+CREATE TRIGGER recipe_uid_new AFTER INSERT ON recipe WHEN NEW.uid IS NULL BEGIN
+    UPDATE recipe SET uid = lower(hex(randomblob(16))) WHERE rowid = NEW.rowid;
+END;
+CREATE TRIGGER recipe_group_uid_new AFTER INSERT ON recipe_group WHEN NEW.uid IS NULL BEGIN
+    UPDATE recipe_group SET uid = lower(hex(randomblob(16))) WHERE rowid = NEW.rowid;
+END;
+CREATE TRIGGER food_uid_new AFTER INSERT ON food WHEN NEW.uid IS NULL BEGIN
+    UPDATE food SET uid = lower(hex(randomblob(16))) WHERE rowid = NEW.rowid;
+END;
+"""
+
+TABLES = BASE_TABLES + V4_TABLES + V5_TABLES + V6_TABLES + V7_TABLES + V8_TABLES + V9_TABLES + V10_TABLES + V11_TABLES + V12_TABLES + V13_TABLES + V14_TABLES + V15_TABLES + V16_TABLES + V17_TABLES + V18_TABLES + V19_TABLES + V20_TABLES + V21_TABLES
 DEFAULT_WATER_GOAL = 2000
 MAX_WATER_ML = 10000
 MAX_SQL_PARAMS = 900  # bound parameters per statement: far below the limit of older SQLite builds (999)
@@ -481,6 +531,9 @@ INSERT INTO goal_history (user_id, valid_from, kcal, protein, carbs, fat, water_
 
 # Version 19 had no sleep; the table is new, nothing existing changes.
 MIGRATE_19_TO_20 = V20_TABLES
+
+# Version 20 had no stable row ids; the column, its values, the indexes and the triggers are new, nothing else changes.
+MIGRATE_20_TO_21 = V21_TABLES
 
 # Demo foods are ordinary `food` rows whose JSON `data` carries "demo": true (test-data mode of the own account) or
 # "demo_account": true (the built-in demo account; these are left out of the product list of everybody else).
@@ -588,7 +641,7 @@ class Store:
                 script += (MIGRATE_12_TO_13 if version < 13 else "") + (MIGRATE_13_TO_14 if version < 14 else "")
                 script += (MIGRATE_14_TO_15 if version < 15 else "") + (MIGRATE_15_TO_16 if version < 16 else "")
                 script += (MIGRATE_16_TO_17 if version < 17 else "") + (MIGRATE_17_TO_18 if version < 18 else "")
-                script += (MIGRATE_18_TO_19 if version < 19 else "") + MIGRATE_19_TO_20
+                script += (MIGRATE_18_TO_19 if version < 19 else "") + (MIGRATE_19_TO_20 if version < 20 else "") + MIGRATE_20_TO_21
             script += f"PRAGMA user_version = {SCHEMA_VERSION}; COMMIT;"
             try:
                 con.executescript(script)
@@ -635,7 +688,8 @@ class Store:
 
     def set_goal(self, user_id: int, goal: dict, valid_from: str | None = None) -> None:
         """Set the current goal and record it in the history from `valid_from` on (the caller's today; default the server's).
-        Earlier days keep the goal they had; a second save on the same day overwrites that day's row."""
+        Earlier days keep the goal they had; a second save on the same day overwrites that day's row. Rows from a later day (saved
+        where it was already tomorrow, or a clock that was ahead) go: the goal saved now is the goal from `valid_from` on."""
         values = {"user_id": user_id, "water_ml": DEFAULT_WATER_GOAL, "steps": activity.DEFAULT_STEPS_GOAL, **goal,
                   "valid_from": valid_from or date.today().isoformat(), "changed_at": int(time.time())}
         with self._connect() as con:
@@ -647,6 +701,7 @@ class Store:
                 "import_id = NULL",
                 values,
             )
+            con.execute("DELETE FROM goal_history WHERE user_id = :user_id AND valid_from > :valid_from", values)
             self._record_goal(con, values)
 
     @staticmethod
@@ -2237,7 +2292,8 @@ class Store:
         """Everything the badges look at: all entries and weights (with their demo flag) and the recipe count."""
         with self._connect() as con:
             entries = con.execute(
-                "SELECT day, meal, food_id, name, brand, amount, per_100, demo FROM diary_entry WHERE user_id = ?",
+                # the order the index on (user_id, food_id) gives anyway, written out: the day sums add up in this order on both servers
+                "SELECT day, meal, food_id, name, brand, amount, per_100, demo FROM diary_entry WHERE user_id = ? ORDER BY food_id, id",
                 (user_id,),
             ).fetchall()
             weights = con.execute("SELECT day, demo FROM weight WHERE user_id = ?", (user_id,)).fetchall()
@@ -2554,22 +2610,28 @@ class Store:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    # the food a row links to, as the export names it: its stable id and its barcode (the import finds the food by either)
+    _FOOD_LINK = ("(SELECT f.uid FROM food f WHERE f.id = {t}.food_id) AS food_uid, "
+                  "(SELECT f.code FROM food f WHERE f.id = {t}.food_id) AS food_code")
+
     def export_diary(self, user_id: int, first: str, last: str, demo: bool) -> list[dict]:
-        rows = self._export_days("diary_entry", "id, day, meal, name, brand, amount, unit, per_100, extra, created_at",
-                                 user_id, first, last, demo, "day, id")
+        rows = self._export_days("diary_entry", "id, uid, day, meal, name, brand, amount, unit, per_100, extra, created_at, external_id, "
+                                 + self._FOOD_LINK.format(t="diary_entry"), user_id, first, last, demo, "day, id")
         return [{**r, "per_100": json.loads(r["per_100"]), "extra": json.loads(r["extra"] or "{}")} for r in rows]
 
     def export_weights(self, user_id: int, first: str, last: str, demo: bool) -> list[dict]:
-        return self._export_days("weight", "day, kg, body_fat_pct, lean_kg", user_id, first, last, demo, "day")
+        rows = self._export_days("weight", "day, kg, body_fat_pct, lean_kg, health, body_fat_health, lean_health", user_id, first, last,
+                                 demo, "day")
+        return [{**r, **{k: bool(r[k]) for k in ("health", "body_fat_health", "lean_health")}} for r in rows]
 
     def export_water(self, user_id: int, first: str, last: str, demo: bool) -> list[dict]:
-        return self._export_days("water", "day, ml", user_id, first, last, demo, "day")
+        return [{**r, "health": bool(r["health"])} for r in self._export_days("water", "day, ml, health", user_id, first, last, demo, "day")]
 
     def export_activity(self, user_id: int, first: str, last: str, demo: bool) -> list[dict]:
         return self._export_days("activity_day", "day, steps, active_kcal, distance_m, source", user_id, first, last, demo, "day")
 
     def export_workouts(self, user_id: int, first: str, last: str, demo: bool) -> list[dict]:
-        return self._export_days("workout", "day, started_at, kind, name, minutes, kcal, distance_m, steps, note, source",
+        return self._export_days("workout", "uid, day, started_at, kind, name, minutes, kcal, distance_m, steps, note, source, external_id",
                                  user_id, first, last, demo, "day, COALESCE(started_at, 0), id")
 
     def export_sleep(self, user_id: int, first: str, last: str, demo: bool) -> list[dict]:
@@ -2579,7 +2641,7 @@ class Store:
         """Fasts that started on a day of the range (local time, like the days of everything else); the open one included."""
         with self._connect() as con:
             rows = con.execute(
-                "SELECT started_at, ended_at, target_hours FROM fast WHERE user_id = ? "
+                "SELECT uid, started_at, ended_at, target_hours FROM fast WHERE user_id = ? "
                 "AND date(started_at, 'unixepoch', 'localtime') BETWEEN ? AND ? ORDER BY started_at",
                 (user_id, first, last),
             ).fetchall()
@@ -2588,13 +2650,15 @@ class Store:
     def export_templates(self, user_id: int) -> list[dict]:
         """The user's meal templates with their items (oldest first)."""
         with self._connect() as con:
-            rows = con.execute("SELECT id, name, created_at FROM template WHERE user_id = ? ORDER BY id", (user_id,)).fetchall()
+            rows = con.execute("SELECT id, uid, name, created_at FROM template WHERE user_id = ? ORDER BY id", (user_id,)).fetchall()
             out = []
             for row in rows:
                 items = con.execute(
-                    "SELECT name, brand, amount, unit, per_100, extra FROM template_item WHERE template_id = ? ORDER BY id", (row["id"],)
+                    "SELECT name, brand, amount, unit, per_100, extra, " + self._FOOD_LINK.format(t="template_item")
+                    + " FROM template_item WHERE template_id = ? ORDER BY id", (row["id"],)
                 ).fetchall()
-                out.append({"name": row["name"], "created_at": row["created_at"], "items": [self._export_item(i) for i in items]})
+                out.append({"uid": row["uid"], "name": row["name"], "created_at": row["created_at"],
+                            "items": [self._export_item(i) for i in items]})
         return out
 
     @staticmethod
@@ -2606,18 +2670,56 @@ class Store:
         hide = "" if demo else " AND NOT COALESCE(json_extract(food.data, '$.demo') = 1, 0)"
         with self._connect() as con:
             rows = con.execute(
-                "SELECT recipe.id, recipe.portions, recipe.total_weight, recipe.updated_at, food.data AS data FROM recipe "
+                "SELECT recipe.id, recipe.uid, food.uid AS food_uid, recipe.portions, recipe.total_weight, recipe.updated_at, food.data AS data, "
+                "food.drink, food.piece_label, food.piece_grams FROM recipe "
                 f"JOIN food ON food.id = recipe.food_id WHERE recipe.created_by = ?{hide} ORDER BY recipe.id", (user_id,)
             ).fetchall()
             out = []
             for row in rows:
                 items = con.execute(
-                    "SELECT name, brand, amount, unit, per_100, extra FROM recipe_item WHERE recipe_id = ? ORDER BY position", (row["id"],)
+                    "SELECT name, brand, amount, unit, per_100, extra, " + self._FOOD_LINK.format(t="recipe_item")
+                    + " FROM recipe_item WHERE recipe_id = ? ORDER BY position", (row["id"],)
                 ).fetchall()
                 data = json.loads(row["data"]) if row["data"] else {}
-                out.append({"name": data.get("name"), "portions": row["portions"], "total_weight": row["total_weight"],
+                out.append({"uid": row["uid"], "food_uid": row["food_uid"], "name": data.get("name"), "portions": row["portions"],
+                            "total_weight": row["total_weight"],
                             "updated_at": row["updated_at"], "per_100": data.get("per_100"),
-                            "items": [self._export_item(i) for i in items]})
+                            "drink": None if row["drink"] is None else bool(row["drink"]), "piece_label": row["piece_label"],
+                            "piece_grams": row["piece_grams"], "items": [self._export_item(i) for i in items]})
+        return out
+
+    def export_foods(self, user_id: int, first: str, last: str, demo: bool, household: bool = False) -> list[dict]:
+        """The products this user made, and those their diary (in the range), templates, recipes and groups use: shared with the
+        household, but needed to bring the links and the own products along. Never a recipe's calculated food (that is the recipe),
+        a remembered miss, a sample food or a picture. A member of the household (`household`) also gets the recipes the household
+        took over from Cookidoo or a web page (they belong to nobody, so a move would lose them); a guest only what they made or use."""
+        hide = "" if demo else f" AND NOT COALESCE({DEMO_FOOD}, 0) AND NOT COALESCE({DEMO_ACCOUNT_FOOD}, 0)"
+        with self._connect() as con:
+            rows = con.execute(
+                "SELECT uid, code, source, external_id, data, piece_label, piece_grams, drink, created_by, fetched_at FROM food "
+                f"WHERE found = 1 AND source <> 'recipe'{hide} AND (created_by = :u "
+                "OR (:h AND created_by IS NULL AND source IN ('cookidoo', 'web')) "
+                "OR id IN (SELECT food_id FROM diary_entry WHERE user_id = :u AND day BETWEEN :a AND :b AND (:d OR demo = 0)) "
+                "OR id IN (SELECT i.food_id FROM template_item i JOIN template t ON t.id = i.template_id WHERE t.user_id = :u) "
+                "OR id IN (SELECT i.food_id FROM recipe_item i JOIN recipe r ON r.id = i.recipe_id WHERE r.created_by = :u) "
+                "OR id IN (SELECT i.food_id FROM recipe_group_item i JOIN recipe_group g ON g.id = i.group_id WHERE g.created_by = :u)) "
+                "ORDER BY id", {"u": user_id, "a": first, "b": last, "d": int(demo), "h": int(household)},
+            ).fetchall()
+        return [{"uid": r["uid"], "code": r["code"], "source": r["source"], "external_id": r["external_id"], "data": json.loads(r["data"]),
+                 "piece_label": r["piece_label"], "piece_grams": r["piece_grams"], "drink": None if r["drink"] is None else bool(r["drink"]),
+                 "own": r["created_by"] == user_id, "fetched_at": r["fetched_at"]} for r in rows]
+
+    def export_recipe_groups(self, user_id: int) -> list[dict]:
+        """The recipe groups this user made, with their members as the stable ids of the foods (own and taken-over recipes)."""
+        with self._connect() as con:
+            rows = con.execute("SELECT id, uid, name, position, source, created_at FROM recipe_group WHERE created_by = ? ORDER BY position, id",
+                               (user_id,)).fetchall()
+            out = []
+            for row in rows:
+                members = con.execute("SELECT f.uid FROM recipe_group_item i JOIN food f ON f.id = i.food_id WHERE i.group_id = ? ORDER BY f.id",
+                                      (row["id"],)).fetchall()
+                out.append({"uid": row["uid"], "name": row["name"], "position": row["position"], "source": row["source"],
+                            "created_at": row["created_at"], "members": [m["uid"] for m in members]})
         return out
 
     def export_badges(self, user_id: int, demo: bool) -> list[dict]:

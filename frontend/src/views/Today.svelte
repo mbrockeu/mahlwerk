@@ -566,4 +566,24 @@
     .skeleton { height: 300px; }
   }
   @media (max-width: 359px) { .hero { flex-direction: column; padding: 20px; } .stats { flex-direction: row; } }
+  /* very narrow (200 % zoom): wrap instead of cutting or overflowing */
+  @media (max-width: 299px) {
+    .titleline { flex-wrap: wrap; gap: 0 10px; }
+    .date { white-space: normal; }
+    .daybar { flex-wrap: wrap; }
+    .daybar .pill { flex-shrink: 0; max-width: 100%; height: auto; min-height: 36px; padding: 6px 14px; white-space: normal; }
+    a.pill { height: auto; min-height: 44px; }
+    .streak { overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+    .hero { padding: 16px 12px; }
+    .stats { flex-wrap: wrap; gap: 10px 16px; }
+    .tiles { grid-template-columns: minmax(0, 1fr); }
+    .tile { height: auto; min-height: 96px; gap: 6px; }
+    .tl, .tv { white-space: normal; overflow-wrap: anywhere; }
+    .t small { white-space: normal; overflow-wrap: anywhere; }
+    .main, .entries button { padding-left: 12px; padding-right: 12px; flex-wrap: wrap; }
+    .t strong, .v { overflow-wrap: anywhere; }
+    .again { flex-wrap: wrap; }
+    .mlist { padding: 12px 12px 14px; }
+    .tplbtns { flex-wrap: wrap; }
+  }
 </style>

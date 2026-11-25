@@ -250,6 +250,15 @@
     .mgrid .d.today .n { padding: 2px 4px; margin: -2px 0 0 -3px; }
   }
   @container month (max-width: 280px) { .mgrid .k { display: none; } }
+  /* a phone at 200 % zoom: the squares are about 15 px wide, so numbers and gaps shrink with them */
+  @container month (max-width: 200px) {
+    .mgrid { gap: 2px; }
+    .mgrid .d { padding: 3px 1px; height: 40px; border-radius: 8px 8px 8px 3px; }
+    .mgrid .n { font-size: 10px; letter-spacing: -0.06em; align-self: center; }
+    .mgrid .d.today .n { padding: 1px 2px; margin: 0; border-radius: 6px 6px 6px 2px; }
+    .mgrid .d.out .n { font-size: 10px; }
+    .wd { font-size: 8.5px; letter-spacing: 0; }
+  }
 
   /* compact view */
   .scroll { overflow-x: auto; overflow-y: hidden; padding: 4px 4px 8px; margin: -4px -4px 0; min-width: 0; }

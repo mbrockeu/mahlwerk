@@ -153,7 +153,7 @@ def test_version_11_database_gets_the_secret_table_without_losing_data(tmp_path)
     con.close()
     store = Store(path)
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 20
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 21
     assert "secret" in {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     con.close()
     assert store.get_goal(1)["kcal"] == 2000

@@ -6,6 +6,7 @@
   import CookidooAccount from '../components/CookidooAccount.svelte';
   import YazioImport from '../components/YazioImport.svelte';
   import DataExport from '../components/DataExport.svelte';
+  import DataImport from '../components/DataImport.svelte';
   import TokenCard from '../components/TokenCard.svelte';
   import WebhookCard from '../components/WebhookCard.svelte';
   import Icon from '../components/Icon.svelte';
@@ -18,7 +19,7 @@
     type MacroKey, type PresetId,
   } from '../lib/goals';
   import { MAX_WORKOUTS_WEEK } from '../lib/training';
-  import { GOAL_SINCE_START, type GoalChange, type ImportBatch } from '../lib/types';
+  import { GOAL_SINCE_START, type GoalChange, type ImportBatch, type ImportInfo } from '../lib/types';
   import { fromDay } from '../lib/date';
   import { fmt, fmtDate, lang, langPref, setLangPref, t, type LangPref } from '../lib/i18n';
   import { setThemePref, theme, type ThemePref } from '../lib/theme.svelte';
@@ -109,6 +110,7 @@
   let importConfirm = $state<number | null>(null);
   let importBusy = $state(false);
   let importError = $state('');
+  let importInfo = $state<ImportInfo | null>(null);
 
   onMount(() => {
     guard.block = (target) => {
@@ -129,6 +131,10 @@
       fastOther = FAST_PRESETS.includes(fasting.target_hours) ? '' : String(fasting.target_hours);
       loaded = true;
       try { imports = await api.imports(); } catch { imports = []; }
+      // the import of an own export: only where the server (or the app) has it; the Python server answers 404, the demo view never asks
+      if (!viewingDemo() && !import.meta.env.VITE_DEMO && !import.meta.env.VITE_MOCK) {
+        try { importInfo = await api.importInfo(); } catch { importInfo = null; }
+      }
       try { goalHistory = await api.goalHistory(); } catch { goalHistory = []; }
     })();
     return () => { guard.block = null; window.removeEventListener('beforeunload', beforeUnload); };
@@ -669,6 +675,7 @@
         {/if}
 
         {#if !viewingDemo() && !import.meta.env.VITE_DEMO}<DataExport />{/if}
+        {#if !viewingDemo() && importInfo?.available}<DataImport maxBytes={importInfo.max_bytes} onimported={async () => { try { imports = await api.imports(); } catch { /* keep the list */ } await refresh(); }} />{/if}
 
         <section class="card" aria-labelledby="cat-title">
           <h2 id="cat-title" class="micro quiet">{t('gpCatalog')}</h2>
@@ -740,6 +747,7 @@
   .hero .lab { color: var(--lime); }
   .bigrow { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
   .bigrow :global(.big) { font-size: 76px; line-height: 1; border-bottom: 3px dotted var(--green-tick); padding-bottom: 2px; border-radius: 0; }
+  @media (max-width: 299px) { .bigrow :global(.big) { font-size: 52px; } }
   .bigrow :global(.big:focus-visible) { border-bottom-color: var(--lime); outline-offset: 6px; }
   .unit { font-size: 14px; font-weight: 500; color: var(--on-deep); }
   .err { color: #ffd9b0; font-size: 13px; }
@@ -754,6 +762,7 @@
   .macros { display: flex; flex-direction: column; gap: 12px; }
   .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
   .tile { color: var(--on-tile); padding: 12px 10px 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; --focus: var(--on-tile); }
+  @media (max-width: 299px) { .tiles { grid-template-columns: minmax(0, 1fr); } .tl, .pct { white-space: normal; overflow-wrap: anywhere; } }
   .tl { font-size: 12px; font-weight: 600; white-space: nowrap; letter-spacing: -0.01em; }
   .gr { display: flex; align-items: baseline; gap: 2px; font-size: 32px; line-height: 1.1; min-width: 0; }
   .gr :global(input) { font-size: 32px; border-bottom: 2px dotted var(--track); border-radius: 0; }
@@ -787,6 +796,7 @@
   .g i { display: block; width: 100%; height: 100%; background: var(--green-tick); }
   .btns { display: flex; gap: 8px; }
   .btns button { min-height: 44px; border-radius: 22px 22px 22px 8px; font-weight: 600; font-size: 14px; white-space: nowrap; --focus: var(--focus-base); }
+  @media (max-width: 299px) { .btns { flex-wrap: wrap; } .btns button { white-space: normal; padding-left: 10px; padding-right: 10px; } }
   .btns .add { flex: 1; background: var(--deep); color: var(--on-deep); }
   .btns .minus { padding: 0 18px; border: 2px solid var(--hairline); font-family: var(--f-mono); font-size: 13px; }
   .btns button:active { transform: scale(0.97); }
@@ -796,6 +806,7 @@
   .tgs { width: 44px; height: 44px; border-radius: 22px 22px 22px 8px; border: 2px solid var(--hairline); font-size: 20px; font-weight: 600; line-height: 1; --focus: var(--focus-base); }
   .tgs:active { transform: scale(0.97); }
   .tgs[disabled] { opacity: 0.45; }
+  @media (max-width: 299px) { .tgb { flex-wrap: wrap; justify-content: center; } }
   .tgv { min-width: 8em; text-align: center; font-size: 16px; font-weight: 600; }
   .gl { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 2px solid var(--hairline); }
   .gl .lab { color: var(--quiet); }

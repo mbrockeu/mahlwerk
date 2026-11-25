@@ -6,6 +6,7 @@ data/
 .env
 node_modules/
 web/dist/
+web/dist-app/
 web/live/
 web/live.old/
 web/live.prev/

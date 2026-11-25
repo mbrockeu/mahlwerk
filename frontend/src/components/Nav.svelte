@@ -108,6 +108,15 @@
   @keyframes pulse2 { 0% { transform: scale(1); } 35% { transform: scale(1.22); } 100% { transform: scale(1); } }
   .group { display: contents; }
   /* wide screens: the bar becomes a slim rail on the left edge, same shapes and colours */
+  /* very narrow: the bar uses the width, the items share it and show only their icons (their names stay as aria-label) */
+  @media (max-width: 299px) {
+    nav { width: calc(100% - 16px); padding: 0 4px; gap: 2px; }
+    a { flex: 1 1 0; min-width: 0; max-width: 48px; height: 40px; }
+    a.active { padding: 0; }
+    a span { display: none; }
+    .scan { width: 46px; height: 46px; border-radius: 23px; }
+    .dots { transform: scale(0.77); }
+  }
   @media (min-width: 900px) {
     nav {
       left: 16px; top: calc(16px + var(--band, 0px)); bottom: 16px; transform: none; width: 76px; height: auto; border-radius: 38px;

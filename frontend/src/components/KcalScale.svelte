@@ -64,5 +64,6 @@
   .knob.drag { transform: scale(1.18); }
   .marks { position: relative; height: 16px; font-family: var(--f-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.04em; color: var(--on-deep); opacity: 0.85; }
   .marks span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+  @media (max-width: 299px) { .marks span:nth-child(even) { display: none; } }
   .marks span:first-child { transform: translateX(-30%); }
 </style>

@@ -4,6 +4,8 @@
   import { exportUrl, periodProblem, type ExportPeriod } from '../lib/dataExport';
   import { today } from '../lib/date';
   import { lang, t } from '../lib/i18n';
+  import { localApi, localDownload } from '../lib/local';
+  import { toast } from '../lib/store.svelte';
 
   const PERIODS: { id: ExportPeriod; label: () => string }[] = [
     { id: 'all', label: () => t('exAll') },
@@ -17,11 +19,18 @@
 
   const problem = $derived(periodProblem(period, from, to));
   const href = $derived(exportUrl(period, from, to, today(), lang));
+  // in the app there is no server behind the link: the file comes from the app host (lib/local.ts)
+  const inApp = !!localApi();
+  function appDownload(event: MouseEvent) {
+    event.preventDefault();
+    if (href) localDownload(href).catch((e) => toast(t('loadFailed', { reason: e instanceof Error ? e.message : 'error' })));
+  }
 </script>
 
 <section class="icard" aria-labelledby="ex-title" data-testid="data-export">
   <h2 id="ex-title" class="micro quiet">{t('exTitle')}</h2>
   <p class="note">{t('exText')}</p>
+  {#if inApp}<p class="note app-note" data-testid="app-only-note">{t('exAppNote')}</p>{/if}
   <div class="field">
     <span id="ex-period">{t('exPeriod')}</span>
     <div class="chips" role="group" aria-labelledby="ex-period">
@@ -38,7 +47,7 @@
     {#if problem}<p class="note warn" role="alert">{t('exBad')}</p>{/if}
   {/if}
   {#if href}
-    <a class="btn primary dl" {href} download>{t('exButton')}</a>
+    <a class="btn primary dl" {href} download onclick={inApp ? appDownload : undefined}>{t('exButton')}</a>
   {:else}
     <span class="btn primary dl off" role="link" aria-disabled="true">{t('exButton')}</span>
   {/if}
@@ -51,4 +60,5 @@
   .dates { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
   .dl { align-self: flex-start; text-decoration: none; }
   .dl.off { opacity: 0.55; pointer-events: none; }
+  .app-note { font-weight: 600; color: var(--text); }
 </style>

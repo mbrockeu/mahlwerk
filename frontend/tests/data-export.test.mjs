@@ -29,3 +29,13 @@ test('an end before the start or a malformed day gives no link', () => {
   assert.equal(exportUrl('custom', '2026-02-01', '2026-01-01', TODAY, 'en'), null);
   assert.equal(exportUrl('custom', 'abc', '', TODAY, 'en'), null);
 });
+
+test('the import preview shows only the kinds in the file and adds them up', async () => {
+  const { importRows, importTotals, deletedTotal } = await import('../src/lib/dataExport.ts');
+  const zero = { new: 0, changed: 0, unchanged: 0, skipped: 0, reasons: {} };
+  const counts = { foods: { ...zero, new: 2 }, diary: { ...zero, new: 3, changed: 1, unchanged: 5 }, sleep: zero, webhooks: { ...zero, skipped: 1, reasons: { not_imported: 1 } } };
+  assert.deepEqual(importRows(counts).map((r) => r.kind), ['foods', 'diary', 'webhooks']);
+  assert.deepEqual(importTotals(counts), { new: 5, changed: 1, unchanged: 5, skipped: 1 });
+  assert.equal(deletedTotal({ diary: 4, weight: 2, imports: 7 }), 6);
+  assert.equal(deletedTotal(null), 0);
+});

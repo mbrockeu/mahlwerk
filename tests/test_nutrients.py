@@ -190,7 +190,7 @@ def test_version_2_database_gets_extra_on_entries_without_losing_data(tmp_path):
     store = Store(path)
 
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 20
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 21
     assert con.execute("SELECT name, amount, demo, extra FROM diary_entry").fetchall() == [("Rice", 150, 1, "{}")]
     con.close()
     assert store.entries_between(1, "2026-01-01", "2026-01-31")[0]["extra"] == {}
@@ -274,6 +274,16 @@ def test_insights_micros_null_percent_without_nrv_and_empty_without_data(client)
     assert micros == [{"key": "caffeine", "group": "other", "unit": "mg", "nrv": None, "average": 100,
                        "coverage": 1, "percent_nrv": None}]
     assert client.get(f"/api/v1/insights?from={d(10)}&to={d(12)}").json()["micros"] == []
+
+
+def test_insights_leave_out_a_stored_nutrient_this_version_does_not_know(client, tmp_path):
+    juice = make_food(client, "Juice", extra={"vitamin_c": 40}, kcal=100)
+    log(client, juice, 200, d(0))
+    with sqlite3.connect(tmp_path / "test.db") as con:  # stored by another version (or an old import)
+        con.execute("""UPDATE diary_entry SET extra = json_set(extra, '$.unobtainium', 3)""")
+    r = client.get(f"/api/v1/insights?from={d(0)}&to={d(1)}")
+    assert r.status_code == 200, r.text
+    assert [m["key"] for m in r.json()["micros"]] == ["vitamin_c"]
 
 
 # catalogue import and lookups
