@@ -151,6 +151,14 @@ def test_history_endpoint_newest_first(changed, monkeypatch):
     assert changed.get("/api/v1/me").json()["goal"]["kcal"] == 1800
 
 
+def test_a_save_removes_the_rows_of_later_days(changed, monkeypatch):
+    """Saved where it was already the next day (or with a clock ahead), then again here: the later row must not win on its day."""
+    set_goal(changed, monkeypatch, D1, {**A, "kcal": 1200})
+    data = changed.get("/api/v1/me/goal/history").json()
+    assert [(h["valid_from"], h["kcal"]) for h in data] == [(iso(D1), 1200)]
+    assert changed.get(f"/api/v1/diary/{iso(D2, 3)}").json()["goal"]["kcal"] == 1200
+
+
 def test_insights_judge_each_day_against_its_own_goal(changed):
     data = changed.get(f"/api/v1/insights?from={iso(D1)}&to={iso(D2)}&granularity=day&compare=previous").json()
     assert [c["state"] for c in data["calendar"]] == ["in_range"] * 7 + ["under"]

@@ -288,6 +288,11 @@ test('the goal of the file wins also over a later change here, as a change from 
   assert.equal(p.json.modes.merge.counts.goal.changed, 1);
   assert.equal((await confirm(w, 'ann', p.json.token)).status, 200);
   assert.equal((await send(w, 'ann', 'GET', '/api/v1/me')).json.goal.kcal, 2100);
+  // and the later change here is gone: it would win again on its day
+  const history = (await send(w, 'ann', 'GET', '/api/v1/me/goal/history')).json;
+  assert.ok(history.every((h: any) => h.valid_from < '2999-01-01'), JSON.stringify(history));
+  assert.equal(history[0].kcal, 2100);
+  assert.equal((await send(w, 'ann', 'GET', '/api/v1/diary/2999-01-02')).json.goal.kcal, 2100);
 });
 
 test('replace: the products of a removed Yazio batch lose the batch; a guest\'s new products are the guest\'s', async () => {

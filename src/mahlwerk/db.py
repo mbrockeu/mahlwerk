@@ -688,7 +688,8 @@ class Store:
 
     def set_goal(self, user_id: int, goal: dict, valid_from: str | None = None) -> None:
         """Set the current goal and record it in the history from `valid_from` on (the caller's today; default the server's).
-        Earlier days keep the goal they had; a second save on the same day overwrites that day's row."""
+        Earlier days keep the goal they had; a second save on the same day overwrites that day's row. Rows from a later day (saved
+        where it was already tomorrow, or a clock that was ahead) go: the goal saved now is the goal from `valid_from` on."""
         values = {"user_id": user_id, "water_ml": DEFAULT_WATER_GOAL, "steps": activity.DEFAULT_STEPS_GOAL, **goal,
                   "valid_from": valid_from or date.today().isoformat(), "changed_at": int(time.time())}
         with self._connect() as con:
@@ -700,6 +701,7 @@ class Store:
                 "import_id = NULL",
                 values,
             )
+            con.execute("DELETE FROM goal_history WHERE user_id = :user_id AND valid_from > :valid_from", values)
             self._record_goal(con, values)
 
     @staticmethod

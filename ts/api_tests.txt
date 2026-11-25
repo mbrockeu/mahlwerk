@@ -274,6 +274,7 @@ tests/test_fasting.py::test_delete
 tests/test_fasting.py::test_recent_keeps_the_latest_14_finished_fasts_newest_first
 tests/test_fasting.py::test_other_users_fasts_are_not_visible_and_not_changeable
 tests/test_fasting.py::test_settings_default_patch_and_validation
+tests/test_goal_history.py::test_a_save_removes_the_rows_of_later_days
 tests/test_hardening.py::test_a_webhook_cannot_target_the_inside_or_unknown_names[http://127.0.0.1/]
 tests/test_hardening.py::test_a_webhook_cannot_target_the_inside_or_unknown_names[http://127.0.0.1:8123/api]
 tests/test_hardening.py::test_a_webhook_cannot_target_the_inside_or_unknown_names[http://0x7f000001/]

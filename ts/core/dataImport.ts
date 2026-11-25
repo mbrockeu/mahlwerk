@@ -731,6 +731,8 @@ async function importGoal(r: Run): Promise<void> {
     const day = today();
     const want = { ...goalOf(f.goal), changed_at: r.now };
     count(r, 'goal_history', merged.has(day) ? 'changed' : 'new');
+    for (const later of [...merged.keys()].filter((k) => k > day)) merged.delete(later); // like PUT /me/goal: a later row would win again
+    if (r.write) await db.run('DELETE FROM goal_history WHERE user_id = ? AND valid_from > ?', [user.id, day]);
     merged.set(day, want);
     newest = want;
     warn(r, 'goal_from_today');
