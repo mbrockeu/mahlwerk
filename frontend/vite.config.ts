@@ -43,7 +43,7 @@ export default defineConfig(({ mode }) => {
             const hashes = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)]
               .map((m) => `'sha256-${createHash('sha256').update(m[1]!).digest('base64')}'`);
             const self = "'self' mahlwerk-app:";
-            const csp = [`default-src ${self}`, `script-src ${self} ${hashes.join(' ')}`, `style-src ${self} 'unsafe-inline'`,
+            const csp = [`default-src ${self}`, `script-src ${self} 'wasm-unsafe-eval' ${hashes.join(' ')}`, `style-src ${self} 'unsafe-inline'`,
               `img-src ${self} data: blob: https:`, `font-src ${self}`, `connect-src ${self}`, "frame-src 'none'", "object-src 'none'",
               "base-uri 'none'", "form-action 'none'"].join('; ');
             return html.replace('<meta charset="utf-8">', `<meta charset="utf-8">\n  <meta http-equiv="Content-Security-Policy" content="${csp}">`);
