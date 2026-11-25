@@ -244,7 +244,7 @@ input[type='search']::-webkit-search-cancel-button, input[type='search']::-webki
   .page { padding-left: 10px; padding-right: 10px; }
   main.hasmenu .page-head { padding-right: 50px; }
   .page-head { flex-wrap: wrap; }
-  .page-head h1 { font-size: 26px; overflow-wrap: break-word; min-width: 0; max-width: 100%; }
+  .page-head h1 { font-size: min(26px, 10vw); overflow-wrap: break-word; hyphens: auto; min-width: 0; max-width: 100%; }
   .btn { padding: 0 14px; min-width: 0; max-width: 100%; }
   .row-pill { padding: 6px 12px; flex-wrap: wrap; }
   .row-pill .t strong, .row-pill .t small { white-space: normal; overflow-wrap: anywhere; }
