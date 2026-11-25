@@ -18,7 +18,6 @@
 // - recipe pictures: no picture service (no sharp): the picture routes answer 501 like a server without one;
 // - the catalogue refresh: loads the published file instead of rebuilding it (catalogDownload.ts); the BLS comes with the app;
 // - demo data (MAHLWERK_DEMO_DATA unset).
-import { z } from 'zod';
 import { initAuth } from '../core/auth.ts';
 import { installCookidoo } from '../core/cookidooService.ts';
 import { bodyOf, decodePath, errorRes, makeRouter } from '../core/dispatch.ts';
@@ -37,8 +36,6 @@ import { openNativeDb } from './nativeDb.ts';
 import { bridgeOutgoing } from './outgoing.ts';
 import { bridgeKeyFile } from './vaultKey.ts';
 
-// zod would probe `new Function` for its faster parser; the app's Content-Security-Policy forbids eval, so parse without it
-z.config({ jitless: true });
 
 /** Fixed: the app's own environment cannot switch these back on. */
 export const APP_ENV: Record<string, string> = {

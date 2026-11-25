@@ -1,6 +1,7 @@
 // Entry of the app build (`npm run build:app` -> web/dist-app): the same interface, but the API is answered in the page by the app
 // host (ts/app, the core of the server) with the data on the device, reached over the native bridge of the iOS app
 // (`window.webkit.messageHandlers.mahlwerkNative`, see ts/PORTING.md "App-Host"). Sets `window.mahlwerkLocal`, then starts the app.
+import '../../ts/app/zodJitless.ts'; // first: before any zod schema is built
 import schemaSql from '../../ts/core/schema.sql?raw';
 import v21Sql from '../../ts/core/migrations/v21.sql?raw';
 import { hostRequest, localFetch, openLocal } from '../../ts/app/localHost.ts';
