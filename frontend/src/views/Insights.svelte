@@ -601,6 +601,8 @@
   .tabs { display: flex; gap: 4px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none; box-shadow: inset 0 -2px 0 var(--hairline); margin: 2px -4px 0; padding: 0 4px; }
   .tabs::-webkit-scrollbar { display: none; }
   .tab { flex-shrink: 0; min-height: 46px; padding: 0 14px; font-size: 15px; font-weight: 600; color: var(--quiet); border-bottom: 3px solid transparent; }
+  /* very narrow: the tabs wrap onto further lines instead of scrolling out of view */
+  @media (max-width: 299px) { .tabs { flex-wrap: wrap; overflow: visible; box-shadow: none; } .tab { flex-shrink: 1; min-height: 44px; padding: 0 10px; } }
   .tab.on { color: var(--text); border-bottom-color: var(--text); }
   .tab:hover { color: var(--text); }
   .chip.help { gap: 7px; padding: 0 14px 0 8px; }
@@ -623,6 +625,7 @@
   .goalrange { grid-column: 1 / -1; align-items: stretch; }
   .lab { color: #d5ead0; }
   .big { font-family: var(--f-display); font-weight: 800; font-size: 40px; letter-spacing: -0.04em; line-height: 1.02; white-space: nowrap; }
+  @media (max-width: 299px) { .hero { grid-template-columns: minmax(0, 1fr); padding: 18px 14px; } .big { white-space: normal; overflow-wrap: anywhere; font-size: 34px; } }
   .big small { margin-left: 4px; font-family: var(--f-mono); font-size: 14px; font-weight: 500; letter-spacing: 0; }
   .prevtxt { font-size: 12px; color: #d5ead0; }
   .ticks { display: block; margin-top: 6px; }
