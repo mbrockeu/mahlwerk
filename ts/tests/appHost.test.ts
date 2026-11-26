@@ -452,3 +452,36 @@ test('the iCloud backup routes: state, backup as base64, restore as replace (app
   assert.equal((await req2({ method: 'POST', path: '/api/v1/me/backup/restore', body: { zip_base64: '***' } })).status, 422);
   native.close(); other.close();
 });
+
+test('the iCloud backup leaves out the values from Apple Health (App Review 5.1.3), hand-typed values stay', async () => {
+  const native = fresh();
+  const { dispatch } = await openLocal({ bridge: native.bridge, schemaSql });
+  const request = hostRequest(dispatch);
+  const d0 = new Date(), at = (n: number) => new Date(d0.getTime() - n * 86400000).toISOString().slice(0, 10);
+  const [h, m] = [at(2), at(1)];
+  const sync = await request({ method: 'POST', path: '/api/v1/health/sync', body: { days: [
+    { day: h, steps: 5000, weight_kg: 80, water_ml: 1500, sleep_minutes: 420, workouts: [{ external_id: 'hk-1', kind: 'run', minutes: 30 }] },
+    { day: m, body_fat_pct: 20 }] } });
+  assert.equal(sync.status, 200, sync.body ?? '');
+  await request({ method: 'PUT', path: `/api/v1/weights/${m}`, body: { kg: 81.5 } }); // by hand; the body fat of this day came from Health
+  await request({ method: 'POST', path: `/api/v1/water/${m}`, body: { add_ml: 250 } });
+  await request({ method: 'PUT', path: '/api/v1/me/goal', body: { kcal: 2000, protein: 100, carbs: 220, fat: 70 } });
+  const backup = JSON.parse((await request({ method: 'GET', path: '/api/v1/me/backup' })).body!);
+  const file = await exportJson(Uint8Array.from(Buffer.from(backup.zip_base64, 'base64')));
+  assert.equal(file.health_excluded, true);
+  assert.deepEqual(file.weight.map((w: any) => [w.day, w.kg, w.body_fat_pct ?? null]), [[m, 81.5, null]]);
+  assert.deepEqual(file.water.map((w: any) => [w.day, w.ml]), [[m, 250]]);
+  assert.deepEqual([file.activity.length, file.sleep.length, file.workouts.length], [0, 0, 0]);
+  assert.deepEqual([backup.counts.weight, backup.counts.water, backup.counts.activity, backup.counts.sleep, backup.counts.workouts], [1, 1, 0, 0, 0]);
+  assert.equal(backup.counts.goal, 1);
+  // restored on a fresh device: the hand-typed values come back, the Health values are read from Health again
+  const other = fresh();
+  const two = await openLocal({ bridge: other.bridge, schemaSql });
+  const req2 = hostRequest(two.dispatch);
+  assert.equal((await req2({ method: 'POST', path: '/api/v1/me/backup/restore', body: { zip_base64: backup.zip_base64 } })).status, 200);
+  const after = JSON.parse((await req2({ method: 'GET', path: '/api/v1/me/backup/state' })).body!).counts;
+  assert.deepEqual([after.weight, after.water, after.activity, after.sleep, after.workouts], [1, 1, 0, 0, 0]);
+  const again = await exportJson(Uint8Array.from(Buffer.from(JSON.parse((await req2({ method: 'GET', path: '/api/v1/me/backup' })).body!).zip_base64, 'base64')));
+  assert.deepEqual([again.weight[0].kg, again.water[0].ml], [81.5, 250]);
+  native.close(); other.close();
+});

@@ -1,6 +1,7 @@
 // The iCloud file backup of the app (the native side keeps the files in the app's iCloud folder; see ts/PORTING.md "App-Host"):
 // three routes that exist only in the app host, never in the server, reached through window.mahlwerkHost.request.
-// - GET  /api/v1/me/backup          -> {filename, zip_base64, counts, empty}: the same ZIP as GET /me/export (format 2, everything)
+// - GET  /api/v1/me/backup          -> {filename, zip_base64, counts, empty}: the ZIP of GET /me/export (format 2, everything) without
+//   the values from Apple Health (App Review 5.1.3); `counts` of the day-based kinds is what the file holds
 // - GET  /api/v1/me/backup/state    -> {empty, counts}: empty = nothing of the person's own yet (Health values do not count)
 // - POST /api/v1/me/backup/restore  {zip_base64} -> like "replace" of the import, as one transaction; 422 for a broken file
 // The body is text on the native side, hence base64. Stored secrets (the Cookidoo account) are never part of an export.
@@ -8,7 +9,7 @@ import { z } from 'zod';
 import { sessionUser } from '../core/auth.ts';
 import { decodeImport, modesAllowed, ownCounts, parseExport, runImport } from '../core/dataImport.ts';
 import { today } from '../core/dates.ts';
-import { buildExport, fileName } from '../core/export.ts';
+import { exportCounts, exportData, fileName, withoutHealth, zipExport } from '../core/export.ts';
 import type { Db } from '../core/db.ts';
 import { HttpError, parse, route, type Route } from '../core/http.ts';
 import { heavy, REASONS } from '../core/routes/dataImport.ts';
@@ -31,8 +32,11 @@ async function isEmpty(db: Db, userId: number): Promise<boolean> {
 export const BACKUP_ROUTES: Route[] = [
   route('GET', '/api/v1/me/backup', async (req) => {
     const user = await sessionUser(req);
-    const zip = await buildExport(req.ctx.db, user, null, null, 'de', req.ctx.now());
-    return { filename: fileName(user.username, today()), zip_base64: toB64(zip), counts: await ownCounts(req.ctx.db, user.id), empty: await isEmpty(req.ctx.db, user.id) };
+    // without the values from Apple Health (App Review 5.1.3); after a restore the app reads them from Health again
+    const data = withoutHealth(await exportData(req.ctx.db, user, null, null, req.ctx.now()));
+    const zip = await zipExport(data, 'de', req.ctx.now());
+    return { filename: fileName(user.username, today()), zip_base64: toB64(zip), counts: { ...(await ownCounts(req.ctx.db, user.id)), ...exportCounts(data) },
+      empty: await isEmpty(req.ctx.db, user.id) };
   }),
 
   route('GET', '/api/v1/me/backup/state', async (req) => {

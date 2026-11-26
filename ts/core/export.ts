@@ -135,6 +135,29 @@ const jsonText = (value: unknown): Uint8Array => new TextEncoder().encode(JSON.s
 /** The whole archive in memory. `first`/`last` limit the day-based data; the demo rows of an own account are left out, the
  * demo account itself exports its sample data. */
 export async function buildExport(db: Db, user: { id: number; username: string; display_name: string; is_demo?: unknown; household?: unknown }, first: string | null, last: string | null, lang: string, nowSeconds: number): Promise<Uint8Array> {
+  return zipExport(await exportData(db, user, first, last, nowSeconds), lang, nowSeconds);
+}
+
+/** Leaves out what came from Apple Health (App Review 5.1.3: no personal health information in iCloud; the iCloud backup of the app):
+ * activity, sleep and workouts with source 'health', water whose amount is a Health value, and weights whose kg is one; of a weight
+ * typed in by hand only the body values that came from Health are dropped. Values typed in by hand stay. */
+export function withoutHealth(data: Json): Json {
+  const weight = (data.weight as Json[]).filter((w) => !w.health).map((w) => ({
+    ...w, ...(w.body_fat_health ? { body_fat_pct: null, body_fat_health: false } : {}), ...(w.lean_health ? { lean_kg: null, lean_health: false } : {}),
+  }));
+  const notHealth = (rows: Json[]) => rows.filter((r) => r.source !== 'health');
+  return { ...data, health_excluded: true, weight, water: (data.water as Json[]).filter((w) => !w.health),
+    activity: notHealth(data.activity), sleep: notHealth(data.sleep), workouts: notHealth(data.workouts) };
+}
+
+/** The rows of the day-based kinds in an export, named as in `ownCounts` (what a restore of it brings back). */
+export function exportCounts(data: Json): Record<string, number> {
+  const kinds = ['diary', 'weight', 'water', 'activity', 'sleep', 'workouts', 'fasting'];
+  return Object.fromEntries(kinds.map((k) => [k, (data[k] as unknown[]).length]));
+}
+
+/** The content of the archive (mahlwerk-export.json); `zipExport` writes it with the CSV files. */
+export async function exportData(db: Db, user: { id: number; username: string; display_name: string; is_demo?: unknown; household?: unknown }, first: string | null, last: string | null, nowSeconds: number): Promise<Json> {
   const demo = Boolean(user.is_demo);
   const a = first || FIRST_DAY, b = last || LAST_DAY, uid = user.id;
   const account = (await exportAccount(db, uid)) ?? {};
@@ -168,6 +191,11 @@ export async function buildExport(db: Db, user: { id: number; username: string; 
     badges: withDates(await exportBadges(db, uid, demo), 'earned_at'),
     webhooks: await webhooks(db, uid),
   };
+  return data;
+}
+
+/** The archive of `exportData`: the CSV files in the reader's language plus the JSON. */
+export function zipExport(data: Json, lang: string, nowSeconds: number): Promise<Uint8Array> {
   const style = new CsvStyle(lang);
   return buildZip([
     ['diary.csv', style.render(diaryColumns(data.diary), diaryRows(data.diary, lang))],
