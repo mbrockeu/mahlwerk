@@ -1200,6 +1200,7 @@ function mockConnections(method: string, p: string, body: unknown, raw?: Blob): 
     if (!yzStage) throw new ApiError(410, 'nothing is waiting to be imported (it may have expired): upload the files again');
     if ((body as { token: string }).token !== yzStage.token) throw new ApiError(409, 'the files changed since the preview: look at the preview again');
     const id = Math.max(0, ...importBatches.map((b) => b.id)) + 1;
+    if (yzStage.refresh && !(body as { expect_removed?: unknown }).expect_removed) throw new ApiError(422, 'a refresh needs expect_removed (entries and workouts) from the preview');
     if (yzStage.refresh) { const refreshed = { ...yzPreviewData(), batch_id: null, dry_run: false }; yzStage = null; return refreshed; } // a refresh with nothing new leaves no batch
     importBatches.unshift({ id, kind: 'yazio', created_at: Math.floor(Date.now() / 1000), counts: { days: 412, entries: 3640, product_entries: 3100, recipe_entries: 340, quick_entries: 200, foods: 520, weights: 180, water: 390, goal_set: true, activity_days: 220, workouts: 64 } });
     const done = { ...yzPreviewData(), batch_id: id, dry_run: false };

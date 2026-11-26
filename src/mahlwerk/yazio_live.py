@@ -272,8 +272,8 @@ class Fetcher:
     async def _fetch_refresh(self, http, progress: Progress, token: str, days: int) -> dict[str, dict]:
         """Refresh mode: EVERY day of the last `days` days ending today is asked for directly (no listing of the days that
         have entries), so that an empty day is a real answer. What follows from that is a deletion on the Mahlwerk side, so
-        nothing is guessed: a day whose consumed items or exercises do not come back as an object (404, no content, a missing
-        list), or any failed request, ends the whole run (no partial refresh). `no_data` is not an error here."""
+        nothing is guessed: a day whose consumed items or exercises do not come back as an object with ALL their lists (404, no
+        content, a missing list), or any failed request, ends the whole run (no partial refresh). `no_data` is not an error here."""
         get = lambda path, **params: self._send(http, progress, "GET", path, token=token, params=params or None)  # noqa: E731
         today = self.today()
         day_list = [(today - timedelta(days=days - 1 - i)).isoformat() for i in range(days)]
@@ -292,7 +292,7 @@ class Fetcher:
                 lists[key] = consumed[key]
             content = {"consumed": lists, "exercises": exercises}
             for key in ("training", "custom_training"):
-                if key in exercises and not isinstance(exercises[key], list):
+                if not isinstance(exercises.get(key), list):  # as strict as consumed: a missing list would read as "no workouts"
                     raise LiveError("unexpected")
             if isinstance(summary, dict):  # water, steps and goals are only ever set or updated, never taken away
                 content["daily_summary"] = summary

@@ -272,7 +272,7 @@ export class Fetcher {
   }
 
   /** Refresh mode (see yazio_live.py `_fetch_refresh`): EVERY day of the last `days` days ending today is asked for directly, so that an
-   * empty day is a real answer; a day whose consumed items or exercises do not come back as an object (404, no content, a missing list),
+   * empty day is a real answer; a day whose consumed items or exercises do not come back as an object with ALL their lists (404, no content, a missing list),
    * or any failed request, ends the whole run (no partial refresh). `no_data` is not an error here. */
   private async fetchRefresh(progress: Progress, token: string, days: number): Promise<Record<string, any>> {
     const get = (path: string, params?: Record<string, string>) => this.send(progress, 'GET', path, { token, params });
@@ -291,7 +291,7 @@ export class Fetcher {
         if (!Array.isArray(consumed[key])) throw new LiveError('unexpected');
         lists[key] = consumed[key];
       }
-      for (const key of ['training', 'custom_training']) if (Object.hasOwn(exercises, key) && !Array.isArray(exercises[key])) throw new LiveError('unexpected');
+      for (const key of ['training', 'custom_training']) if (!Array.isArray(exercises[key])) throw new LiveError('unexpected'); // as strict as consumed: a missing list would read as "no workouts"
       const content: Record<string, any> = { consumed: lists, exercises };
       if (isDict(summary)) content.daily_summary = summary; // water, steps and goals are only ever set or updated, never taken away
       return content;

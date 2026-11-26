@@ -48,9 +48,12 @@ class DryRun extends Error {
  * the user already has are left out. A food is taken from an earlier import (same key) or from an existing food with the same barcode,
  * and created otherwise; an existing food is never changed. Weight, water and goal are only set where the user has none. With
  * `dryRun` everything is done and rolled back, so the counts are exact. */
-export async function importYazio(db: Db, userId: number, plan: Plan, dryRun = false): Promise<Record<string, any>> {
+/** The removals of a refresh differ from what the person was shown; nothing was written. */
+export class RefreshChanged extends Error { constructor() { super('refresh changed'); } }
+
+export async function importYazio(db: Db, userId: number, plan: Plan, dryRun = false, expectRemoved: [number, number] | null = null): Promise<Record<string, any>> {
   const now = Math.floor(Date.now() / 1000);
-  const work = (tx: Db) => writePlan(tx, userId, plan, now);
+  const work = (tx: Db) => writePlan(tx, userId, plan, now, dryRun ? null : expectRemoved);
   if (!dryRun) return finish(await db.tx(work), plan);
   try {
     await db.tx(async (tx) => { throw new DryRun(await work(tx)); });
@@ -79,7 +82,7 @@ const workoutDiffers = (row: Row, w: PlanWorkout): boolean => row.day !== w.day 
   || !(['minutes', 'kcal', 'distance_m', 'steps'] as const).every((k) => sameNumber(row[k], w[k]));
 const chunks = <T>(list: T[], size = 500): T[][] => Array.from({ length: Math.ceil(list.length / size) }, (_, i) => list.slice(i * size, (i + 1) * size));
 
-async function writePlan(con: Db, userId: number, plan: Plan, now: number) {
+async function writePlan(con: Db, userId: number, plan: Plan, now: number, expectRemoved: [number, number] | null) {
   const refresh = plan.refresh ?? null;
   const [firstDay, lastDay] = refresh ? [refresh.first_day, refresh.last_day] : [null, null];
   const yazioBatch = "(SELECT id FROM import_batch WHERE user_id = ? AND kind = 'yazio')";
@@ -106,7 +109,12 @@ async function writePlan(con: Db, userId: number, plan: Plan, now: number) {
     entries.push(entry);
   }
   const gone = refresh ? [...scope].filter(([ext]) => !plan.seen_entries!.has(ext)).map(([, r]) => r.id as number) : [];
-  for (const chunk of chunks(gone)) await con.run(`DELETE FROM diary_entry WHERE id IN (${chunk.map(() => '?').join(', ')})`, chunk);
+  if (refresh && expectRemoved) {
+    const live = await con.all("SELECT external_id FROM workout WHERE user_id = ? AND external_id IS NOT NULL AND source = 'yazio' AND day BETWEEN ? AND ? "
+      + `AND import_id IN ${yazioBatch}`, [userId, firstDay, lastDay, userId]);
+    if (gone.length !== expectRemoved[0] || live.filter((r) => !plan.seen_workouts!.has(r.external_id as string)).length !== expectRemoved[1]) throw new RefreshChanged(); // the transaction rolls back
+  }
+  for (const chunk of chunks(gone)) await con.run(`DELETE FROM diary_entry WHERE user_id = ? AND import_id IN ${yazioBatch} AND id IN (${chunk.map(() => '?').join(', ')})`, [userId, userId, ...chunk]);
   let batchId: number | null = (await con.run("INSERT INTO import_batch (user_id, kind, created_at) VALUES (?, 'yazio', ?)", [userId, now])).lastId;
   const needed = [...new Set([...[...entries, ...updates.map((u) => u[1])].flatMap((e) => (e.food_key ? [e.food_key] : [])), ...(plan.all_products ? [...plan.foods.keys()] : [])])];
   const { ids, created, reused } = await importFoods(con, plan.foods, needed, batchId, now);
@@ -116,8 +124,8 @@ async function writePlan(con: Db, userId: number, plan: Plan, now: number) {
     [userId, e.day, e.meal, e.food_key ? ids.get(e.food_key) ?? null : null, e.amount, e.unit, e.name, e.brand, toJson(e.per_100), toJson(e.extra), now, e.external_id, batchId]);
   }
   for (const [rowId, e] of updates) {
-    await con.run('UPDATE diary_entry SET day = ?, meal = ?, food_id = ?, amount = ?, unit = ?, name = ?, brand = ?, per_100 = ?, extra = ? WHERE id = ?',
-      [e.day, e.meal, e.food_key ? ids.get(e.food_key) ?? null : null, e.amount, e.unit, e.name, e.brand, toJson(e.per_100), toJson(e.extra), rowId]);
+    await con.run(`UPDATE diary_entry SET day = ?, meal = ?, food_id = ?, amount = ?, unit = ?, name = ?, brand = ?, per_100 = ?, extra = ? WHERE id = ? AND user_id = ? AND import_id IN ${yazioBatch}`,
+      [e.day, e.meal, e.food_key ? ids.get(e.food_key) ?? null : null, e.amount, e.unit, e.name, e.brand, toJson(e.per_100), toJson(e.extra), rowId, userId, userId]);
   }
   let weights = 0, water = 0, goal = 0, activity = 0, weightsUpdated = 0, waterUpdated = 0, activityUpdated = 0;
   for (const [table, list, field] of [['weight', plan.weights, 'kg'], ['water', plan.water, 'ml']] as const) {
@@ -129,7 +137,7 @@ async function writePlan(con: Db, userId: number, plan: Plan, now: number) {
     for (const w of list as { day: string; kg?: number; ml?: number }[]) {
       const value = w[field]!;
       if (have.has(w.day)) {
-        if (!sameKg(have.get(w.day), value)) { await con.run(`UPDATE ${table} SET ${field} = ? WHERE user_id = ? AND day = ?`, [value, userId, w.day]); updated++; }
+        if (!sameKg(have.get(w.day), value)) { await con.run(`UPDATE ${table} SET ${field} = ? WHERE user_id = ? AND day = ? AND import_id IN ${yazioBatch}`, [value, userId, w.day, userId]); updated++; }
         continue;
       }
       inserted += (await con.run(`INSERT OR IGNORE INTO ${table} (user_id, day, ${field}, demo, import_id) VALUES (?, ?, ?, 0, ?)`, [userId, w.day, value, batchId])).changes;
@@ -156,7 +164,8 @@ async function writePlan(con: Db, userId: number, plan: Plan, now: number) {
     const row = haveActivity.get(a.day);
     if (row) {
       if (!(['steps', 'active_kcal', 'distance_m'] as const).every((k) => sameNumber(row[k], a[k]))) {
-        await con.run('UPDATE activity_day SET steps = ?, active_kcal = ?, distance_m = ? WHERE user_id = ? AND day = ?', [a.steps, a.active_kcal, a.distance_m, userId, a.day]);
+        await con.run(`UPDATE activity_day SET steps = ?, active_kcal = ?, distance_m = ? WHERE user_id = ? AND day = ? AND source = 'yazio' AND import_id IN ${yazioBatch}`,
+          [a.steps, a.active_kcal, a.distance_m, userId, a.day, userId]);
         activityUpdated++;
       }
       continue;
@@ -186,10 +195,10 @@ async function writePlan(con: Db, userId: number, plan: Plan, now: number) {
     workouts.push(w);
   }
   const workoutsGone = refresh ? [...workoutScope].filter(([ext]) => !plan.seen_workouts!.has(ext)).map(([, r]) => r.id as number) : [];
-  for (const chunk of chunks(workoutsGone)) await con.run(`DELETE FROM workout WHERE id IN (${chunk.map(() => '?').join(', ')})`, chunk);
+  for (const chunk of chunks(workoutsGone)) await con.run(`DELETE FROM workout WHERE user_id = ? AND source = 'yazio' AND import_id IN ${yazioBatch} AND id IN (${chunk.map(() => '?').join(', ')})`, [userId, userId, ...chunk]);
   for (const [rowId, w] of workoutUpdates) {
-    await con.run('UPDATE workout SET day = ?, started_at = ?, kind = ?, name = ?, minutes = ?, kcal = ?, distance_m = ?, steps = ?, note = ? WHERE id = ?',
-      [w.day, w.started_at, w.kind, w.name, w.minutes, w.kcal, w.distance_m, w.steps, w.note, rowId]);
+    await con.run(`UPDATE workout SET day = ?, started_at = ?, kind = ?, name = ?, minutes = ?, kcal = ?, distance_m = ?, steps = ?, note = ? WHERE id = ? AND user_id = ? AND source = 'yazio' AND import_id IN ${yazioBatch}`,
+      [w.day, w.started_at, w.kind, w.name, w.minutes, w.kcal, w.distance_m, w.steps, w.note, rowId, userId, userId]);
   }
   for (const w of workouts) {
     await con.run("INSERT INTO workout (user_id, day, started_at, kind, name, minutes, kcal, distance_m, steps, note, source, external_id, import_id, created_at) "

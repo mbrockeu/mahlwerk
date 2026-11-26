@@ -256,6 +256,11 @@ export function buildPlan(loaded: Loaded, allProducts: boolean, summary: Summary
   if (refresh !== null) {
     const wanted = dayRange(refresh.first_day, refresh.last_day);
     if (!wanted.length || wanted.some((d) => !validDays.includes(d))) throw new YazioError(`${where}: the fetched days do not cover the period of the refresh`);
+    for (const d of wanted) { // a day that Yazio did not answer in full would read as "nothing logged" and delete: refuse it
+      const { consumed, exercises } = days[d];
+      if (!isDict(consumed) || !isDict(exercises) || !['products', 'recipe_portions', 'simple_products'].every((k) => Array.isArray(consumed[k]))
+        || !['training', 'custom_training'].every((k) => Array.isArray(exercises[k]))) throw new YazioError(`${where}: a day of the refresh is incomplete (entries or exercises missing)`);
+    }
     summary.refresh = { ...refresh };
     summary.entries_seen = seenEntries.size;
     summary.workouts_seen = seenWorkouts.size;
@@ -379,10 +384,10 @@ function goalOf(days: Record<string, any>, validDays: string[]): PlanGoal | null
 }
 
 /** Import parsed export files into the account of one user (with `dryRun`: count only, write nothing). */
-export async function runImportFrom(db: Db, userId: number, loaded: Loaded, allProducts = false, dryRun = false, where = 'the export', refresh: Refresh | null = null): Promise<Summary> {
+export async function runImportFrom(db: Db, userId: number, loaded: Loaded, allProducts = false, dryRun = false, where = 'the export', refresh: Refresh | null = null, expectRemoved: [number, number] | null = null): Promise<Summary> {
   const summary = newSummary(dryRun);
   const plan = buildPlan(loaded, allProducts, summary, where, refresh);
-  const r = await importYazio(db, userId, plan, dryRun);
+  const r = await importYazio(db, userId, plan, dryRun, expectRemoved);
   summary.days = r.days;
   summary.entries = { product: r.product_entries, recipe: r.recipe_entries, quick: r.quick_entries };
   summary.total_entries = r.product_entries + r.recipe_entries + r.quick_entries;

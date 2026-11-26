@@ -78,12 +78,16 @@ COUNTS = ("entries_total", "entries_updated", "entries_removed", "workouts", "wo
           "weights_updated", "water", "water_updated", "activity_days", "activity_updated", "already_imported", "workouts_already")
 
 
+def expect(pre):
+    return {"entries": pre["entries_removed"], "workouts": pre["workouts_removed"]}
+
+
 def refresh(c, days=7):
     """A refresh run, its preview and its confirmation; the counts of both must be the same."""
     run = fetch(c, days=days)
     assert run["state"] == "done", run
     pre = c.post(f"{URL}/preview", json={}).json()
-    done = c.post(f"{URL}/confirm", json={"token": pre["token"]}).json()
+    done = c.post(f"{URL}/confirm", json={"token": pre["token"], "expect_removed": expect(pre)}).json()
     assert {k: pre[k] for k in COUNTS} == {k: done[k] for k in COUNTS}  # the dry run counts exactly
     return pre, done
 
@@ -290,3 +294,49 @@ def test_an_upload_after_a_refresh_is_an_ordinary_import(live):
         assert put(live, name, data).status_code == 200
     pre = live.post(f"{URL}/preview", json={}).json()
     assert pre["refresh"] is None and pre["entries_removed"] == 0 and pre["entries_total"] == 1
+
+
+def snapshot(c):
+    return (diary(c, 2), diary(c, 1), diary(c, 20), workouts(c, 2), batches(c))
+
+
+def test_exercises_without_both_lists_abort_and_nothing_is_written(live):
+    seed(live)
+    before = snapshot(live)
+    fill(live, 7)
+    live.fake.days[d(2)] = content()
+    for bad in ({}, {"training": []}, {"custom_training": []}, {"training": [], "custom_training": "x"}):
+        live.fake.days[d(1)] = {**content(), "exercises": bad}
+        run = fetch(live, fill_days=False, days=7)
+        live.clock.now += 3600
+        assert run["state"] == "error" and run["error_kind"] == "unexpected", bad
+        assert live.get(URL).json()["stage"] is None
+        assert snapshot(live) == before
+
+
+def test_confirm_of_a_refresh_needs_the_removals_that_were_shown(live):
+    seed(live)
+    live.fake.days[d(2)] = content([oats("e-2", 30, "dinner")])  # e-1 and the training are gone
+    live.fake.days[d(1)] = content([oats("e-3", 40, "lunch")])
+    assert fetch(live, days=7)["state"] == "done"
+    pre = live.post(f"{URL}/preview", json={}).json()
+    assert (pre["entries_removed"], pre["workouts_removed"]) == (1, 1)
+    before = snapshot(live)
+    missing = live.post(f"{URL}/confirm", json={"token": pre["token"]})
+    assert missing.status_code == 422 and "expect_removed" in missing.json()["detail"]
+    wrong = live.post(f"{URL}/confirm", json={"token": pre["token"], "expect_removed": {"entries": 0, "workouts": 1}})
+    assert wrong.status_code == 409 and "changed since the preview" in wrong.json()["detail"]
+    wrong = live.post(f"{URL}/confirm", json={"token": pre["token"], "expect_removed": {"entries": 1, "workouts": 0}})
+    assert wrong.status_code == 409
+    assert snapshot(live) == before and live.get(URL).json()["stage"] is not None  # nothing written, still waiting
+    ok = live.post(f"{URL}/confirm", json={"token": pre["token"], "expect_removed": {"entries": 1, "workouts": 1}})
+    assert ok.status_code == 200 and diary(live, 2) == [("Oats", 30, "dinner")] and workouts(live, 2) == []
+
+
+def test_an_ordinary_confirm_does_not_need_expect_removed(live):
+    seed(live)
+    assert put(live, "days.json", {d(2): content([oats("u-1", 10)])}).status_code == 200
+    put(live, "products.json", PRODUCTS)
+    put(live, "weight.json", {})
+    pre = live.post(f"{URL}/preview", json={}).json()
+    assert live.post(f"{URL}/confirm", json={"token": pre["token"]}).status_code == 200

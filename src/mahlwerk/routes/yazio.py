@@ -15,7 +15,7 @@ from starlette.concurrency import run_in_threadpool
 
 from .. import yazio, yazio_live, yazio_stage
 from ..auth import session_user
-from ..db import Store
+from ..db import RefreshChanged, Store
 from ..deps import get_store
 
 router = APIRouter(prefix="/api/v1/me/yazio", dependencies=[Depends(session_user)])
@@ -92,9 +92,16 @@ class Preview(BaseModel):
     dry_run: bool
 
 
+class ExpectRemoved(BaseModel):
+    entries: int = Field(ge=0)
+    workouts: int = Field(ge=0)
+
+
 class ConfirmIn(BaseModel):
     token: str = Field(max_length=64, description="the token of the preview")
     all_products: bool = False
+    expect_removed: ExpectRemoved | None = Field(
+        None, description="REQUIRED for a refresh: the `entries_removed` and `workouts_removed` of the preview; a different count now gives 409")
 
 
 class PreviewIn(BaseModel):
@@ -200,13 +207,16 @@ def _loaded(files: dict[str, bytes]) -> dict[str, dict | None]:
     return {name: json.loads(files[name]) if name in files else None for name in yazio.FILES}
 
 
-async def _import(request: Request, user: dict, store: Store, all_products: bool, dry_run: bool, token: str | None) -> tuple[yazio.Summary, str]:
+async def _import(request: Request, user: dict, store: Store, all_products: bool, dry_run: bool, token: str | None,
+                  expect_removed: ExpectRemoved | None = None) -> tuple[yazio.Summary, str]:
     staging = request.app.state.yazio_stage
     stage = staging.get(user["id"])
     if stage is None:
         raise HTTPException(410, "nothing is waiting to be imported (it may have expired): upload the files again")
     if token is not None and token != stage.token:
         raise HTTPException(409, "the files changed since the preview: look at the preview again")
+    if stage.refresh and token is not None and expect_removed is None:
+        raise HTTPException(422, "a refresh needs expect_removed (entries and workouts) from the preview")
     if stage.source == "login" and not request.app.state.features.yazio_login:
         staging.clear(user["id"])  # what a sign-in fetched is not kept once an admin switched the connector off
         raise HTTPException(404, "the direct Yazio sign-in is switched off (admin area)")
@@ -218,9 +228,11 @@ async def _import(request: Request, user: dict, store: Store, all_products: bool
     try:
         def work() -> yazio.Summary:
             return yazio.run_import_from(store, user["id"], _loaded(stage.files), all_products, dry_run, "the uploaded files",
-                                         stage.refresh)
+                                         stage.refresh, (expect_removed.entries, expect_removed.workouts) if expect_removed else None)
         try:
             summary = await run_in_threadpool(work)
+        except RefreshChanged:
+            raise HTTPException(409, "the data changed since the preview, look at the preview again") from None
         except yazio.YazioError as exc:
             raise HTTPException(422, str(exc)) from exc
         except (ValueError, RecursionError):
@@ -241,7 +253,7 @@ async def preview(request: Request, body: PreviewIn | None = None, user: dict = 
 @router.post("/confirm", response_model=Preview)
 async def confirm(body: ConfirmIn, request: Request, user: dict = Depends(session_user), store: Store = Depends(get_store)) -> Preview:
     """Import what the preview showed (`token`), as one batch that can be taken back. The staging area is emptied."""
-    summary, token = await _import(request, user, store, body.all_products, False, body.token)
+    summary, token = await _import(request, user, store, body.all_products, False, body.token, body.expect_removed)
     request.app.state.yazio_stage.clear(user["id"], token)  # only what was imported, not a newer upload
     return _preview(summary, token)
 

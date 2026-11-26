@@ -552,10 +552,16 @@ show the same preview as the file upload. A sign-in fetches either the whole per
     for those days, **including items this importer skips** (unknown product, invalid amount, training without duration): a skipped
     but listed item stays. If Yazio lists nothing at all for the period while Mahlwerk holds Yazio entries there, they are removed
     (a day emptied in Yazio is valid); the preview shows `entries_seen: 0` next to the removals.
+  - *Moved in Yazio:* an entry Yazio moved to a day outside the period is removed at its old day (it is no longer listed there) and only
+    comes back with a full fetch.
   - *New:* an id Mahlwerk does not have is imported as usual, into the batch of this run.
   - *Weight, water, activity:* for days of the period they are set as before where there is no value; where the value came from Yazio
     it is updated to Yazio's value. They are never deleted, and a value the person typed is kept. The weight of the day before the
-    period is asked as well (so the first day does not take over an older measurement), and only weights of the period are used.
+    period is asked as well (so the first day does not take over an older measurement), and only weights of the period are used. Yazio's weight answers may carry no date of the measurement, so a refresh can put a weight on another day than an
+    earlier full import did (nothing is deleted, so at worst two nearby days carry the same value).
+  - *Safeguards:* every day must come back with its three entry lists and both exercise lists, or the run ends; the confirmation must
+    name the removals the preview showed (`expect_removed`) and is refused, writing nothing, if they differ by then; every write of a
+    refresh is limited to the person's own rows of a Yazio batch, inside one write transaction.
   - *Undo:* taking the batch of a refresh back removes only what that run inserted. Rows it updated keep their original batch and
     are not restored; **deleted rows are not restored**. A refresh that only updates or removes leaves no batch.
   - The file upload is unchanged: it never updates or removes anything, and an upload replaces a waiting refresh.

@@ -605,6 +605,10 @@ class LastAdmin(Exception):
 
 
 
+class RefreshChanged(Exception):
+    """The removals of a refresh differ from what the person was shown; nothing was written."""
+
+
 def _norm(value):
     """Numbers rounded to 6 places (ints and floats alike), dicts and lists normalised: what is compared to see whether Yazio changed a value."""
     if isinstance(value, bool) or value is None or isinstance(value, str):
@@ -2121,7 +2125,7 @@ class Store:
                 rows = con.execute(f"{sql} WHERE b.user_id = ? ORDER BY b.id DESC", (user_id,)).fetchall()
         return [self._batch(r) for r in rows]
 
-    def import_yazio(self, user_id: int, plan: dict, dry_run: bool = False) -> dict:
+    def import_yazio(self, user_id: int, plan: dict, dry_run: bool = False, expect_removed: tuple[int, int] | None = None) -> dict:
         """Write a prepared Yazio import in ONE transaction; any error leaves the database as it was.
 
         `plan` has `entries` (each: kind product|recipe|quick, external_id, day, meal, food_key|None, amount, unit,
@@ -2144,12 +2148,15 @@ class Store:
           user changed (a change clears `import_id`) are never touched; their ids still count as "already imported".
         - weights, water and activity days of the period that came from Yazio get Yazio's value; others are left as they are.
         Nothing is deleted from weight, water and activity. Taking back the new batch removes only what it inserted.
+        The write starts with BEGIN IMMEDIATE, so the scope is read inside the write transaction. `expect_removed` (entries, workouts):
+        what the person was shown; if the removals counted now differ, `RefreshChanged` is raised and nothing is written.
         """
         now = int(time.time())
         refresh = plan.get("refresh")
         first_day, last_day = (refresh["first_day"], refresh["last_day"]) if refresh else (None, None)
         yazio_batch = "(SELECT id FROM import_batch WHERE user_id = ? AND kind = 'yazio')"
         with self._connect() as con:
+            con.execute("BEGIN IMMEDIATE")
             taken = {
                 r[0] for r in con.execute(
                     "SELECT external_id FROM diary_entry WHERE user_id = ? AND external_id IS NOT NULL", (user_id,))
@@ -2177,9 +2184,17 @@ class Store:
                 taken.add(ext)
                 entries.append(entry)
             gone = [r["id"] for ext, r in scope.items() if ext not in plan["seen_entries"]] if refresh else []
+            if refresh and expect_removed is not None and not dry_run:
+                wanted = sum(1 for r in con.execute(
+                    "SELECT external_id FROM workout WHERE user_id = ? AND external_id IS NOT NULL AND source = 'yazio' "
+                    f"AND day BETWEEN ? AND ? AND import_id IN {yazio_batch}", (user_id, first_day, last_day, user_id))
+                    if r["external_id"] not in plan["seen_workouts"])
+                if (len(gone), wanted) != tuple(expect_removed):
+                    raise RefreshChanged()  # the `with` rolls everything back
             for start in range(0, len(gone), 500):
                 chunk = gone[start:start + 500]
-                con.execute(f"DELETE FROM diary_entry WHERE id IN ({', '.join('?' * len(chunk))})", chunk)
+                con.execute(f"DELETE FROM diary_entry WHERE user_id = ? AND import_id IN {yazio_batch} AND id IN ({', '.join('?' * len(chunk))})",
+                            (user_id, user_id, *chunk))
             batch_id = con.execute(
                 "INSERT INTO import_batch (user_id, kind, created_at) VALUES (?, 'yazio', ?)", (user_id, now)
             ).lastrowid
@@ -2200,10 +2215,10 @@ class Store:
             )
             con.executemany(
                 "UPDATE diary_entry SET day = ?, meal = ?, food_id = ?, amount = ?, unit = ?, name = ?, brand = ?, per_100 = ?, "
-                "extra = ? WHERE id = ?",
+                f"extra = ? WHERE id = ? AND user_id = ? AND import_id IN {yazio_batch}",
                 [
                     (e["day"], e["meal"], ids.get(e["food_key"]), e["amount"], e["unit"], e["name"], e["brand"],
-                     _json(e["per_100"]), _json(e["extra"]), row_id)
+                     _json(e["per_100"]), _json(e["extra"]), row_id, user_id, user_id)
                     for row_id, e in updates
                 ],
             )
@@ -2218,7 +2233,8 @@ class Store:
                 for w in plan[key]:
                     if w["day"] in have:
                         if round(float(have[w["day"]]), 2) != round(float(w[field]), 2):
-                            con.execute(f"UPDATE {table} SET {field} = ? WHERE user_id = ? AND day = ?", (w[field], user_id, w["day"]))
+                            con.execute(f"UPDATE {table} SET {field} = ? WHERE user_id = ? AND day = ? AND import_id IN {yazio_batch}",
+                                        (w[field], user_id, w["day"], user_id))
                             updated += 1
                         continue
                     inserted += con.execute(
@@ -2249,8 +2265,9 @@ class Store:
                 row = have_activity.get(a["day"])
                 if row is not None:
                     if not all(_same_number(row[k], a[k]) for k in ("steps", "active_kcal", "distance_m")):
-                        con.execute("UPDATE activity_day SET steps = ?, active_kcal = ?, distance_m = ? WHERE user_id = ? AND day = ?",
-                                    (a["steps"], a["active_kcal"], a["distance_m"], user_id, a["day"]))
+                        con.execute("UPDATE activity_day SET steps = ?, active_kcal = ?, distance_m = ? WHERE user_id = ? AND day = ? "
+                                    f"AND source = 'yazio' AND import_id IN {yazio_batch}",
+                                    (a["steps"], a["active_kcal"], a["distance_m"], user_id, a["day"], user_id))
                         activity_updated += 1
                     continue
                 activity += con.execute(
@@ -2286,11 +2303,13 @@ class Store:
             workouts_gone = [r["id"] for ext, r in workout_scope.items() if ext not in plan["seen_workouts"]] if refresh else []
             for start in range(0, len(workouts_gone), 500):
                 chunk = workouts_gone[start:start + 500]
-                con.execute(f"DELETE FROM workout WHERE id IN ({', '.join('?' * len(chunk))})", chunk)
+                con.execute(f"DELETE FROM workout WHERE user_id = ? AND source = 'yazio' AND import_id IN {yazio_batch} "
+                            f"AND id IN ({', '.join('?' * len(chunk))})", (user_id, user_id, *chunk))
             con.executemany(
                 "UPDATE workout SET day = ?, started_at = ?, kind = ?, name = ?, minutes = ?, kcal = ?, distance_m = ?, steps = ?, "
-                "note = ? WHERE id = ?",
-                [(w["day"], w["started_at"], w["kind"], w["name"], w["minutes"], w["kcal"], w["distance_m"], w["steps"], w["note"], row_id)
+                f"note = ? WHERE id = ? AND user_id = ? AND source = 'yazio' AND import_id IN {yazio_batch}",
+                [(w["day"], w["started_at"], w["kind"], w["name"], w["minutes"], w["kcal"], w["distance_m"], w["steps"], w["note"], row_id,
+                  user_id, user_id)
                  for row_id, w in workout_updates],
             )
             con.executemany(

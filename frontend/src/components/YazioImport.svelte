@@ -97,7 +97,7 @@
     step = 'importing';
     error = '';
     try {
-      done = await api.yazioConfirm(preview.token, allProducts);
+      done = await api.yazioConfirm(preview.token, allProducts, preview.refresh ? { entries: preview.entries_removed, workouts: preview.workouts_removed } : undefined);
       preview = null;
       await refresh();
       onimported();
@@ -203,6 +203,7 @@
         <p class="note mono">{t('yzRefreshWorkouts', { n: fmt(p.workouts), c: fmt(p.workouts_updated), r: fmt(p.workouts_removed) })}</p>
         {#if p.weights_updated + p.water_updated + p.activity_updated > 0}<p class="note mono">{t('yzRefreshValues', { n: fmt(p.weights_updated + p.water_updated + p.activity_updated) })}</p>{/if}
         {#if p.refresh.entries_seen === 0 && p.entries_removed > 0}<p class="note warnbox" role="alert">{t('yzRefreshEmpty', { n: fmt(p.entries_removed) })}</p>{/if}
+        {#if p.refresh.workouts_seen === 0 && p.workouts_removed > 0}<p class="note warnbox" role="alert">{t('yzRefreshEmptyWorkouts', { n: fmt(p.workouts_removed) })}</p>{/if}
         <p class="note">{t('yzRefreshUndo')}</p>
       {/if}
       <p class="note">{p.goal_set ? t('yzGoalSet') : t('yzGoalKept')}</p>

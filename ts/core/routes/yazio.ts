@@ -10,6 +10,7 @@ import { HttpError, parse, route, type Ctx, type Req, type Route } from '../http
 import { nullish, pyBool, pyInt, pyStr } from '../models/common.ts';
 import { pyLen, pyStrip } from '../text.ts';
 import { FILES, YazioError, runImportFrom, type Summary } from '../yazio.ts';
+import { RefreshChanged } from '../store/imports.ts';
 import { Credentials, DEFAULT_MONTHS, LiveError, MAX_MONTHS, MAX_REFRESH_DAYS, Refused, Runs, appIdentity, runView } from '../yazioLive.ts';
 import { MAX_FILE, StageError, Staging, UPLOAD_NAMES, decodeUpload, stageView } from '../yazioStage.ts';
 
@@ -70,7 +71,7 @@ function previewOf(summary: Summary, token: string) {
 const stageHttp = (e: StageError) => new HttpError(({ too_large: 413, busy: 503 } as Record<string, number>)[e.code] ?? 422, e.text);
 const busy = (text: string, seconds = 3) => new HttpError(429, text, { 'retry-after': String(seconds) });
 
-const confirmIn = z.object({ token: pyStr(0, 64), all_products: pyBool().default(false) });
+const confirmIn = z.object({ token: pyStr(0, 64), all_products: pyBool().default(false), expect_removed: nullish(z.object({ entries: pyInt().refine((n) => n >= 0), workouts: pyInt().refine((n) => n >= 0) })) });
 const previewIn = z.object({ all_products: pyBool().default(false) });
 // No limits declared on purpose: a validation error must never echo the password; the handler checks.
 const loginIn = z.object({ email: z.string().default(''), password: z.string().default(''), months: nullish(pyInt()), days: nullish(pyInt()) });
@@ -79,7 +80,7 @@ const loginIn = z.object({ email: z.string().default(''), password: z.string().d
 const loaded = (files: Record<string, Uint8Array>) =>
   Object.fromEntries(FILES.map((name) => [name, Object.hasOwn(files, name) ? JSON.parse(new TextDecoder().decode(files[name])) : null]));
 
-async function importStaged(req: Req, allProducts: boolean, dryRun: boolean, token: string | null): Promise<[Summary, string]> {
+async function importStaged(req: Req, allProducts: boolean, dryRun: boolean, token: string | null, expectRemoved: { entries: number; workouts: number } | null = null): Promise<[Summary, string]> {
   const { ctx } = req;
   const user = req.user!;
   const { stage: staging } = yazioOf(ctx);
@@ -90,6 +91,7 @@ async function importStaged(req: Req, allProducts: boolean, dryRun: boolean, tok
     staging.clear(user.id); // what a sign-in fetched is not kept once an admin switched the connector off
     throw new HttpError(404, 'the direct Yazio sign-in is switched off (admin area)');
   }
+  if (stage.refresh && token !== null && expectRemoved === null) throw new HttpError(422, 'a refresh needs expect_removed (entries and workouts) from the preview');
   if (!staging.begin(user.id)) throw new HttpError(409, 'an upload, preview or import of yours is still running');
   if (!staging.tryHeavy()) {
     staging.end(user.id);
@@ -97,8 +99,9 @@ async function importStaged(req: Req, allProducts: boolean, dryRun: boolean, tok
   }
   try {
     try {
-      return [await runImportFrom(ctx.db, user.id, loaded(stage.files), allProducts, dryRun, 'the uploaded files', stage.refresh), stage.token];
+      return [await runImportFrom(ctx.db, user.id, loaded(stage.files), allProducts, dryRun, 'the uploaded files', stage.refresh, expectRemoved ? [expectRemoved.entries, expectRemoved.workouts] : null), stage.token];
     } catch (e) {
+      if (e instanceof RefreshChanged) throw new HttpError(409, 'the data changed since the preview, look at the preview again');
       if (e instanceof YazioError) throw new HttpError(422, e.message);
       if (e instanceof SyntaxError || e instanceof RangeError) throw new HttpError(422, 'the files cannot be read');
       throw e;
@@ -172,7 +175,7 @@ export const routes: Route[] = [
   route('POST', `${URL}/confirm`, async (req) => {
     const user = await sessionUser(req);
     const body = parse(confirmIn, req.body);
-    const [summary, token] = await importStaged(req, body.all_products, false, body.token);
+    const [summary, token] = await importStaged(req, body.all_products, false, body.token, body.expect_removed);
     yazioOf(req.ctx).stage.clear(user.id, token); // only what was imported, not a newer upload
     return previewOf(summary, token);
   }),

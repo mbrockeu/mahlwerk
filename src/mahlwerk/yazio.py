@@ -384,6 +384,13 @@ def build_plan_from(loaded: dict[str, dict | None], all_products: bool, summary:
         wanted = [d for d in _day_range(refresh["first_day"], refresh["last_day"])]
         if not wanted or any(d not in valid_days for d in wanted):
             raise YazioError(f"{where}: the fetched days do not cover the period of the refresh")
+        for d in wanted:  # a day that Yazio did not answer in full would read as "nothing logged" and delete: refuse it
+            block = days[d]
+            consumed, exercises = block.get("consumed"), block.get("exercises")
+            if (not isinstance(consumed, dict) or not isinstance(exercises, dict)
+                    or not all(isinstance(consumed.get(k), list) for k in ("products", "recipe_portions", "simple_products"))
+                    or not all(isinstance(exercises.get(k), list) for k in ("training", "custom_training"))):
+                raise YazioError(f"{where}: a day of the refresh is incomplete (entries or exercises missing)")
         summary.refresh = dict(refresh)
         summary.entries_seen, summary.workouts_seen = len(seen_entries), len(seen_workouts)
 
@@ -536,14 +543,14 @@ def run_import(
 
 def run_import_from(
     store: Store, user_id: int, loaded: dict[str, dict | None], all_products: bool = False, dry_run: bool = False,
-    where: str = "the export", refresh: dict | None = None,
+    where: str = "the export", refresh: dict | None = None, expect_removed: tuple[int, int] | None = None,
 ) -> Summary:
     """Import parsed export files into the account of one user (with `dry_run`: count only, write nothing). With `refresh`
     (see `build_plan_from`) rows that came from Yazio are brought in line with what Yazio says for those days."""
     started = time.monotonic()
     summary = Summary(dry_run=dry_run)
     plan = build_plan_from(loaded, all_products, summary, where, refresh)
-    result = store.import_yazio(user_id, plan, dry_run=dry_run)
+    result = store.import_yazio(user_id, plan, dry_run=dry_run, expect_removed=expect_removed)
     summary.days = result["days"]
     summary.entries = Counter({
         "product": result["product_entries"], "recipe": result["recipe_entries"], "quick": result["quick_entries"]})

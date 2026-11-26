@@ -831,3 +831,20 @@ def test_a_failure_while_writing_activity_rolls_everything_back(client, store, u
     with pytest.raises(sqlite3.OperationalError):
         yazio.run_import(store, uid, export)
     assert tables(store) == before
+
+
+def test_a_refresh_whose_days_are_incomplete_is_refused(tmp_path):
+    """The plan builder of a refresh: a day without its lists would read as "nothing logged" and delete, so it is refused."""
+    store = Store(str(tmp_path / "r.db"))
+    uid = store.get_or_create_user("u", "u")["id"]
+    period = {"first_day": "2026-01-10", "last_day": "2026-01-10"}
+    full = {"consumed": {"products": [], "recipe_portions": [], "simple_products": []}, "exercises": {"training": [], "custom_training": []}}
+    files = lambda day: {"products.json": {"products": {}, "recipes": {}}, "days.json": {"2026-01-10": day}, "weight.json": {}}  # noqa: E731
+    assert yazio.run_import_from(store, uid, files(full), refresh=period, dry_run=True).refresh == period
+    bad_days = [
+        {**full, "exercises": {}}, {**full, "exercises": {"training": []}}, {**full, "consumed": {"products": []}},
+        {"consumed": full["consumed"]}, {**full, "consumed": {**full["consumed"], "simple_products": None}},
+    ]
+    for day in bad_days:
+        with pytest.raises(yazio.YazioError, match="incomplete"):
+            yazio.run_import_from(store, uid, files(day), refresh=period, dry_run=True)

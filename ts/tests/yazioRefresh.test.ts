@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import { YazioError, runImportFrom } from '../core/yazio.ts';
 import { Credentials, Fetcher, LiveError } from '../core/yazioLive.ts';
+import { RefreshChanged } from '../core/store/imports.ts';
 import type { Outgoing } from '../core/outgoing.ts';
 import { makeWorld, type World } from './cookidooHarness.ts';
 
@@ -142,4 +143,31 @@ test('an unanswered or failed day ends the whole run, an empty period is fine', 
   await assert.rejects(fetcher(service(notList)).run(new Credentials('a@b.de', 'x'), 12, progress(), 3), (e: any) => e instanceof LiveError && e.kind === 'unexpected');
   const got = await fetcher(service(empty())).run(new Credentials('a@b.de', 'x'), 12, progress(), 3);
   assert.equal(Object.keys(got['days.json']).length, 3); // nothing logged at all is a valid answer
+});
+
+test('a refresh day without its lists is refused by the plan builder', async () => {
+  const { db, id } = await setup();
+  for (const bad of [{ ...day(), exercises: {} }, { ...day(), exercises: { training: [] } }, { ...day(), consumed: { products: [] } }, { consumed: day().consumed }]) {
+    await assert.rejects(runImportFrom(db, id, files({ ...empty(), '2026-03-10': bad }), false, true, 'test', PERIOD), (e: any) => e instanceof YazioError && /incomplete/.test(e.message));
+  }
+});
+
+test('the removals the person was shown must still be the removals: otherwise nothing is written', async () => {
+  const { db, id } = await setup();
+  await runImportFrom(db, id, files({ ...empty(), '2026-03-10': day([oats('e1', 80)], [run('t1', 30)]) }));
+  const next = files(empty());
+  await assert.rejects(runImportFrom(db, id, next, false, false, 'test', PERIOD, [0, 1]), RefreshChanged);
+  await assert.rejects(runImportFrom(db, id, next, false, false, 'test', PERIOD, [1, 0]), RefreshChanged);
+  assert.equal(await count(db, 'SELECT count(*) AS n FROM diary_entry'), 1);
+  assert.equal(await count(db, 'SELECT count(*) AS n FROM workout'), 1);
+  const s = await runImportFrom(db, id, next, false, false, 'test', PERIOD, [1, 1]);
+  assert.deepEqual([s.entries_removed, s.workouts_removed], [1, 1]);
+  assert.equal(await count(db, 'SELECT count(*) AS n FROM diary_entry'), 0);
+});
+
+test('a refresh fetch needs both exercise lists', async () => {
+  for (const exercises of [{}, { training: [] }, { custom_training: [] }, { training: [], custom_training: 'x' }]) {
+    const days = { ...empty(), '2026-03-10': { ...day(), exercises } };
+    await assert.rejects(fetcher(service(days)).run(new Credentials('a@b.de', 'x'), 12, progress(), 3), (e: any) => e instanceof LiveError && e.kind === 'unexpected');
+  }
 });
