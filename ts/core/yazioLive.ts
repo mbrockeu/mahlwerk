@@ -13,7 +13,7 @@
 //   are reduced to the neutral categories of MESSAGES.
 // - The app identifiers come from `MAHLWERK_YAZIO_CLIENT_ID` / `MAHLWERK_YAZIO_CLIENT_SECRET` (the environment of the context).
 // - Politeness and brakes: at most 4 requests at once, 48 MB of answers per run, a budget of requests and of time per run, a bounded
-//   period (at most 24 months), one run per person at a time, at most 2 runs on the server at once, at most 3 sign-in attempts per person
+//   period (at most 24 months, or 31 days for a refresh), one run per person at a time, at most 2 runs on the server at once, at most 3 sign-in attempts per person
 //   and hour and 30 seconds between two of them, at most 10 per hour on the whole server.
 import type { Ctx } from './http.ts';
 import { OutError, outgoing, type Outgoing } from './outgoing.ts';
@@ -27,6 +27,7 @@ const MAX_SECONDS = 20 * 60;
 export const MAX_MONTHS = 24;
 export const DEFAULT_MONTHS = 12;
 const MAX_DAYS = 800;
+export const MAX_REFRESH_DAYS = 31; // the refresh period ("last N days"): 1 to 31
 const RETRIES = 2;
 const MAX_RUN_BYTES = 48 * 1024 * 1024; // all answers of one run together; more is a clean stop ("too_large")
 const GLOBAL_ATTEMPTS = [10, 3600] as const; // sign-in attempts per hour for the whole server, whoever makes them
@@ -162,11 +163,14 @@ export class Fetcher {
   }
 
   /** Sign in once, fetch the period, return `{"days.json": ..., "products.json": ..., "weight.json": ...}`. */
-  async run(credentials: Credentials, months: number, progress: Progress): Promise<Record<string, any>> {
+  async run(credentials: Credentials, months: number, progress: Progress, days: number | null = null): Promise<Record<string, any>> {
     months = Math.max(1, Math.min(MAX_MONTHS, months));
     this.deadline = this.clock() + MAX_SECONDS;
     let token = await this.login(progress, credentials);
-    try { return await this.fetchAll(progress, token, months); } finally { token = ''; }
+    try {
+      if (days !== null) return await this.fetchRefresh(progress, token, Math.max(1, Math.min(MAX_REFRESH_DAYS, days)));
+      return await this.fetchAll(progress, token, months);
+    } finally { token = ''; }
   }
 
   private async login(progress: Progress, credentials: Credentials): Promise<string> {
@@ -240,7 +244,19 @@ export class Fetcher {
     days.forEach((day, i) => { if (fetched[i] !== null) dayMap[day] = fetched[i]; });
     if (!Object.keys(dayMap).length) throw new LiveError('no_data');
 
-    // 3. the products and recipes the entries refer to
+    const catalog = await this.catalogOf(progress, get, dayMap);
+
+    // 4. the weight: the last value at or before each logged day
+    const dayList = Object.keys(dayMap);
+    progress.phase = 'weights'; progress.done = 0; progress.total = dayList.length;
+    const answers = await this.many(progress, dayList, (day) => get('/user/bodyvalues/weight/last', { date: day }));
+    const weights = weightsOf(dayList, answers);
+    progress.phase = 'done';
+    return { 'days.json': dayMap, 'products.json': catalog, 'weight.json': weights };
+  }
+
+  /** The products and recipes the entries of the fetched days refer to. */
+  private async catalogOf(progress: Progress, get: (path: string, params?: Record<string, string>) => Promise<any>, dayMap: Record<string, any>): Promise<Record<string, any>> {
     const productIds = new Set<string>(), recipeIds = new Set<string>();
     for (const content of Object.values<any>(dayMap)) {
       for (const item of content.consumed.products) if (isDict(item) && typeof item.product_id === 'string' && ID.test(item.product_id)) productIds.add(item.product_id);
@@ -252,14 +268,48 @@ export class Fetcher {
     const found = await this.many(progress, wanted, ([kind, ident]) => get(`/${kind}/${ident}`));
     const catalog: Record<string, any> = { products: nullMap(), recipes: nullMap() };
     wanted.forEach(([kind, ident], i) => { if (isDict(found[i])) catalog[kind][ident] = found[i]; });
+    return catalog;
+  }
 
-    // 4. the weight: the last value at or before each logged day
-    const dayList = Object.keys(dayMap);
-    progress.phase = 'weights'; progress.done = 0; progress.total = dayList.length;
-    const answers = await this.many(progress, dayList, (day) => get('/user/bodyvalues/weight/last', { date: day }));
-    const weights = weightsOf(dayList, answers);
+  /** Refresh mode (see yazio_live.py `_fetch_refresh`): EVERY day of the last `days` days ending today is asked for directly, so that an
+   * empty day is a real answer; a day whose consumed items or exercises do not come back as an object with ALL their lists (404, no content, a missing list),
+   * or any failed request, ends the whole run (no partial refresh). `no_data` is not an error here. */
+  private async fetchRefresh(progress: Progress, token: string, days: number): Promise<Record<string, any>> {
+    const get = (path: string, params?: Record<string, string>) => this.send(progress, 'GET', path, { token, params });
+    const today = this.today();
+    const base = Date.UTC(Number(today.iso.slice(0, 4)), Number(today.iso.slice(5, 7)) - 1, Number(today.iso.slice(8, 10)));
+    const dayBack = (n: number) => new Date(base - n * 86400000).toISOString().slice(0, 10);
+    const dayList = Array.from({ length: days }, (_, i) => dayBack(days - 1 - i));
+    progress.phase = 'days'; progress.done = 0; progress.total = dayList.length;
+    const oneDay = async (day: string) => {
+      const consumed = await get('/user/consumed-items', { date: day });
+      const exercises = await get('/user/exercises', { date: day });
+      const summary = await get('/user/widgets/daily-summary', { date: day });
+      if (!isDict(consumed) || !isDict(exercises)) throw new LiveError('unexpected');
+      const lists: Record<string, any> = {};
+      for (const key of ['products', 'recipe_portions', 'simple_products']) {
+        if (!Array.isArray(consumed[key])) throw new LiveError('unexpected');
+        lists[key] = consumed[key];
+      }
+      for (const key of ['training', 'custom_training']) if (!Array.isArray(exercises[key])) throw new LiveError('unexpected'); // as strict as consumed: a missing list would read as "no workouts"
+      const content: Record<string, any> = { consumed: lists, exercises };
+      if (isDict(summary)) content.daily_summary = summary; // water, steps and goals are only ever set or updated, never taken away
+      return content;
+    };
+    const fetched = await this.many(progress, dayList, oneDay);
+    const dayMap = nullMap();
+    dayList.forEach((day, i) => { dayMap[day] = fetched[i]; });
+    const catalog = await this.catalogOf(progress, get, dayMap);
+
+    // the weight: the last value at or before each day; the day before the period is asked too, so that the first day does not take over
+    // an older measurement, and only values of the period itself are kept
+    const asked = [dayBack(days), ...dayList];
+    progress.phase = 'weights'; progress.done = 0; progress.total = asked.length;
+    const answers = await this.many(progress, asked, (day) => get('/user/bodyvalues/weight/last', { date: day }));
+    const weights = nullMap();
+    for (const [day, kg] of Object.entries(weightsOf(asked, answers))) if (day >= dayList[0]! && day <= dayList[dayList.length - 1]!) weights[day] = kg;
     progress.phase = 'done';
-    return { 'days.json': dayMap, 'products.json': catalog, 'weight.json': weights };
+    return { 'days.json': dayMap, 'products.json': catalog, 'weight.json': weights, 'refresh.json': { first_day: dayList[0], last_day: dayList[dayList.length - 1] } };
   }
 }
 
@@ -324,7 +374,7 @@ export class Runs {
     for (const [uid, times] of this.attempts) if (!times.length || now - times[times.length - 1]! > ATTEMPTS[1]) this.attempts.delete(uid);
   }
 
-  start(userId: number, credentials: Credentials, months: number): Run {
+  start(userId: number, credentials: Credentials, months: number, days: number | null = null): Run {
     const identity = appIdentity(this.ctx.env);
     if (identity === null) throw new LiveError('unexpected');
     const now = this.clock();
@@ -343,13 +393,13 @@ export class Runs {
     const run = { user_id: userId, progress: newProgress(), state: 'running', error: null, started: now, finished: null } as Run;
     this.runs.set(userId, run);
     const fetcher = new Fetcher(outgoing(this.ctx), identity, { sleep: this.sleep, today: this.today });
-    run.done = this.work(run, fetcher, credentials, months);
+    run.done = this.work(run, fetcher, credentials, months, days);
     return run;
   }
 
-  private async work(run: Run, fetcher: Fetcher, credentials: Credentials, months: number): Promise<void> {
+  private async work(run: Run, fetcher: Fetcher, credentials: Credentials, months: number, days: number | null): Promise<void> {
     try {
-      const files = await fetcher.run(credentials, months, run.progress);
+      const files = await fetcher.run(credentials, months, run.progress, days);
       if (run.progress.cancelled) throw new LiveError('cancelled');
       await this.deliver(run.user_id, files);
       run.state = 'done';

@@ -34,6 +34,9 @@ How things map:
   keep the name). The steps goal comes with the goal. A second run over an export that was imported before adds the
   activity as a batch of its own and nothing else twice.
 
+Refresh (direct sign-in only, `build_plan_from(..., refresh=...)`): for the last N days Yazio wins for rows that came from Yazio
+(see `Store.import_yazio` and docs/integrations.md); the importer also reports every id Yazio listed, skipped ones included.
+
 Everything is written in one transaction as one import batch; the Yazio ids of the entries make a second run add
 nothing, and `remove` takes the batch back (see `Store.remove_import`).
 """
@@ -46,7 +49,7 @@ import sys
 import time
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from . import activity as act
@@ -99,6 +102,17 @@ class Summary:
     water_kept: int = 0
     goal_set: bool = False
     already_imported: int = 0
+    # refresh mode (direct sign-in, "last N days"): what Yazio changed or removed for rows that came from Yazio
+    refresh: dict | None = None  # {"first_day", "last_day"}
+    entries_seen: int = 0  # ids Yazio listed for the days of the refresh (also those the importer skipped)
+    workouts_seen: int = 0
+    entries_updated: int = 0
+    entries_removed: int = 0
+    workouts_updated: int = 0
+    workouts_removed: int = 0
+    weights_updated: int = 0
+    water_updated: int = 0
+    activity_updated: int = 0
     skipped: Counter = field(default_factory=Counter)  # reason -> how many
     notes: Counter = field(default_factory=Counter)  # things that were adjusted, not skipped
     unknown_keys: Counter = field(default_factory=Counter)  # Yazio nutrient keys without a counterpart
@@ -129,6 +143,12 @@ class Summary:
         ]
         if self.already_imported:
             out.append(f"Already imported earlier: {self.already_imported} entries")
+        if self.refresh:
+            out.append(f"Refresh of {self.refresh['first_day']} to {self.refresh['last_day']}: Yazio listed {self.entries_seen} entries "
+                       f"and {self.workouts_seen} workouts")
+            out.append(f"Entries: {self.entries_updated} updated, {self.entries_removed} removed; workouts: {self.workouts_updated} "
+                       f"updated, {self.workouts_removed} removed; weights {self.weights_updated}, water {self.water_updated}, "
+                       f"activity {self.activity_updated} updated")
         if self.skipped:
             out.append(f"Skipped: {sum(self.skipped.values())}")
             out += [f"  {count} x {reason}" for reason, count in sorted(self.skipped.items())]
@@ -242,9 +262,15 @@ def load_folder(directory: str | Path) -> dict[str, dict | None]:
     return {name: _read(folder, name) for name in FILES}
 
 
-def build_plan_from(loaded: dict[str, dict | None], all_products: bool, summary: Summary, where: str = "the export") -> dict:
+def build_plan_from(loaded: dict[str, dict | None], all_products: bool, summary: Summary, where: str = "the export",
+                    refresh: dict | None = None) -> dict:
     """Prepare everything `Store.import_yazio` writes from the parsed files (`FILES` -> object or None). The one core
-    behind the command line, the file upload and the direct sign-in: all three hand over the same structure."""
+    behind the command line, the file upload and the direct sign-in: all three hand over the same structure.
+
+    `refresh` ({"first_day", "last_day"}, only from a direct sign-in that fetched every day of the period) switches on
+    the refresh mode of the store. The plan then also carries the ids Yazio listed for these days, ALL of them, also those
+    this importer skips (`seen_entries`: the entry ids; `seen_workouts`: `yazio:<id>`): a row whose id is not among them
+    is gone in Yazio, a skipped but listed one is not."""
     summary.missing_files = [name for name, data in loaded.items() if data is None]
     if len(summary.missing_files) == len(FILES):
         raise YazioError(f"{where}: none of {', '.join(FILES)} found")
@@ -299,6 +325,8 @@ def build_plan_from(loaded: dict[str, dict | None], all_products: bool, summary:
 
     entries: list[dict] = []
     skip = summary.skipped
+    seen_entries: set[str] = set()
+    seen_workouts: set[str] = set()
     water: list[dict] = []
     activity: list[dict] = []
     workouts: list[dict] = []
@@ -316,6 +344,8 @@ def build_plan_from(loaded: dict[str, dict | None], all_products: bool, summary:
                 found.append((str(item.get("date", "")) if isinstance(item, dict) else "", item, kind))
         found.sort(key=lambda f: f[0])  # by time of day; stable for equal times
         for _, item, kind in found:
+            if isinstance(item, dict) and item.get("id"):
+                seen_entries.add(str(item["id"]))  # before the importer may skip it
             entry = _entry(item, kind, day, product_food, recipe_food, convert, skip, summary, bool(catalog))
             if entry:
                 entries.append(entry)
@@ -332,6 +362,8 @@ def build_plan_from(loaded: dict[str, dict | None], all_products: bool, summary:
             activity.append(day_activity)
         for list_name in ("training", "custom_training"):
             for item in exercises.get(list_name) if isinstance(exercises.get(list_name), list) else []:
+                if isinstance(item, dict) and item.get("id"):
+                    seen_workouts.add(f"yazio:{item['id']}")
                 workout = _workout(item, day, skip)
                 if workout:
                     workouts.append(workout)
@@ -348,10 +380,35 @@ def build_plan_from(loaded: dict[str, dict | None], all_products: bool, summary:
         else:
             weights.append({"day": day, "kg": round(value, 2)})
 
+    if refresh is not None:
+        wanted = [d for d in _day_range(refresh["first_day"], refresh["last_day"])]
+        if not wanted or any(d not in valid_days for d in wanted):
+            raise YazioError(f"{where}: the fetched days do not cover the period of the refresh")
+        for d in wanted:  # a day that Yazio did not answer in full would read as "nothing logged" and delete: refuse it
+            block = days[d]
+            consumed, exercises = block.get("consumed"), block.get("exercises")
+            if (not isinstance(consumed, dict) or not isinstance(exercises, dict)
+                    or not all(isinstance(consumed.get(k), list) for k in ("products", "recipe_portions", "simple_products"))
+                    or not all(isinstance(exercises.get(k), list) for k in ("training", "custom_training"))):
+                raise YazioError(f"{where}: a day of the refresh is incomplete (entries or exercises missing)")
+        summary.refresh = dict(refresh)
+        summary.entries_seen, summary.workouts_seen = len(seen_entries), len(seen_workouts)
+
     return {
         "foods": foods, "entries": entries, "weights": weights, "water": water, "all_products": all_products,
         "goal": _goal(days, valid_days), "activity": activity, "workouts": workouts,
+        "refresh": dict(refresh) if refresh is not None else None, "seen_entries": seen_entries, "seen_workouts": seen_workouts,
     }
+
+
+def _day_range(first: str, last: str) -> list[str]:
+    """Every day from `first` to `last` (inclusive); empty when either is no date or the order is wrong (or more than 400 days)."""
+    if not (_is_day(first) and _is_day(last)):
+        return []
+    a, b = date.fromisoformat(first), date.fromisoformat(last)
+    if b < a or (b - a).days > 400:
+        return []
+    return [(a + timedelta(days=i)).isoformat() for i in range((b - a).days + 1)]
 
 
 def _positive(value, top: float) -> float | None:
@@ -486,19 +543,25 @@ def run_import(
 
 def run_import_from(
     store: Store, user_id: int, loaded: dict[str, dict | None], all_products: bool = False, dry_run: bool = False,
-    where: str = "the export",
+    where: str = "the export", refresh: dict | None = None, expect_removed: tuple[int, int] | None = None,
 ) -> Summary:
-    """Import parsed export files into the account of one user (with `dry_run`: count only, write nothing)."""
+    """Import parsed export files into the account of one user (with `dry_run`: count only, write nothing). With `refresh`
+    (see `build_plan_from`) rows that came from Yazio are brought in line with what Yazio says for those days."""
     started = time.monotonic()
     summary = Summary(dry_run=dry_run)
-    plan = build_plan_from(loaded, all_products, summary, where)
-    result = store.import_yazio(user_id, plan, dry_run=dry_run)
+    plan = build_plan_from(loaded, all_products, summary, where, refresh)
+    result = store.import_yazio(user_id, plan, dry_run=dry_run, expect_removed=expect_removed)
     summary.days = result["days"]
     summary.entries = Counter({
         "product": result["product_entries"], "recipe": result["recipe_entries"], "quick": result["quick_entries"]})
     summary.foods_created, summary.foods_reused = result["foods"], result["foods_reused"]
-    summary.weights, summary.weights_kept = result["weights"], len(plan["weights"]) - result["weights"]
-    summary.water, summary.water_kept = result["water"], len(plan["water"]) - result["water"]
+    summary.weights, summary.weights_updated = result["weights"], result["weights_updated"]
+    summary.weights_kept = len(plan["weights"]) - result["weights"] - result["weights_updated"]
+    summary.water, summary.water_updated = result["water"], result["water_updated"]
+    summary.water_kept = len(plan["water"]) - result["water"] - result["water_updated"]
+    summary.entries_updated, summary.entries_removed = result["entries_updated"], result["entries_removed"]
+    summary.workouts_updated, summary.workouts_removed = result["workouts_updated"], result["workouts_removed"]
+    summary.activity_updated = result["activity_updated"]
     summary.goal_set = result["goal_set"]
     summary.activity_days, summary.activity_kept = result["activity_days"], result["activity_kept"]
     summary.workouts, summary.workouts_already = result["workouts"], result["workouts_already"]

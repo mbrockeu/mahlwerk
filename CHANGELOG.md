@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Yazio: update the last days.** The direct sign-in can now refresh a short period (`days`, 1 to 31; the profile offers 3, 7, 14 and
+  30) instead of fetching months once: every day is asked for directly, and for entries and workouts that came from Yazio, changes
+  and deletions made in Yazio are applied (Yazio wins). Own entries, Health and demo rows, entries you changed in Mahlwerk and rows
+  outside the period are never touched; weights, water and activity of Yazio origin are updated, never deleted. A day that does not
+  answer ends the run without writing anything. The preview counts new, changed and removed items exactly (same staging, token and
+  dry run). Taking the import back removes only what it added; removed and overwritten rows are not restored. Same behaviour in the
+  Python and the TypeScript server. See "Yazio direct sign-in" in `docs/integrations.md` and `docs/api-v1.md`.
+
 ### Changed
 - **The profile settings are grouped under headings** (appearance and use, diary and training, data and import, connections, account, about), in the style of the admin page. Cards only moved; card titles are now one heading level lower.
 

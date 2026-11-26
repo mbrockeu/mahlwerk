@@ -860,13 +860,21 @@ and are dropped by `DELETE /me/yazio`, after a confirmation and when they expire
 | `GET /me/yazio` | – | `{stage:{token, source:"upload"\|"login", files:{name:bytes}}\|null, login:{enabled, available, run:Run\|null, max_months, default_months}, max_file_bytes}` | What waits, and the state of the direct sign-in (`available`: switched on **and** app identifiers set). |
 | `PUT /me/yazio/files/{name}` | the file itself (not a form), plain or gzip-packed | the stage (as above) | `name` is `days.json`, `products.json`, `weight.json` or `export.zip`. The name is checked before the body is read. At most 24 MB as sent (**413**); 24 MB per file and 32 MB per person after unpacking, a packed-to-unpacked ratio above 100 and more than 200,000 objects/lists or 2 million elements over a person's files are refused (**413**); **503** when the server holds too many uploads; **429** with `Retry-After` when another upload, preview or import is running on the server (only one heavy job runs at a time), **409** when one of the caller's own is still running. A ZIP's entry count and directory size are read before it is opened (ZIP64 refused). Files of one series are collected; a ZIP replaces the area. **422**: unexpected name, empty, not valid JSON with an object on top (nothing of the content is echoed), damaged gzip/ZIP, unsafe ZIP path, ZIP with none of the three files or one of them twice. **415** for a multipart form. |
 | `POST /me/yazio/preview` | `{all_products?:bool}` | Preview | Counts exactly what an import would do (a dry run, rolled back). **410** nothing waits (or it expired), **409** a preview or import of yours is still running. |
-| `POST /me/yazio/confirm` | `{token, all_products?:bool}` | Preview with `batch_id` | Imports what the preview showed. **409** when the files changed since (`token` is that of the preview), **410** when nothing waits. Empties the area. The batch appears in `GET /me/imports` and can be removed like any other. Running it twice for the same files imports nothing twice. |
+| `POST /me/yazio/confirm` | `{token, all_products?:bool, expect_removed?:{entries:int, workouts:int}}` | Preview with `batch_id` | Imports what the preview showed. For a **refresh** `expect_removed` is required (the `entries_removed` and `workouts_removed` of the preview): **422** without it, and **409** ("the data changed since the preview, look at the preview again", nothing written) when the removals counted at confirmation differ; an ordinary import ignores it. **409** when the files changed since (`token` is that of the preview), **410** when nothing waits. Empties the area. The batch appears in `GET /me/imports` and can be removed like any other. Running it twice for the same files imports nothing twice. |
 | `DELETE /me/yazio` | – | 204 | Discards the files and cancels a running sign-in fetch. |
 
 `Preview` is `{token, days, entries:{product, recipe, quick}, entries_total, foods_created, foods_reused, weights, weights_kept,
 water, water_kept, activity_days, activity_kept, workouts, workouts_already, goal_set, already_imported,
-skipped:[{reason, count}], notes:[{text, count}], unknown_keys, dropped_values, missing_files:[string], batch_id:int\|null,
+refresh:{first_day, last_day, entries_seen, workouts_seen}\|null, entries_updated, entries_removed, workouts_updated, workouts_removed,
+weights_updated, water_updated, activity_updated, skipped:[{reason, count}], notes:[{text, count}], unknown_keys, dropped_values, missing_files:[string], batch_id:int\|null,
 dry_run:bool}`. The work runs in a worker thread, so the server keeps answering (12,000 entries take about a second).
+
+The fields after `already_imported` belong to a **refresh** (see below) and are 0 / `null` otherwise. `entries_total` counts the new
+entries, `entries_updated` and `entries_removed` the entries that came from Yazio and were changed or deleted in Yazio
+(`workouts_*`, `weights_updated`, `water_updated`, `activity_updated` likewise), `already_imported` the unchanged ones (and those that
+are not from Yazio), `refresh` the period and how many entry and workout ids Yazio listed for it (also those that cannot be imported;
+`entries_seen: 0` with removals means Yazio reported an empty period). An upload never sets `refresh`; a refresh with only updates or
+removals has `batch_id: null` (there is nothing to take back).
 
 ### Direct sign-in at Yazio (optional, unofficial)
 
@@ -875,7 +883,7 @@ Off by default; an admin switches the connector `yazio_login` on **and** the env
 
 | Method and path | Body | Returns | Notes |
 | --- | --- | --- | --- |
-| `POST /me/yazio/login` | `{email, password, months?}` | Run (202) | Starts a background fetch of the last `months` (1 to 24, default 12) months. The server signs in once, then forgets e-mail address, password and sign-in. **404** switched off, **409** not set up or a fetch of yours already runs, **429** brake (30 seconds between attempts, 3 per hour per person, 10 per hour on the whole server; 2 runs on the server at once), **422** missing values or period (the input is never echoed). |
+| `POST /me/yazio/login` | `{email, password, months?}` or `{email, password, days}` | Run (202) | Starts a background fetch of the last `months` (1 to 24, default 12) months, **or**, with `days` (1 to 31), a refresh of the last `days` days ending today (exactly one of the two; both is **422**). The server signs in once, then forgets e-mail address, password and sign-in. **404** switched off, **409** not set up or a fetch of yours already runs, **429** brake (30 seconds between attempts, 3 per hour per person, 10 per hour on the whole server; 2 runs on the server at once), **422** missing values or period (the input is never echoed). |
 
 `Run` is `{state:"running"\|"done"\|"error"\|"cancelled", phase:"login"\|"discover"\|"days"\|"products"\|"weights"\|"done", done, total,
 requests, error:string\|null, error_kind:string\|null}`; poll `GET /me/yazio` (every second or two). When the state is `done` the
@@ -883,6 +891,16 @@ fetched data waits as a stage with `source:"login"` for preview and confirmation
 `busy` (Yazio asked to slow down), `unavailable`, `unexpected` (an answer did not look as expected: the unofficial interface may have
 changed), `too_large`, `limit` (request or time budget used up: choose a shorter period), `expired`, `no_data` or `cancelled`; the
 text is neutral and never carries content from Yazio.
+
+**Refresh (`days`).** Every day of the period is asked for directly. A day that does not answer as an object with its three lists of
+entries and both exercise lists (`training`, `custom_training`), or any failed request ends the run with an error (`unexpected`, `expired`, ...; nothing is
+staged, nothing written); `no_data` does not occur. The stage then remembers the period (it is not an upload and is dropped by
+one); preview and confirmation behave as described for `Preview`. For the days of the period, entries and workouts that came from
+Yazio (a diary entry whose `import_id` is a Yazio batch of the person; a workout with source `yazio` and such an `import_id`) are
+updated to Yazio's values when they differ and deleted when Yazio no longer lists their id (ids the importer skips still count as
+listed); weights, water and activity days of Yazio origin are updated, never deleted; own, Health, demo and changed rows and rows
+outside the period are never touched. Taking a batch back does not restore updated or deleted rows. Details:
+[integrations.md](integrations.md#yazio-direct-sign-in).
 
 - Product entries become diary entries with a snapshot (name, brand, unit, per 100 = the Yazio value per gram x 100,
   `extra` converted from grams to the unit of the nutrient directory; keys without a counterpart are counted and

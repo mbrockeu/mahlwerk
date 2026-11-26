@@ -604,6 +604,44 @@ class LastAdmin(Exception):
     """The change would leave the server without an active admin."""
 
 
+
+class RefreshChanged(Exception):
+    """The removals of a refresh differ from what the person was shown; nothing was written."""
+
+
+def _norm(value):
+    """Numbers rounded to 6 places (ints and floats alike), dicts and lists normalised: what is compared to see whether Yazio changed a value."""
+    if isinstance(value, bool) or value is None or isinstance(value, str):
+        return value
+    if isinstance(value, (int, float)):
+        return round(float(value), 6)
+    if isinstance(value, dict):
+        return {k: _norm(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_norm(v) for v in value]
+    return value
+
+
+def _same_number(a, b) -> bool:
+    return (a is None and b is None) or (a is not None and b is not None and round(float(a), 3) == round(float(b), 3))
+
+
+def _entry_differs(row, entry: dict) -> bool:
+    """A stored Yazio entry against the one Yazio says now (the food link is not compared: it only follows a changed entry)."""
+    return (
+        row["day"] != entry["day"] or row["meal"] != entry["meal"] or row["unit"] != entry["unit"]
+        or row["name"] != entry["name"] or row["brand"] != entry["brand"] or _norm(row["amount"]) != _norm(entry["amount"])
+        or _norm(json.loads(row["per_100"])) != _norm(entry["per_100"]) or _norm(json.loads(row["extra"] or "{}")) != _norm(entry["extra"])
+    )
+
+
+def _workout_differs(row, w: dict) -> bool:
+    return (
+        row["day"] != w["day"] or row["started_at"] != w["started_at"] or row["kind"] != w["kind"] or row["name"] != w["name"]
+        or row["note"] != w["note"] or not all(_same_number(row[k], w[k]) for k in ("minutes", "kcal", "distance_m", "steps"))
+    )
+
+
 class Store:
     def __init__(self, path: str):
         Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -2087,7 +2125,7 @@ class Store:
                 rows = con.execute(f"{sql} WHERE b.user_id = ? ORDER BY b.id DESC", (user_id,)).fetchall()
         return [self._batch(r) for r in rows]
 
-    def import_yazio(self, user_id: int, plan: dict, dry_run: bool = False) -> dict:
+    def import_yazio(self, user_id: int, plan: dict, dry_run: bool = False, expect_removed: tuple[int, int] | None = None) -> dict:
         """Write a prepared Yazio import in ONE transaction; any error leaves the database as it was.
 
         `plan` has `entries` (each: kind product|recipe|quick, external_id, day, meal, food_key|None, amount, unit,
@@ -2099,26 +2137,71 @@ class Store:
         taken from an earlier import (same key) or from an existing food with the same barcode, and created
         otherwise; an existing food is never changed. Weight, water and goal are only set where the user has none.
         With `dry_run` everything is done and rolled back, so the counts are exact.
+
+        Refresh mode (`plan["refresh"]` = {first_day, last_day}, `seen_entries`, `seen_workouts`; only the direct sign-in
+        that asked Yazio for every day of the period makes it): rows that came from Yazio (diary entries whose `import_id`
+        is a batch of this user with kind 'yazio'; workouts with source 'yazio' and such an `import_id`; weights and water
+        with such an `import_id`; activity days with source 'yazio') are brought in line with Yazio, which wins:
+        - entries/workouts of the period whose id Yazio did not list are deleted ("listed" includes what the importer
+          skips, so a skipped item stays); the ones whose values differ are updated (they keep their `import_id`);
+          new ones are inserted into the new batch. Rows outside the period, manual, Health and demo rows and rows the
+          user changed (a change clears `import_id`) are never touched; their ids still count as "already imported".
+        - weights, water and activity days of the period that came from Yazio get Yazio's value; others are left as they are.
+        Nothing is deleted from weight, water and activity. Taking back the new batch removes only what it inserted.
+        The write starts with BEGIN IMMEDIATE, so the scope is read inside the write transaction. `expect_removed` (entries, workouts):
+        what the person was shown; if the removals counted now differ, `RefreshChanged` is raised and nothing is written.
         """
         now = int(time.time())
+        refresh = plan.get("refresh")
+        first_day, last_day = (refresh["first_day"], refresh["last_day"]) if refresh else (None, None)
+        yazio_batch = "(SELECT id FROM import_batch WHERE user_id = ? AND kind = 'yazio')"
         with self._connect() as con:
+            con.execute("BEGIN IMMEDIATE")
             taken = {
                 r[0] for r in con.execute(
                     "SELECT external_id FROM diary_entry WHERE user_id = ? AND external_id IS NOT NULL", (user_id,))
             }
-            entries, already = [], 0
+            scope: dict[str, sqlite3.Row] = {}  # refresh: the Yazio rows of the period, by external id
+            if refresh:
+                scope = {r["external_id"]: r for r in con.execute(
+                    "SELECT id, external_id, day, meal, amount, unit, name, brand, per_100, extra FROM diary_entry "
+                    f"WHERE user_id = ? AND external_id IS NOT NULL AND day BETWEEN ? AND ? AND import_id IN {yazio_batch}",
+                    (user_id, first_day, last_day, user_id))}
+            entries, updates, already, handled = [], [], 0, set()
             for entry in plan["entries"]:
-                if entry["external_id"] in taken:
+                ext = entry["external_id"]
+                row = scope.get(ext)
+                if row is not None and ext not in handled:
+                    handled.add(ext)
+                    if _entry_differs(row, entry):
+                        updates.append((row["id"], entry))
+                    else:
+                        already += 1
+                    continue
+                if ext in taken:
                     already += 1
                     continue
-                taken.add(entry["external_id"])
+                taken.add(ext)
                 entries.append(entry)
+            gone = [r["id"] for ext, r in scope.items() if ext not in plan["seen_entries"]] if refresh else []
+            if refresh and expect_removed is not None and not dry_run:
+                wanted = sum(1 for r in con.execute(
+                    "SELECT external_id FROM workout WHERE user_id = ? AND external_id IS NOT NULL AND source = 'yazio' "
+                    f"AND day BETWEEN ? AND ? AND import_id IN {yazio_batch}", (user_id, first_day, last_day, user_id))
+                    if r["external_id"] not in plan["seen_workouts"])
+                if (len(gone), wanted) != tuple(expect_removed):
+                    raise RefreshChanged()  # the `with` rolls everything back
+            for start in range(0, len(gone), 500):
+                chunk = gone[start:start + 500]
+                con.execute(f"DELETE FROM diary_entry WHERE user_id = ? AND import_id IN {yazio_batch} AND id IN ({', '.join('?' * len(chunk))})",
+                            (user_id, user_id, *chunk))
             batch_id = con.execute(
                 "INSERT INTO import_batch (user_id, kind, created_at) VALUES (?, 'yazio', ?)", (user_id, now)
             ).lastrowid
 
             needed = list(dict.fromkeys(
-                [e["food_key"] for e in entries if e["food_key"]] + (list(plan["foods"]) if plan["all_products"] else [])
+                [e["food_key"] for e in entries + [u[1] for u in updates] if e["food_key"]]
+                + (list(plan["foods"]) if plan["all_products"] else [])
             ))
             ids, created, reused = self._import_foods(con, plan["foods"], needed, batch_id, now)
             con.executemany(
@@ -2130,17 +2213,38 @@ class Store:
                     for e in entries
                 ],
             )
-            weights = water = 0
-            for w in plan["weights"]:
-                weights += con.execute(
-                    "INSERT OR IGNORE INTO weight (user_id, day, kg, demo, import_id) VALUES (?, ?, ?, 0, ?)",
-                    (user_id, w["day"], w["kg"], batch_id),
-                ).rowcount
-            for w in plan["water"]:
-                water += con.execute(
-                    "INSERT OR IGNORE INTO water (user_id, day, ml, demo, import_id) VALUES (?, ?, ?, 0, ?)",
-                    (user_id, w["day"], w["ml"], batch_id),
-                ).rowcount
+            con.executemany(
+                "UPDATE diary_entry SET day = ?, meal = ?, food_id = ?, amount = ?, unit = ?, name = ?, brand = ?, per_100 = ?, "
+                f"extra = ? WHERE id = ? AND user_id = ? AND import_id IN {yazio_batch}",
+                [
+                    (e["day"], e["meal"], ids.get(e["food_key"]), e["amount"], e["unit"], e["name"], e["brand"],
+                     _json(e["per_100"]), _json(e["extra"]), row_id, user_id, user_id)
+                    for row_id, e in updates
+                ],
+            )
+            weights = water = weights_updated = water_updated = 0
+            for table, key, field in (("weight", "weights", "kg"), ("water", "water", "ml")):
+                have = {}
+                if refresh:
+                    have = {r["day"]: r[field] for r in con.execute(
+                        f"SELECT day, {field} FROM {table} WHERE user_id = ? AND day BETWEEN ? AND ? AND import_id IN {yazio_batch}",
+                        (user_id, first_day, last_day, user_id))}
+                inserted = updated = 0
+                for w in plan[key]:
+                    if w["day"] in have:
+                        if round(float(have[w["day"]]), 2) != round(float(w[field]), 2):
+                            con.execute(f"UPDATE {table} SET {field} = ? WHERE user_id = ? AND day = ? AND import_id IN {yazio_batch}",
+                                        (w[field], user_id, w["day"], user_id))
+                            updated += 1
+                        continue
+                    inserted += con.execute(
+                        f"INSERT OR IGNORE INTO {table} (user_id, day, {field}, demo, import_id) VALUES (?, ?, ?, 0, ?)",
+                        (user_id, w["day"], w[field], batch_id),
+                    ).rowcount
+                if table == "weight":
+                    weights, weights_updated = inserted, updated
+                else:
+                    water, water_updated = inserted, updated
             goal = 0
             if plan["goal"]:
                 goal = con.execute(
@@ -2151,8 +2255,21 @@ class Store:
                 if goal:  # the user had no goal: the imported one counts for every day, the imported past included
                     self._record_goal(con, {"steps": None, "water_ml": None, **plan["goal"], "user_id": user_id,
                                             "valid_from": goals.SINCE_START, "changed_at": now})
-            activity = 0
+            activity = activity_updated = 0
+            have_activity = {}
+            if refresh:
+                have_activity = {r["day"]: r for r in con.execute(
+                    "SELECT day, steps, active_kcal, distance_m FROM activity_day WHERE user_id = ? AND day BETWEEN ? AND ? "
+                    f"AND source = 'yazio' AND import_id IN {yazio_batch}", (user_id, first_day, last_day, user_id))}
             for a in plan.get("activity", []):
+                row = have_activity.get(a["day"])
+                if row is not None:
+                    if not all(_same_number(row[k], a[k]) for k in ("steps", "active_kcal", "distance_m")):
+                        con.execute("UPDATE activity_day SET steps = ?, active_kcal = ?, distance_m = ? WHERE user_id = ? AND day = ? "
+                                    f"AND source = 'yazio' AND import_id IN {yazio_batch}",
+                                    (a["steps"], a["active_kcal"], a["distance_m"], user_id, a["day"], user_id))
+                        activity_updated += 1
+                    continue
                 activity += con.execute(
                     "INSERT OR IGNORE INTO activity_day (user_id, day, steps, active_kcal, distance_m, source, import_id) "
                     "VALUES (?, ?, ?, ?, ?, 'yazio', ?)",
@@ -2161,13 +2278,40 @@ class Store:
             known_workouts = {
                 r[0] for r in con.execute("SELECT external_id FROM workout WHERE user_id = ? AND external_id IS NOT NULL", (user_id,))
             }
-            workouts, workouts_already = [], 0
+            workout_scope: dict[str, sqlite3.Row] = {}
+            if refresh:
+                workout_scope = {r["external_id"]: r for r in con.execute(
+                    "SELECT id, external_id, day, started_at, kind, name, minutes, kcal, distance_m, steps, note FROM workout "
+                    "WHERE user_id = ? AND external_id IS NOT NULL AND source = 'yazio' AND day BETWEEN ? AND ? "
+                    f"AND import_id IN {yazio_batch}", (user_id, first_day, last_day, user_id))}
+            workouts, workout_updates, workouts_already, workouts_handled = [], [], 0, set()
             for w in plan.get("workouts", []):
-                if w["external_id"] in known_workouts:
+                ext = w["external_id"]
+                row = workout_scope.get(ext)
+                if row is not None and ext not in workouts_handled:
+                    workouts_handled.add(ext)
+                    if _workout_differs(row, w):
+                        workout_updates.append((row["id"], w))
+                    else:
+                        workouts_already += 1
+                    continue
+                if ext in known_workouts:
                     workouts_already += 1
                     continue
-                known_workouts.add(w["external_id"])
+                known_workouts.add(ext)
                 workouts.append(w)
+            workouts_gone = [r["id"] for ext, r in workout_scope.items() if ext not in plan["seen_workouts"]] if refresh else []
+            for start in range(0, len(workouts_gone), 500):
+                chunk = workouts_gone[start:start + 500]
+                con.execute(f"DELETE FROM workout WHERE user_id = ? AND source = 'yazio' AND import_id IN {yazio_batch} "
+                            f"AND id IN ({', '.join('?' * len(chunk))})", (user_id, user_id, *chunk))
+            con.executemany(
+                "UPDATE workout SET day = ?, started_at = ?, kind = ?, name = ?, minutes = ?, kcal = ?, distance_m = ?, steps = ?, "
+                f"note = ? WHERE id = ? AND user_id = ? AND source = 'yazio' AND import_id IN {yazio_batch}",
+                [(w["day"], w["started_at"], w["kind"], w["name"], w["minutes"], w["kcal"], w["distance_m"], w["steps"], w["note"], row_id,
+                  user_id, user_id)
+                 for row_id, w in workout_updates],
+            )
             con.executemany(
                 "INSERT INTO workout (user_id, day, started_at, kind, name, minutes, kcal, distance_m, steps, note, source, "
                 "external_id, import_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'yazio', ?, ?, ?)",
@@ -2182,7 +2326,7 @@ class Store:
                 "goal_set": bool(goal), "activity_days": activity, "workouts": len(workouts),
             }
             if not (entries or created or weights or water or goal or activity or workouts):
-                con.execute("DELETE FROM import_batch WHERE id = ?", (batch_id,))
+                con.execute("DELETE FROM import_batch WHERE id = ?", (batch_id,))  # nothing to take back (updates and removals have no batch)
                 batch_id = None
             else:
                 con.execute("UPDATE import_batch SET counts = ? WHERE id = ?", (_json(counts), batch_id))
@@ -2190,7 +2334,10 @@ class Store:
                 con.rollback()
                 batch_id = None
         return {**counts, "foods_reused": reused, "already_imported": already, "batch_id": batch_id,
-                "activity_kept": len(plan.get("activity", [])) - activity, "workouts_already": workouts_already}
+                "activity_kept": len(plan.get("activity", [])) - activity - activity_updated, "workouts_already": workouts_already,
+                "entries_updated": len(updates), "entries_removed": len(gone), "workouts_updated": len(workout_updates),
+                "workouts_removed": len(workouts_gone), "weights_updated": weights_updated, "water_updated": water_updated,
+                "activity_updated": activity_updated}
 
     @staticmethod
     def _import_foods(con: sqlite3.Connection, specs: dict, needed: list[str], batch_id: int, now: int, user_id: int | None = None):

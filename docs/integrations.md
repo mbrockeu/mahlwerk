@@ -511,8 +511,9 @@ the suggested amount in it.
 
 ## Yazio direct sign-in
 
-Optional connector (off by default) that lets a person sign in at Yazio **once** from the profile, so the server can fetch the
-diary and show the same preview as the file upload. **Read this before you switch it on.**
+Optional connector (off by default) that lets a person sign in at Yazio from the profile, so the server can fetch the diary and
+show the same preview as the file upload. A sign-in fetches either the whole period once or, as a **refresh**, the last few days
+(below). Each sign-in is used for one run and forgotten. **Read this before you switch it on.**
 
 - **It is unofficial.** Yazio publishes no API. The calls below come from public, community-written clients; Yazio can change or
   block them at any time, and using them may be against Yazio's terms. An admin switches it on at their own responsibility
@@ -530,10 +531,44 @@ diary and show the same preview as the file upload. **Read this before you switc
   `/user/exercises` and `/user/widgets/daily-summary` (per day), `/products/{id}` and `/recipes/{id}` (per product and recipe
   that was eaten) and `/user/bodyvalues/weight/last` (per logged day). The answers are put into the structure of the
   exporter's files and imported by the same code as an upload.
+- **Refresh of the last days.** The whole-period fetch brings entries in once: an entry whose Yazio id Mahlwerk already has is skipped,
+  so changes or deletions made in Yazio afterwards never arrive. For that the person signs in once more and chooses a refresh of
+  the last 1 to 31 days (the profile offers 3, 7, 14 and 30; `days` instead of `months`, exactly one of the two), the days ending
+  today (the server's local date). The server then asks for **every** day directly (no listing of the days that have entries), so
+  an empty day is a real answer; if any day, or any request, fails or does not answer as an object with its lists (not found,
+  no content), the whole run ends with a neutral error and nothing is written. The preview and the confirmation use the same
+  staging, token, transaction and dry run as every import, so the counts are exact. For the days of the period **Yazio wins**
+  for what came from Yazio:
+  - *What came from Yazio:* diary entries whose `import_id` points to an import batch of kind `yazio` of this person; workouts with
+    source `yazio` and such an `import_id`; weights and water with such an `import_id`; activity days with source `yazio`. Own
+    entries, entries of Apple Health or the demo data, rows outside the period and **rows the person changed in Mahlwerk** (a change
+    to an entry, workout, weight, water or activity day clears the link to the batch) are never touched; an entry or workout whose
+    Yazio id Mahlwerk has already counts as "already imported" (a copy or re-log of an entry, a data import of an own export and the
+    demo data do not carry a link to a Yazio batch, so none of them is ever taken for a Yazio row).
+  - *Updated:* a Yazio entry or workout of the period that is in Yazio's answer with different values (day, meal, amount, unit, name,
+    brand, nutrients, workout fields; compared after parsing and rounding, so an unchanged refresh reports 0) gets Yazio's values.
+    It stays in its original batch. A row outside the period is never moved or changed, even when Yazio now lists its id inside it.
+  - *Removed:* a Yazio entry or workout of the period whose id Yazio did not list is deleted. "Listed" means every id in Yazio's answer
+    for those days, **including items this importer skips** (unknown product, invalid amount, training without duration): a skipped
+    but listed item stays. If Yazio lists nothing at all for the period while Mahlwerk holds Yazio entries there, they are removed
+    (a day emptied in Yazio is valid); the preview shows `entries_seen: 0` next to the removals.
+  - *Moved in Yazio:* an entry Yazio moved to a day outside the period is removed at its old day (it is no longer listed there) and only
+    comes back with a full fetch.
+  - *New:* an id Mahlwerk does not have is imported as usual, into the batch of this run.
+  - *Weight, water, activity:* for days of the period they are set as before where there is no value; where the value came from Yazio
+    it is updated to Yazio's value. They are never deleted, and a value the person typed is kept. The weight of the day before the
+    period is asked as well (so the first day does not take over an older measurement), and only weights of the period are used. Yazio's weight answers may carry no date of the measurement, so a refresh can put a weight on another day than an
+    earlier full import did (nothing is deleted, so at worst two nearby days carry the same value).
+  - *Safeguards:* every day must come back with its three entry lists and both exercise lists, or the run ends; the confirmation must
+    name the removals the preview showed (`expect_removed`) and is refused, writing nothing, if they differ by then; every write of a
+    refresh is limited to the person's own rows of a Yazio batch, inside one write transaction.
+  - *Undo:* taking the batch of a refresh back removes only what that run inserted. Rows it updated keep their original batch and
+    are not restored; **deleted rows are not restored**. A refresh that only updates or removes leaves no batch.
+  - The file upload is unchanged: it never updates or removes anything, and an upload replaces a waiting refresh.
 - **What it keeps.** Nothing of e-mail address, password and token (memory of the fetching thread for the run only; no refresh
   token). Nothing in logs or error texts. The fetched data waits in memory like an upload (20 minutes) until confirmed.
 - **Brakes.** Fixed host and base path, https only, no redirects, 20 s timeout and 2 MB per answer, at most 4 requests at once,
-  at most 8000 requests and 20 minutes per run, 1 to 24 months, 2 retries on server errors, no retry of a refused sign-in; per
+  at most 8000 requests and 20 minutes per run, 1 to 24 months (a refresh: 1 to 31 days), 2 retries on server errors, no retry of a refused sign-in; per
   person one run at a time and at most 3 sign-in attempts an hour (30 seconds apart), at most 10 an hour on the whole server; 2 runs on the server at once; 48 MB of answers per run; a run ends when its person signs out or is blocked or the connector is switched off.
 - **Sources of the interface** (read on 2026-11-13): the exporter whose files the importer reads,
   [aleksandr-bogdanov/yazio-exporter](https://github.com/aleksandr-bogdanov/yazio-exporter) (MIT per its README), the TypeScript

@@ -209,6 +209,7 @@ class Stage:
     token: str = ""
     source: str = "upload"  # upload or login
     expires: float = 0.0
+    refresh: dict | None = None  # {"first_day", "last_day"} of a refresh fetched by the direct sign-in (never from an upload)
 
     @property
     def size(self) -> int:
@@ -243,15 +244,17 @@ class Staging:
             self._expire()
             return self._stages.get(user_id)
 
-    def add(self, user_id: int, files: dict[str, bytes], source: str = "upload", replace: bool = False) -> Stage:
+    def add(self, user_id: int, files: dict[str, bytes], source: str = "upload", replace: bool = False,
+            refresh: dict | None = None) -> Stage:
         """Put files into the person's area (a file of the same name replaces the old one; `replace` empties the area
-        first). The token changes."""
+        first). The token changes. `refresh` (only with source "login") is the period of a refresh fetch; whatever is added
+        later replaces the area and drops it."""
         with self._lock:
             self._expire()
             old = self._stages.get(user_id)
             keep = {} if replace or old is None or old.source != source else dict(old.files)
             keep.update(files)
-            stage = Stage(keep, secrets.token_urlsafe(12), source, self.clock() + TTL)
+            stage = Stage(keep, secrets.token_urlsafe(12), source, self.clock() + TTL, refresh if source == "login" else None)
             others = sum(s.size for u, s in self._stages.items() if u != user_id)
             if stage.size > MAX_PERSON:
                 raise StageError("too_large", "the files together are larger than allowed")

@@ -17,7 +17,7 @@ Rules this module keeps:
 - The app identifiers (`client_id`, `client_secret` of the Yazio app) are not part of this repository: they come from
   `MAHLWERK_YAZIO_CLIENT_ID` / `MAHLWERK_YAZIO_CLIENT_SECRET`, and without them the direct sign-in is not available.
 - Politeness and brakes: at most 4 requests at once, 48 MB of answers per run, a budget of requests and of time per run, a bounded period (at most
-  24 months), one run per person at a time, at most 2 runs on the server at once, at most 3 sign-in attempts per person
+  24 months, or 31 days for a refresh), one run per person at a time, at most 2 runs on the server at once, at most 3 sign-in attempts per person
   and hour and 30 seconds between two of them, at most 10 per hour on the whole server (so a wrong password is not repeated and the
   server cannot be used to try passwords against Yazio accounts in bulk).
 """
@@ -32,7 +32,7 @@ import time
 from calendar import monthrange
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 
 import httpx
 
@@ -48,6 +48,7 @@ MAX_SECONDS = 20 * 60
 MAX_MONTHS = 24
 DEFAULT_MONTHS = 12
 MAX_DAYS = 800
+MAX_REFRESH_DAYS = 31  # the refresh period ("last N days"): 1 to 31
 RETRIES = 2
 MAX_RUN_BYTES = 48 * 1024 * 1024  # all answers of one run together; more is a clean stop ("too_large")
 GLOBAL_ATTEMPTS = (10, 3600)  # sign-in attempts per hour for the whole server, whoever makes them
@@ -189,8 +190,10 @@ class Fetcher:
 
     # ---- the run ----
 
-    async def run(self, credentials: Credentials, months: int, progress: Progress) -> dict[str, dict]:
-        """Sign in once, fetch the period, return `{"days.json": ..., "products.json": ..., "weight.json": ...}`."""
+    async def run(self, credentials: Credentials, months: int, progress: Progress, days: int | None = None) -> dict[str, dict]:
+        """Sign in once, fetch the period, return `{"days.json": ..., "products.json": ..., "weight.json": ...}`.
+        With `days` (refresh mode) the last N days ending today are fetched day by day and the result also holds
+        `"refresh.json": {"first_day", "last_day"}`; see `_fetch_refresh`."""
         months = max(1, min(MAX_MONTHS, months))
         self.deadline = self.clock() + MAX_SECONDS
         limits = httpx.Limits(max_connections=CONCURRENCY, max_keepalive_connections=CONCURRENCY)
@@ -200,6 +203,8 @@ class Fetcher:
         ) as http:
             token = await self._login(http, progress, credentials)
             try:
+                if days is not None:
+                    return await self._fetch_refresh(http, progress, token, max(1, min(MAX_REFRESH_DAYS, days)))
                 return await self._fetch(http, progress, token, months)
             finally:
                 token = ""
@@ -238,6 +243,78 @@ class Fetcher:
             await asyncio.gather(*tasks, return_exceptions=True)
             raise
         return results
+
+    async def _catalog(self, progress: Progress, get, day_map: dict[str, dict]) -> dict[str, dict]:
+        """The products and recipes the entries of the fetched days refer to."""
+        product_ids, recipe_ids = set(), set()
+        for content in day_map.values():
+            for item in content["consumed"]["products"]:
+                if isinstance(item, dict) and isinstance(item.get("product_id"), str) and _ID.fullmatch(item["product_id"]):
+                    product_ids.add(item["product_id"])
+            for item in content["consumed"]["recipe_portions"]:
+                if isinstance(item, dict) and isinstance(item.get("recipe_id"), str) and _ID.fullmatch(item["recipe_id"]):
+                    recipe_ids.add(item["recipe_id"])
+        progress.phase, progress.done = "products", 0
+        wanted = [("products", pid) for pid in sorted(product_ids)] + [("recipes", rid) for rid in sorted(recipe_ids)]
+        progress.total = len(wanted)
+
+        async def one_item(job):
+            kind, ident = job
+            return await get(f"/{kind}/{ident}")
+
+        found = await self._many(progress, wanted, one_item)
+        catalog: dict[str, dict] = {"products": {}, "recipes": {}}
+        for (kind, ident), content in zip(wanted, found):
+            if isinstance(content, dict):
+                catalog[kind][ident] = content
+        return catalog
+
+    async def _fetch_refresh(self, http, progress: Progress, token: str, days: int) -> dict[str, dict]:
+        """Refresh mode: EVERY day of the last `days` days ending today is asked for directly (no listing of the days that
+        have entries), so that an empty day is a real answer. What follows from that is a deletion on the Mahlwerk side, so
+        nothing is guessed: a day whose consumed items or exercises do not come back as an object with ALL their lists (404, no
+        content, a missing list), or any failed request, ends the whole run (no partial refresh). `no_data` is not an error here."""
+        get = lambda path, **params: self._send(http, progress, "GET", path, token=token, params=params or None)  # noqa: E731
+        today = self.today()
+        day_list = [(today - timedelta(days=days - 1 - i)).isoformat() for i in range(days)]
+        progress.phase, progress.done, progress.total = "days", 0, len(day_list)
+
+        async def one_day(day: str):
+            consumed = await get("/user/consumed-items", date=day)
+            exercises = await get("/user/exercises", date=day)
+            summary = await get("/user/widgets/daily-summary", date=day)
+            if not isinstance(consumed, dict) or not isinstance(exercises, dict):
+                raise LiveError("unexpected")
+            lists = {}
+            for key in ("products", "recipe_portions", "simple_products"):
+                if not isinstance(consumed.get(key), list):
+                    raise LiveError("unexpected")
+                lists[key] = consumed[key]
+            content = {"consumed": lists, "exercises": exercises}
+            for key in ("training", "custom_training"):
+                if not isinstance(exercises.get(key), list):  # as strict as consumed: a missing list would read as "no workouts"
+                    raise LiveError("unexpected")
+            if isinstance(summary, dict):  # water, steps and goals are only ever set or updated, never taken away
+                content["daily_summary"] = summary
+            return content
+
+        fetched = await self._many(progress, day_list, one_day)
+        day_map = dict(zip(day_list, fetched))
+        catalog = await self._catalog(progress, get, day_map)
+
+        # the weight: the last value at or before each day; the day before the period is asked too, so that the first day does
+        # not take over an older measurement, and only values of the period itself are kept
+        asked = [(today - timedelta(days=days)).isoformat(), *day_list]
+        progress.phase, progress.done, progress.total = "weights", 0, len(asked)
+
+        async def one_weight(day: str):
+            return await get("/user/bodyvalues/weight/last", date=day)
+
+        answers = await self._many(progress, asked, one_weight)
+        weights = {d: kg for d, kg in _weights(asked, answers).items() if day_list[0] <= d <= day_list[-1]}
+        progress.phase = "done"
+        return {"days.json": day_map, "products.json": catalog, "weight.json": weights,
+                "refresh.json": {"first_day": day_list[0], "last_day": day_list[-1]}}
 
     async def _fetch(self, http, progress: Progress, token: str, months: int) -> dict[str, dict]:
         get = lambda path, **params: self._send(http, progress, "GET", path, token=token, params=params or None)  # noqa: E731
@@ -285,28 +362,7 @@ class Fetcher:
         if not day_map:
             raise LiveError("no_data")
 
-        # 3. the products and recipes the entries refer to
-        product_ids, recipe_ids = set(), set()
-        for content in day_map.values():
-            for item in content["consumed"]["products"]:
-                if isinstance(item, dict) and isinstance(item.get("product_id"), str) and _ID.fullmatch(item["product_id"]):
-                    product_ids.add(item["product_id"])
-            for item in content["consumed"]["recipe_portions"]:
-                if isinstance(item, dict) and isinstance(item.get("recipe_id"), str) and _ID.fullmatch(item["recipe_id"]):
-                    recipe_ids.add(item["recipe_id"])
-        progress.phase, progress.done = "products", 0
-        wanted = [("products", pid) for pid in sorted(product_ids)] + [("recipes", rid) for rid in sorted(recipe_ids)]
-        progress.total = len(wanted)
-
-        async def one_item(job):
-            kind, ident = job
-            return await get(f"/{kind}/{ident}")
-
-        found = await self._many(progress, wanted, one_item)
-        catalog: dict[str, dict] = {"products": {}, "recipes": {}}
-        for (kind, ident), content in zip(wanted, found):
-            if isinstance(content, dict):
-                catalog[kind][ident] = content
+        catalog = await self._catalog(progress, get, day_map)
 
         # 4. the weight: the last value at or before each logged day
         progress.phase, progress.done, progress.total = "weights", 0, len(day_map)
@@ -386,7 +442,7 @@ class Runs:
         for uid in [u for u, times in self._attempts.items() if not times or now - times[-1] > ATTEMPTS[1]]:
             del self._attempts[uid]
 
-    def start(self, user_id: int, credentials: Credentials, months: int) -> Run:
+    def start(self, user_id: int, credentials: Credentials, months: int, days: int | None = None) -> Run:
         identity = app_identity()
         if identity is None:
             raise LiveError("unexpected")
@@ -412,13 +468,13 @@ class Runs:
             run = Run(user_id, started=now)
             self._runs[user_id] = run
         fetcher = Fetcher(identity, self.transport, sleep=self.sleep, today=self.today)
-        run.thread = threading.Thread(target=self._work, args=(run, fetcher, credentials, months), daemon=True, name="yazio-run")
+        run.thread = threading.Thread(target=self._work, args=(run, fetcher, credentials, months, days), daemon=True, name="yazio-run")
         run.thread.start()
         return run
 
-    def _work(self, run: Run, fetcher: Fetcher, credentials: Credentials, months: int) -> None:
+    def _work(self, run: Run, fetcher: Fetcher, credentials: Credentials, months: int, days: int | None = None) -> None:
         try:
-            files = asyncio.run(fetcher.run(credentials, months, run.progress))
+            files = asyncio.run(fetcher.run(credentials, months, run.progress, days))
             if run.progress.cancelled.is_set():
                 raise LiveError("cancelled")
             self.deliver(run.user_id, files)
