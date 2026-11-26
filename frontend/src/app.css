@@ -35,6 +35,8 @@
   --green-text: #1d5c43;      /* green used as text or icon colour on stone / paper */
   --focus-base: #1d5c43;
   --bar: #1d5c43;             /* chart bars and lines, scale fill */
+  --band-a: 0.16;             /* opacity of the weight spread band over --bar */
+  --open-a: 0.35;             /* opacity of the open end of the weight trend */
   --bar-soft: #5e8a74;      /* >= 3:1 on paper and stone */
   --bar-over: #c05080;
   --series-dark: #17211c;
@@ -82,6 +84,8 @@
   --green-text: #7fd4a8;
   --focus-base: #c9f04a;
   --bar: #4fae85;
+  --band-a: 0.3;
+  --open-a: 0.5;
   --bar-soft: #4f8068;
   --bar-over: #ef8db9;
   --series-dark: #5d7b69;

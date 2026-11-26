@@ -56,7 +56,7 @@
       <text x={PL - 7} y={y(g) + 4} text-anchor="end" class="lab">{fmt1(g)}</text>
     {/each}
     <path d="M{PL} {H - PB}H{width - PR}" stroke="var(--hairline)" stroke-width="2" />
-    {#if band}<path d={band} fill="var(--bar)" opacity="0.13" />{/if}
+    {#if band}<path d={band} fill="var(--bar)" style="opacity: var(--band-a)" />{/if}
     {#each dots ? raw : [] as p (p.day)}
       <circle cx={x(p.day)} cy={y(p.kg)} r="3" fill="var(--paper)" stroke="var(--quiet)" stroke-width="1.6" />
     {/each}
@@ -66,7 +66,7 @@
       {#if dots}{#each fat as p (p.day)}<circle cx={x(p.day)} cy={yf(p.pct)} r="2.5" fill="var(--paper)" stroke="var(--weight-orange)" stroke-width="1.5" />{/each}{/if}
     {/if}
     {#if line}<path d={line} fill="none" stroke="var(--bar)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />{/if}
-    {#if openLine}<path d={openLine} fill="none" stroke="var(--bar)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.35" />{/if}
+    {#if openLine}<path d={openLine} fill="none" stroke="var(--bar)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: var(--open-a)" />{/if}
     {#if end}<circle cx={x(end.day)} cy={y(end.kg)} r="7" fill="var(--weight-orange)" stroke="var(--paper)" stroke-width="3" opacity={endOpen ? 0.6 : 1} />{/if}
     <text x={PL} y={H - 7} text-anchor="start" class="lab">{dm(from)}</text>
     <text x={width - PR} y={H - 7} text-anchor="end" class="lab">{dm(to)}</text>
@@ -74,8 +74,8 @@
   <p class="legend mono">
     {#if dots}<span><svg width="16" height="10" aria-hidden="true"><circle cx="8" cy="5" r="3" fill="var(--paper)" stroke="var(--quiet)" stroke-width="1.6" /></svg>{t('wtMeasured')}</span>{/if}
     <span><svg width="16" height="10" aria-hidden="true"><path d="M0 5H16" stroke="var(--bar)" stroke-width="3.5" stroke-linecap="round" /></svg>{t('wtTrend')}</span>
-    {#if openLine}<span><svg width="16" height="10" aria-hidden="true"><path d="M0 5H16" stroke="var(--bar)" stroke-width="3.5" stroke-linecap="round" opacity="0.35" /></svg>{t('wtOpen')}</span>{/if}
-    {#if band}<span><svg width="16" height="10" aria-hidden="true"><rect width="16" height="10" rx="2" fill="var(--bar)" opacity="0.18" /></svg>{t('wtSpread')} ±{fmt1(spread ?? 0)} {t('kg')}</span>{/if}
+    {#if openLine}<span><svg width="16" height="10" aria-hidden="true"><path d="M0 5H16" stroke="var(--bar)" stroke-width="3.5" stroke-linecap="round" style="opacity: var(--open-a)" /></svg>{t('wtOpen')}</span>{/if}
+    {#if band}<span><svg width="16" height="10" aria-hidden="true"><rect width="16" height="10" rx="2" fill="var(--bar)" style="opacity: var(--band-a)" /></svg>{t('wtSpread')} ±{fmt1(spread ?? 0)} {t('kg')}</span>{/if}
     {#if fat.length}<span><svg width="16" height="10" aria-hidden="true"><path d="M0 5H16" stroke="var(--weight-orange)" stroke-width="2.5" stroke-dasharray="4 3" /></svg>{t('wtBodyFat')}</span>{/if}
   </p>
   {#if !dots}<p class="note">{t('wtNoLine')}</p>{/if}
