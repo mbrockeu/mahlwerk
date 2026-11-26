@@ -16,12 +16,12 @@ test('only the last three days of the trend are still open', () => {
   assert.equal(provisional('2026-11-23', '2026-11-26'), false);
 });
 
-test('the usual spread is what 9 of 10 settled values stay within, at least 0.3 kg, and needs ten values', () => {
+test('the usual spread is what 9 of 10 settled values stay within, at least 0.3 kg, and needs six values', () => {
   const pts = series([80, 80.5, 80, 80.5, 80, 80.5, 80, 80.5, 80, 80.5, 80, 80.5, 80, 80.5]);
   const today = pts.at(-1).day;
   const spread = usualSpread(pts, trendOf(pts), today);
   assert.ok(spread >= 0.3 && spread <= 0.3, `got ${spread}`); // deviations ±0.25 at most: the floor
-  assert.equal(usualSpread(pts.slice(0, 9), trendOf(pts.slice(0, 9)), today), null);
+  assert.equal(usualSpread(pts.slice(0, 5), trendOf(pts.slice(0, 5)), today), null);
   const wild = series([80, 82, 80, 82, 80, 82, 80, 82, 80, 82, 80, 82, 80, 82]);
   assert.ok(usualSpread(wild, trendOf(wild), wild.at(-1).day) >= 0.8);
 });

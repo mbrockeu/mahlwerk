@@ -9,7 +9,7 @@ export const HALF_WINDOW = 3;
 /** The usual spread is the distance that 9 of 10 recent values stay within. */
 const SPREAD_SHARE = 0.9;
 const SPREAD_DAYS = 60;
-const SPREAD_MIN_VALUES = 10;
+const SPREAD_MIN_VALUES = 6;
 const SPREAD_FLOOR = 0.3; // kg: scales and water never hold a value closer than that
 const PACE_DAYS = 21;
 const PACE_MIN_VALUES = 5;
