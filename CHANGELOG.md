@@ -16,6 +16,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 - **The profile is a settings page with sections**, like system settings: goals, appearance and use, diary and training, data and import, connections, account, about. On wide windows a sidebar (with your name) lists the sections and only the chosen one is shown; on a phone the profile is a list of rows and each section opens as its own page with a back link. The section is in the address (`#/profile/goals`, `look`, `diary`, `data`, `connections`, `account`, `about`), so links and the browser's back button work, and unsaved goals survive a switch between sections. Cards only moved; card titles are one heading level below the section title. Links from other pages (set a goal, badges, admin) lead to the right section.
+- **“Same as yesterday” can be taken back from the meal itself** for as long as the meal holds exactly the copied entries; the undo message now stays 30 seconds.
+- **The profile has no close button any more** (it is left through the main navigation); admin and badges show a back link to their profile section instead of an X.
 
 ## [0.4.1] - 2026-11-25
 
