@@ -38,6 +38,7 @@
       <h1 id="con-app-title">{t('appConTitle')}</h1>
       <p class="quiet">{t('appConDevice', { device: shown })}<br>{t('appConAs', { name: ui.me?.display_name ?? '' })}</p>
       <p>{t('appConText')}</p>
+      <p class="note warn">{t('appConWarn')}</p>
       {#if error}<p class="note warn" role="alert">{error}</p>{/if}
       <div class="row">
         <button class="btn primary" type="button" onclick={allow} disabled={busy}>{t('appConAllow')}</button>

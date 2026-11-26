@@ -433,8 +433,8 @@ const en = {
   admRefreshStarted: 'Refresh started', admRefreshBusy: 'A refresh is already running.', 
 
   // access keys
-  appConTitle: 'Connect the iPhone app?', appConDevice: 'Device: {device}', appConAs: 'Signed in as {name}',
-  appConText: 'The Mahlwerk app on this device may read and write your diary (Apple Health sync, widgets). It gets its own access key for that. You can revoke it at any time under Profile → Connections → Access keys.',
+  appConTitle: 'Connect the iPhone app?', appConDevice: 'Device (as the app names it): {device}', appConAs: 'Signed in as {name}',
+  appConText: 'The app gets its own access key with “read and write”. It acts as you (diary, Apple Health sync, widgets), but cannot create keys or webhooks. You can revoke it at any time under Profile → Connections → Access keys.', appConWarn: 'Only confirm if you just tapped “Sign in with the browser” in the Mahlwerk app yourself.',
   appConAllow: 'Connect', appConCancel: 'Cancel', appConDone: 'Done. You can close this window.',
   appConBad: 'This link is incomplete. Start again in the app.', appConFail: 'Could not connect: {error}',
   tokTitle: 'Access keys', tokText: 'A key lets scripts and home automation use your diary without your password. It acts as you, but cannot create keys or webhooks. For the iPhone app with your server: create a key with “write”, copy it (it is shown only once) and paste it in the app under Settings → Server.',
@@ -1215,8 +1215,8 @@ const de: Record<Key, string> = {
   admRefreshStarted: 'Auffrischen gestartet', admRefreshBusy: 'Es läuft schon ein Durchlauf.', 
 
   // Zugriffsschlüssel
-  appConTitle: 'iPhone-App verbinden?', appConDevice: 'Gerät: {device}', appConAs: 'Angemeldet als {name}',
-  appConText: 'Die Mahlwerk-App auf diesem Gerät darf dein Tagebuch lesen und schreiben (Health-Abgleich, Widgets). Sie bekommt dafür einen eigenen Zugriffsschlüssel. Den kannst du jederzeit unter Profil → Verbindungen → Zugriffsschlüssel widerrufen.',
+  appConTitle: 'iPhone-App verbinden?', appConDevice: 'Gerät (so nennt es die App): {device}', appConAs: 'Angemeldet als {name}',
+  appConText: 'Die App bekommt einen eigenen Zugriffsschlüssel mit „lesen und schreiben“. Er handelt als du (Tagebuch, Health-Abgleich, Widgets), kann aber keine Schlüssel oder Webhooks anlegen. Du kannst ihn jederzeit unter Profil → Verbindungen → Zugriffsschlüssel widerrufen.', appConWarn: 'Bestätige nur, wenn du gerade selbst in der Mahlwerk-App auf „Mit Browser anmelden“ getippt hast.',
   appConAllow: 'Verbinden', appConCancel: 'Abbrechen', appConDone: 'Erledigt. Du kannst dieses Fenster schließen.',
   appConBad: 'Dieser Link ist unvollständig. Starte bitte noch einmal in der App.', appConFail: 'Verbinden hat nicht geklappt: {error}',
   tokTitle: 'Zugriffsschlüssel', tokText: 'Mit einem Schlüssel greifen Skripte und Hausautomation auf dein Tagebuch zu, ohne dein Passwort. Er handelt als du, kann aber keine Schlüssel oder Webhooks anlegen. Für die iPhone-App mit deinem Server: Schlüssel mit „schreiben“ anlegen, kopieren (er wird nur einmal angezeigt) und in der App unter Einstellungen → Server einfügen.',

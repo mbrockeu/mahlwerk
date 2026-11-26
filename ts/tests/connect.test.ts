@@ -97,3 +97,15 @@ test('confirming needs the normal sign-in, a valid challenge and the switch; the
   const v = await world({ MAHLWERK_TOKENS: 'false' });
   assert.equal((await confirm(v)).status, 404);
 });
+
+test('a person keeps at most three waiting codes, and revoking their access drops them', async () => {
+  const w = await world();
+  const codes: string[] = [];
+  for (let i = 0; i < 4; i++) codes.push(codeOf((await confirm(w)).json.redirect));
+  assert.equal((await exchange(w, codes[0]!)).status, 400); // the oldest made room
+  const ben = codeOf((await confirm(w, w.ben)).json.redirect);
+  await w.admin.get('/api/v1/me');
+  assert.equal((await w.admin.post('/api/v1/admin/users/ann/revoke-access')).status, 200);
+  for (const c of codes.slice(1)) assert.equal((await exchange(w, c)).status, 400);
+  assert.equal((await exchange(w, ben)).status, 200); // somebody else's stays
+});
