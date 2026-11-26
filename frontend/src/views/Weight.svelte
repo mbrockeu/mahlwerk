@@ -179,7 +179,7 @@
       {/each}
     </div>
     <figure>
-      <WeightChart from={start} to={ui.today} today={ui.today} weight={chartWeight} raw={shown} spread={reading?.spread ?? null} />
+      <WeightChart from={first?.day ?? start} to={ui.today} today={ui.today} weight={chartWeight} raw={shown} spread={reading?.spread ?? null} />
       <figcaption class="micro quiet">{chartLabel}</figcaption>
     </figure>
   {/if}
