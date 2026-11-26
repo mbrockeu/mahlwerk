@@ -90,6 +90,7 @@ export const api = {
   patchUser: (username: string, body: { disabled?: boolean; is_admin?: boolean; household?: boolean }) => request<Account>('PATCH', `admin/users/${encodeURIComponent(username)}`, body),
   resetPassword: (username: string, password: string) => request<void>('POST', `admin/users/${encodeURIComponent(username)}/password`, { password }),
   revokeAccess: (username: string) => request<{ tokens: number; sessions: number }>('POST', `admin/users/${encodeURIComponent(username)}/revoke-access`),
+  connectApp: (body: { challenge: string; challenge_method: 'S256'; device: string }) => request<{ redirect: string; expires_in: number }>('POST', 'connect/app', body),
   me: () => request<Me>('GET', 'me'),
   setDisplayName: (display_name: string | null) => request<Me>('PATCH', 'me', { display_name }),
   setGoal: (goal: Goal) => request<Goal>('PUT', 'me/goal', goal),

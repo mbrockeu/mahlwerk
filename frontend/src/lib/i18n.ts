@@ -433,6 +433,10 @@ const en = {
   admRefreshStarted: 'Refresh started', admRefreshBusy: 'A refresh is already running.', 
 
   // access keys
+  appConTitle: 'Connect the iPhone app?', appConDevice: 'Device: {device}', appConAs: 'Signed in as {name}',
+  appConText: 'The Mahlwerk app on this device may read and write your diary (Apple Health sync, widgets). It gets its own access key for that. You can revoke it at any time under Profile → Connections → Access keys.',
+  appConAllow: 'Connect', appConCancel: 'Cancel', appConDone: 'Done. You can close this window.',
+  appConBad: 'This link is incomplete. Start again in the app.', appConFail: 'Could not connect: {error}',
   tokTitle: 'Access keys', tokText: 'A key lets scripts and home automation use your diary without your password. It acts as you, but cannot create keys or webhooks. For the iPhone app with your server: create a key with “write”, copy it (it is shown only once) and paste it in the app under Settings → Server.',
   tokNone: 'No keys yet.', tokName: 'Name', tokNamePh: 'e.g. Home Assistant', tokScope: 'Access', tokRead: 'Read only', tokWrite: 'Read and write',
   tokExpiry: 'Expires', tokNever: 'Never', tokDays: '{n} days', tokYear: '1 year', tokCreate: 'Create key',
@@ -1211,6 +1215,10 @@ const de: Record<Key, string> = {
   admRefreshStarted: 'Auffrischen gestartet', admRefreshBusy: 'Es läuft schon ein Durchlauf.', 
 
   // Zugriffsschlüssel
+  appConTitle: 'iPhone-App verbinden?', appConDevice: 'Gerät: {device}', appConAs: 'Angemeldet als {name}',
+  appConText: 'Die Mahlwerk-App auf diesem Gerät darf dein Tagebuch lesen und schreiben (Health-Abgleich, Widgets). Sie bekommt dafür einen eigenen Zugriffsschlüssel. Den kannst du jederzeit unter Profil → Verbindungen → Zugriffsschlüssel widerrufen.',
+  appConAllow: 'Verbinden', appConCancel: 'Abbrechen', appConDone: 'Erledigt. Du kannst dieses Fenster schließen.',
+  appConBad: 'Dieser Link ist unvollständig. Starte bitte noch einmal in der App.', appConFail: 'Verbinden hat nicht geklappt: {error}',
   tokTitle: 'Zugriffsschlüssel', tokText: 'Mit einem Schlüssel greifen Skripte und Hausautomation auf dein Tagebuch zu, ohne dein Passwort. Er handelt als du, kann aber keine Schlüssel oder Webhooks anlegen. Für die iPhone-App mit deinem Server: Schlüssel mit „schreiben“ anlegen, kopieren (er wird nur einmal angezeigt) und in der App unter Einstellungen → Server einfügen.',
   tokNone: 'Noch keine Schlüssel.', tokName: 'Name', tokNamePh: 'z. B. Home Assistant', tokScope: 'Zugriff', tokRead: 'Nur lesen', tokWrite: 'Lesen und schreiben',
   tokExpiry: 'Läuft ab', tokNever: 'Nie', tokDays: '{n} Tage', tokYear: '1 Jahr', tokCreate: 'Schlüssel anlegen',

@@ -15,6 +15,7 @@
   import { auth, endMoment, loadAuth, loadMe, loadVision, markTourSeen, mealByTime, holdToast, openAdd, releaseToast, runToastAction, tourSeen, ui, visionReady } from './lib/store.svelte';
   import { parseDeepLink, stripDeepLink } from './lib/deeplink';
   import Gate from './views/Gate.svelte';
+  import ConnectApp from './views/ConnectApp.svelte';
   import Admin from './views/Admin.svelte';
   import Badges from './views/Badges.svelte';
   import Insights from './views/Insights.svelte';
@@ -51,6 +52,10 @@
   // the phone's more menu (round avatar, top right) is on every main page; profile, badges and admin have their own close button there
   const hasMenu = $derived(['today', 'history', 'products', 'recipes', 'weight'].includes(router.route));
 
+  // the iPhone app's "sign in with the browser" (/?connect_app=<challenge>&device=<name>): only the confirmation page, nothing else
+  const connectQuery = new URLSearchParams(location.search);
+  const connectApp = connectQuery.has('connect_app') ? { challenge: connectQuery.get('connect_app') ?? '', device: connectQuery.get('device') ?? '' } : null;
+
   // direct link (/?go=scan, /?go=add&meal=…): once signed in, open the add sheet for today on the day view, then drop it from the address
   let deepLink = parseDeepLink(location.search);
   $effect(() => {
@@ -75,6 +80,8 @@
   <!-- first answer of the server pending: nothing to show yet -->
 {:else if !auth.signedIn}
   <Gate />
+{:else if connectApp}
+  {#if ui.me}<ConnectApp challenge={connectApp.challenge} device={connectApp.device} />{/if}
 {:else}
 {#key auth.epoch}
 {#if ui.me?.demo_account?.viewing}<DemoViewBand />{/if}

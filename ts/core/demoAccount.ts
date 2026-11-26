@@ -38,7 +38,8 @@ function classify(kind: string, ...routes: string[]): void {
 
 // no demo identity is involved: the switch itself works with the REAL identity and never as the demo account
 classify('public', 'POST /auth/setup', 'POST /auth/login', 'POST /auth/logout', 'GET /auth/oidc/login', 'GET /auth/oidc/callback',
-  'POST /me/demo-view/enter', 'POST /me/demo-view/leave');
+  'POST /me/demo-view/enter', 'POST /me/demo-view/leave',
+  'POST /connect/exchange'); // the iPhone app trades its one-time code; the code names the user, no session is read
 classify('read',
   'GET /auth/status', 'GET /me', 'GET /me/goal/history', 'GET /me/imports', 'GET /weights', 'GET /catalog', 'GET /foods', 'GET /foods/recent', 'GET /foods/combos', 'GET /foods/{food_id}',
   'GET /diary/{day}', 'GET /history', 'GET /insights', 'GET /insights/nutrient', 'GET /insights/foods', 'GET /insights/foods/detail',
@@ -67,6 +68,7 @@ classify('blocked',
   'PUT /foods/{food_id}/piece', 'DELETE /foods/{food_id}/piece', 'PUT /foods/{food_id}/drink',
   // what reaches outwards or lets something in: keys, webhooks, connectors, imports
   'GET /me/tokens', 'POST /me/tokens', 'DELETE /me/tokens/{token_id}',
+  'POST /connect/app', // "sign in with the browser" for the iPhone app makes a key
   'GET /me/webhooks', 'POST /me/webhooks', 'PATCH /me/webhooks/{hook_id}', 'DELETE /me/webhooks/{hook_id}',
   'POST /me/webhooks/{hook_id}/test', 'GET /me/webhooks/{hook_id}/deliveries',
   'DELETE /me/imports/{import_id}',
