@@ -28,7 +28,7 @@
 </script>
 
 <section class="icard" aria-labelledby="ex-title" data-testid="data-export">
-  <h2 id="ex-title" class="micro quiet">{t('exTitle')}</h2>
+  <h3 id="ex-title" class="micro quiet">{t('exTitle')}</h3>
   <p class="note">{t('exText')}</p>
   {#if inApp}<p class="note app-note" data-testid="app-only-note">{t('exAppNote')}</p>{/if}
   <div class="field">

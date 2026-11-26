@@ -104,6 +104,8 @@
   let fastError = $state('');
   let fastOther = $state('');
   let imports = $state<ImportBatch[]>([]);
+  // the "data and import" group only shows when at least one of its cards does
+  const showDataGroup = $derived(!viewingDemo() || !!ui.me?.demo.available || imports.length > 0);
   let goalHistory = $state<GoalChange[]>([]);
   const histFrom = (h: GoalChange) => (h.valid_from === GOAL_SINCE_START ? t('gpHistSince')
     : t('gpHistFrom', { date: new Intl.DateTimeFormat(lang, { day: 'numeric', month: 'numeric', year: 'numeric' }).format(fromDay(h.valid_from)) }));
@@ -517,200 +519,204 @@
       </div>
 
       <div class="settings">
-        <section class="card" aria-labelledby="look-title">
-          <h2 id="look-title" class="micro quiet">{t('displayTitle')}</h2>
-          <div class="field">
-            <span id="look-lang">{t('langLabel')}</span>
-            <div class="chips" role="group" aria-labelledby="look-lang">
-              {#each LANGS as l}
-                <button type="button" class="chip" class:on={currentLang === l.id} aria-pressed={currentLang === l.id}
-                  lang={l.id === 'auto' ? undefined : l.id} onclick={() => chooseLang(l.id)}>{l.label()}</button>
-              {/each}
-            </div>
-          </div>
-          <div class="field">
-            <span id="look-theme">{t('themeLabel')}</span>
-            <div class="chips" role="group" aria-labelledby="look-theme">
-              {#each THEMES as m}
-                <button type="button" class="chip" class:on={theme.pref === m.id} aria-pressed={theme.pref === m.id}
-                  onclick={() => setThemePref(m.id)}>{m.label()}</button>
-              {/each}
-            </div>
-          </div>
-          <p class="note">{t('displayNote')}</p>
-        </section>
-
-        <section class="card" aria-labelledby="play-title">
-          <h2 id="play-title" class="micro quiet">{t('playTitle')}</h2>
-          <Toggle checked={playful} label={t('playTitle')} sub={playful ? t('playOn') : t('playOff')} disabled={playBusy} onchange={togglePlayful} />
-          <p class="note">{t('playText')}</p>
-          {#if playError}<p class="note warn" role="alert">{playError}</p>{/if}
-          {#if playful}<a class="row-pill link" href="#/badges"><span class="t"><strong>{t('badgesLink')}</strong></span><span class="v">→</span></a>{/if}
-        </section>
-
-        <section class="card" aria-labelledby="sug-title">
-          <h2 id="sug-title" class="micro quiet">{t('sgSettingTitle')}</h2>
-          <Toggle checked={suggestOn} label={t('sgSettingTitle')} sub={suggestOn ? t('playOn') : t('playOff')} disabled={sugBusy} onchange={toggleSuggestions} />
-          <p class="note">{t('sgSettingText')}</p>
-          {#if sugError}<p class="note warn" role="alert">{sugError}</p>{/if}
-        </section>
-
-        <section class="card" aria-labelledby="tour-title">
-          <h2 id="tour-title" class="micro quiet">{t('tourReplayTitle')}</h2>
-          <button type="button" class="row-pill link" onclick={replayTour}>
-            <span class="t"><strong>{t('tourReplay')}</strong><small>{t('tourReplayText')}</small></span><span class="v">→</span>
-          </button>
-        </section>
-
-        <section class="card" aria-labelledby="act-title">
-          <h2 id="act-title" class="micro quiet">{t('actTitle')}</h2>
-          <Toggle checked={addToGoal} label={t('actSettingTitle')} sub={addToGoal ? t('playOn') : t('playOff')} disabled={actBusy} onchange={toggleAddToGoal} />
-          <p class="note">{t('actSettingText')}</p>
-          <div class="tg" role="group" aria-labelledby="tg-title">
-            <span id="tg-title" class="micro lab">{t('trainGoalTitle')}</span>
-            <div class="tgb">
-              <button type="button" class="tgs" onclick={() => setWeekGoal(weekGoal - 1)} disabled={actBusy || weekGoal <= 0} aria-label={t('trainGoalLess')}>−</button>
-              <output class="tgv mono" aria-label={t('trainGoalAria')}>{weekGoal ? t('trainGoalValue', { n: weekGoal }) : t('trainGoalOff')}</output>
-              <button type="button" class="tgs" onclick={() => setWeekGoal(weekGoal + 1)} disabled={actBusy || weekGoal >= MAX_WORKOUTS_WEEK} aria-label={t('trainGoalMore')}>+</button>
-            </div>
-            <p class="note">{t('trainGoalText')}</p>
-          </div>
-          {#if actError}<p class="note warn" role="alert">{actError}</p>{/if}
-        </section>
-
-        <section class="card" aria-labelledby="fast-title">
-          <h2 id="fast-title" class="micro quiet">{t('fastSettingsTitle')}</h2>
-          <Toggle checked={fasting.enabled} label={t('fastSettingsTitle')} sub={fasting.enabled ? t('playOn') : t('playOff')} disabled={fastBusy} onchange={() => setFasting({ enabled: !fasting.enabled })} />
-          <p class="note">{t('fastSettingsHint')}</p>
-          {#if fasting.enabled}
+        <section class="sgroup" aria-labelledby="sg-look">
+          <h2 id="sg-look" class="gt">{t('gpGroupLook')}</h2>
+          <section class="card" aria-labelledby="look-title">
+            <h3 id="look-title" class="micro quiet">{t('displayTitle')}</h3>
             <div class="field">
-              <span id="fast-target">{t('fastTarget')}</span>
-              <div class="chips" role="group" aria-labelledby="fast-target">
-                {#each FAST_PRESETS as h}
-                  <button type="button" class="chip" class:on={fasting.target_hours === h} aria-pressed={fasting.target_hours === h}
-                    disabled={fastBusy} onclick={() => setFasting({ target_hours: h })}>{h} h</button>
-                {/each}
-                <input class="other" inputmode="decimal" placeholder={t('fastTargetOther')} aria-label={t('fastTargetOther')} bind:value={fastOther}
-                  onchange={commitOther} onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitOther(); } }} autocomplete="off" />
-              </div>
-            </div>
-          {/if}
-          <p class="note">{t('fastNote')}</p>
-          {#if fastError}<p class="note warn" role="alert">{fastError}</p>{/if}
-        </section>
-
-        {#if ui.me?.demo.available}
-          <section class="card" aria-labelledby="demo-title">
-            <h2 id="demo-title" class="micro quiet">{t('demoTitle')}</h2>
-            <p class="note">{t('demoText')}</p>
-            {#if ui.me?.is_admin}<p class="note">{t('demoDataHint')}</p>{/if}
-            <div class="field">
-              <span id="demo-days">{t('demoDays')}</span>
-              <div class="chips" role="group" aria-labelledby="demo-days">
-                {#each [14, 30, 90] as n}
-                  <button type="button" class="chip" class:on={demoDays === n} aria-pressed={demoDays === n}
-                    onclick={() => (demoDays = n)}>{t('demoDaysN', { n })}</button>
+              <span id="look-lang">{t('langLabel')}</span>
+              <div class="chips" role="group" aria-labelledby="look-lang">
+                {#each LANGS as l}
+                  <button type="button" class="chip" class:on={currentLang === l.id} aria-pressed={currentLang === l.id}
+                    lang={l.id === 'auto' ? undefined : l.id} onclick={() => chooseLang(l.id)}>{l.label()}</button>
                 {/each}
               </div>
             </div>
-            <div class="chips"><button class="btn" disabled={demoBusy} onclick={createDemo}>{t('demoCreate')}</button></div>
-            {#if ui.me.demo.entries > 0 || ui.me.demo.weights > 0 || ui.me.demo.water > 0 || (ui.me.demo.activity ?? 0) > 0}
-              <p class="note">{t('demoPresent', { entries: ui.me.demo.entries, weights: ui.me.demo.weights })}</p>
-              <div class="chips">
-                <button class="btn danger" disabled={demoBusy} onclick={removeDemo}>{demoConfirm ? t('demoConfirm') : t('demoRemove')}</button>
-                {#if demoConfirm}
-                  <button class="btn quiet-btn" disabled={demoBusy} onclick={() => (demoConfirm = false)}>{t('cancel')}</button>
-                {/if}
+            <div class="field">
+              <span id="look-theme">{t('themeLabel')}</span>
+              <div class="chips" role="group" aria-labelledby="look-theme">
+                {#each THEMES as m}
+                  <button type="button" class="chip" class:on={theme.pref === m.id} aria-pressed={theme.pref === m.id}
+                    onclick={() => setThemePref(m.id)}>{m.label()}</button>
+                {/each}
               </div>
-            {/if}
-            {#if demoError}<p class="note warn" role="alert">{demoError}</p>{/if}
-          </section>
-        {/if}
-
-        {#if ui.me?.demo_account?.can_switch}
-          <section class="card" aria-labelledby="dacct-title">
-            <h2 id="dacct-title" class="micro quiet">{t('demoAcctTitle')}</h2>
-            <p class="note">{t('demoAcctText')}</p>
-            <div class="chips"><button class="btn" type="button" onclick={() => switchDemo(true)}>{t('demoAcctSwitch')}</button></div>
-          </section>
-        {/if}
-
-        <section class="card" aria-labelledby="con-title" data-testid="connections">
-          <h2 id="con-title" class="micro quiet">{t('conTitle')}</h2>
-          <p class="note">{t('conText')}</p>
-          {#if ui.me?.features?.cookidoo}
-            <div class="conn" role="group" aria-labelledby="con-ck">
-              <h3 id="con-ck" class="ct">{t('ckaTitleOwn')}</h3>
-              <p class="note">{t('ckaTextOwn')}</p>
-              <CookidooAccount scope="own" id="me-ck" />
             </div>
-          {:else}
-            <p class="note">{t('ckaNeedsConnector')}</p>
-          {/if}
+            <p class="note">{t('displayNote')}</p>
+          </section>
+          <section class="card" aria-labelledby="play-title">
+            <h3 id="play-title" class="micro quiet">{t('playTitle')}</h3>
+            <Toggle checked={playful} label={t('playTitle')} sub={playful ? t('playOn') : t('playOff')} disabled={playBusy} onchange={togglePlayful} />
+            <p class="note">{t('playText')}</p>
+            {#if playError}<p class="note warn" role="alert">{playError}</p>{/if}
+            {#if playful}<a class="row-pill link" href="#/badges"><span class="t"><strong>{t('badgesLink')}</strong></span><span class="v">→</span></a>{/if}
+          </section>
+          <section class="card" aria-labelledby="sug-title">
+            <h3 id="sug-title" class="micro quiet">{t('sgSettingTitle')}</h3>
+            <Toggle checked={suggestOn} label={t('sgSettingTitle')} sub={suggestOn ? t('playOn') : t('playOff')} disabled={sugBusy} onchange={toggleSuggestions} />
+            <p class="note">{t('sgSettingText')}</p>
+            {#if sugError}<p class="note warn" role="alert">{sugError}</p>{/if}
+          </section>
+          <section class="card" aria-labelledby="tour-title">
+            <h3 id="tour-title" class="micro quiet">{t('tourReplayTitle')}</h3>
+            <button type="button" class="row-pill link" onclick={replayTour}>
+              <span class="t"><strong>{t('tourReplay')}</strong><small>{t('tourReplayText')}</small></span><span class="v">→</span>
+            </button>
+          </section>
         </section>
-
-        {#if !viewingDemo()}<YazioImport onimported={async () => { try { imports = await api.imports(); } catch { /* keep the list */ } await refresh(); }} />{/if}
-
-        {#if imports.length > 0}
-          <section class="card" aria-labelledby="import-title">
-            <h2 id="import-title" class="micro quiet">{t('importTitle')}</h2>
-            <p class="note">{t('importText')}</p>
-            {#each imports as batch (batch.id)}
-              <div class="batch">
-                <p class="note">
-                  <strong>{t('importYazio')}</strong> · {fmtDate(batch.created_at)}<br />
-                  {t('importCounts', { entries: fmt(batch.counts.entries), days: fmt(batch.counts.days), foods: fmt(batch.counts.foods), weights: fmt(batch.counts.weights) })}
-                  {#if batch.counts.activity_days || batch.counts.workouts}<br />{t('importActivity', { days: fmt(batch.counts.activity_days ?? 0), workouts: fmt(batch.counts.workouts ?? 0) })}{/if}
-                </p>
-                <div class="chips">
-                  <button class="btn danger" disabled={importBusy} onclick={() => removeImport(batch.id)}>{importConfirm === batch.id ? t('importConfirm') : t('importRemove')}</button>
-                  {#if importConfirm === batch.id}
-                    <button class="btn quiet-btn" disabled={importBusy} onclick={() => (importConfirm = null)}>{t('cancel')}</button>
-                  {/if}
+        <section class="sgroup" aria-labelledby="sg-diary">
+          <h2 id="sg-diary" class="gt">{t('gpGroupDiary')}</h2>
+          <section class="card" aria-labelledby="act-title">
+            <h3 id="act-title" class="micro quiet">{t('actTitle')}</h3>
+            <Toggle checked={addToGoal} label={t('actSettingTitle')} sub={addToGoal ? t('playOn') : t('playOff')} disabled={actBusy} onchange={toggleAddToGoal} />
+            <p class="note">{t('actSettingText')}</p>
+            <div class="tg" role="group" aria-labelledby="tg-title">
+              <span id="tg-title" class="micro lab">{t('trainGoalTitle')}</span>
+              <div class="tgb">
+                <button type="button" class="tgs" onclick={() => setWeekGoal(weekGoal - 1)} disabled={actBusy || weekGoal <= 0} aria-label={t('trainGoalLess')}>−</button>
+                <output class="tgv mono" aria-label={t('trainGoalAria')}>{weekGoal ? t('trainGoalValue', { n: weekGoal }) : t('trainGoalOff')}</output>
+                <button type="button" class="tgs" onclick={() => setWeekGoal(weekGoal + 1)} disabled={actBusy || weekGoal >= MAX_WORKOUTS_WEEK} aria-label={t('trainGoalMore')}>+</button>
+              </div>
+              <p class="note">{t('trainGoalText')}</p>
+            </div>
+            {#if actError}<p class="note warn" role="alert">{actError}</p>{/if}
+          </section>
+          <section class="card" aria-labelledby="fast-title">
+            <h3 id="fast-title" class="micro quiet">{t('fastSettingsTitle')}</h3>
+            <Toggle checked={fasting.enabled} label={t('fastSettingsTitle')} sub={fasting.enabled ? t('playOn') : t('playOff')} disabled={fastBusy} onchange={() => setFasting({ enabled: !fasting.enabled })} />
+            <p class="note">{t('fastSettingsHint')}</p>
+            {#if fasting.enabled}
+              <div class="field">
+                <span id="fast-target">{t('fastTarget')}</span>
+                <div class="chips" role="group" aria-labelledby="fast-target">
+                  {#each FAST_PRESETS as h}
+                    <button type="button" class="chip" class:on={fasting.target_hours === h} aria-pressed={fasting.target_hours === h}
+                      disabled={fastBusy} onclick={() => setFasting({ target_hours: h })}>{h} h</button>
+                  {/each}
+                  <input class="other" inputmode="decimal" placeholder={t('fastTargetOther')} aria-label={t('fastTargetOther')} bind:value={fastOther}
+                    onchange={commitOther} onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitOther(); } }} autocomplete="off" />
                 </div>
               </div>
-            {/each}
-            {#if importError}<p class="note warn" role="alert">{importError}</p>{/if}
+            {/if}
+            <p class="note">{t('fastNote')}</p>
+            {#if fastError}<p class="note warn" role="alert">{fastError}</p>{/if}
           </section>
-        {/if}
-
-        {#if !viewingDemo() && !import.meta.env.VITE_DEMO}<DataExport />{/if}
-        {#if !viewingDemo() && importInfo?.available}<DataImport maxBytes={importInfo.max_bytes} onimported={async () => { try { imports = await api.imports(); } catch { /* keep the list */ } await refresh(); }} />{/if}
-
-        <section class="card" aria-labelledby="cat-title">
-          <h2 id="cat-title" class="micro quiet">{t('gpCatalog')}</h2>
-          <p class="stand">
-            {#if ui.me && ui.me.catalog.products > 0 && ui.me.catalog.updated_at}
-              {t('catalogInfo', { n: fmt(ui.me.catalog.products), date: fmtDate(ui.me.catalog.updated_at) })}
-            {:else}
-              {t('catalogNone')}
-            {/if}
-          </p>
-          <p class="stand">
-            {#if ui.me && ui.me.catalog.bls.products > 0 && ui.me.catalog.bls.updated_at}
-              {t('catalogBls', { n: fmt(ui.me.catalog.bls.products), date: fmtDate(ui.me.catalog.bls.updated_at) })}
-            {:else}
-              {t('catalogBlsNone')}
-            {/if}
-          </p>
-          <p class="note credit">{t('credit')} <a href="https://world.openfoodfacts.org" rel="noopener">Open Food Facts</a> (ODbL) · {t('creditBls')}</p>
         </section>
-
-        {#if auth.mode === 'local' || auth.mode === 'oidc'}<AccountCard />{/if}
-        {#if ui.me?.features?.access_tokens !== false}<TokenCard />{/if}
-        {#if ui.me?.features?.webhooks !== false}<WebhookCard />{/if}
-
-        {#if ui.me?.is_admin}
-          <section class="card" aria-labelledby="admin-title">
-            <h2 id="admin-title" class="micro quiet">{t('admTitle')}</h2>
-            <p class="note">{t('admCardText')}</p>
-            <a class="row-pill link" href="#/admin"><span class="t"><strong>{t('admOpen')}</strong></span><span class="v">→</span></a>
-          </section>
+        {#if showDataGroup}
+        <section class="sgroup" aria-labelledby="sg-data">
+          <h2 id="sg-data" class="gt">{t('gpGroupData')}</h2>
+          {#if !viewingDemo()}<YazioImport onimported={async () => { try { imports = await api.imports(); } catch { /* keep the list */ } await refresh(); }} />{/if}
+          {#if imports.length > 0}
+            <section class="card" aria-labelledby="import-title">
+              <h3 id="import-title" class="micro quiet">{t('importTitle')}</h3>
+              <p class="note">{t('importText')}</p>
+              {#each imports as batch (batch.id)}
+                <div class="batch">
+                  <p class="note">
+                    <strong>{t('importYazio')}</strong> · {fmtDate(batch.created_at)}<br />
+                    {t('importCounts', { entries: fmt(batch.counts.entries), days: fmt(batch.counts.days), foods: fmt(batch.counts.foods), weights: fmt(batch.counts.weights) })}
+                    {#if batch.counts.activity_days || batch.counts.workouts}<br />{t('importActivity', { days: fmt(batch.counts.activity_days ?? 0), workouts: fmt(batch.counts.workouts ?? 0) })}{/if}
+                  </p>
+                  <div class="chips">
+                    <button class="btn danger" disabled={importBusy} onclick={() => removeImport(batch.id)}>{importConfirm === batch.id ? t('importConfirm') : t('importRemove')}</button>
+                    {#if importConfirm === batch.id}
+                      <button class="btn quiet-btn" disabled={importBusy} onclick={() => (importConfirm = null)}>{t('cancel')}</button>
+                    {/if}
+                  </div>
+                </div>
+              {/each}
+              {#if importError}<p class="note warn" role="alert">{importError}</p>{/if}
+            </section>
+          {/if}
+          {#if !viewingDemo() && !import.meta.env.VITE_DEMO}<DataExport />{/if}
+          {#if !viewingDemo() && importInfo?.available}<DataImport maxBytes={importInfo.max_bytes} onimported={async () => { try { imports = await api.imports(); } catch { /* keep the list */ } await refresh(); }} />{/if}
+          {#if ui.me?.demo.available}
+            <section class="card" aria-labelledby="demo-title">
+              <h3 id="demo-title" class="micro quiet">{t('demoTitle')}</h3>
+              <p class="note">{t('demoText')}</p>
+              {#if ui.me?.is_admin}<p class="note">{t('demoDataHint')}</p>{/if}
+              <div class="field">
+                <span id="demo-days">{t('demoDays')}</span>
+                <div class="chips" role="group" aria-labelledby="demo-days">
+                  {#each [14, 30, 90] as n}
+                    <button type="button" class="chip" class:on={demoDays === n} aria-pressed={demoDays === n}
+                      onclick={() => (demoDays = n)}>{t('demoDaysN', { n })}</button>
+                  {/each}
+                </div>
+              </div>
+              <div class="chips"><button class="btn" disabled={demoBusy} onclick={createDemo}>{t('demoCreate')}</button></div>
+              {#if ui.me.demo.entries > 0 || ui.me.demo.weights > 0 || ui.me.demo.water > 0 || (ui.me.demo.activity ?? 0) > 0}
+                <p class="note">{t('demoPresent', { entries: ui.me.demo.entries, weights: ui.me.demo.weights })}</p>
+                <div class="chips">
+                  <button class="btn danger" disabled={demoBusy} onclick={removeDemo}>{demoConfirm ? t('demoConfirm') : t('demoRemove')}</button>
+                  {#if demoConfirm}
+                    <button class="btn quiet-btn" disabled={demoBusy} onclick={() => (demoConfirm = false)}>{t('cancel')}</button>
+                  {/if}
+                </div>
+              {/if}
+              {#if demoError}<p class="note warn" role="alert">{demoError}</p>{/if}
+            </section>
+          {/if}
+        </section>
         {/if}
-
-        <section class="card" aria-labelledby="acc-title">
-          <h2 id="acc-title" class="micro quiet">{t('gpAccount')}</h2>
-          <p class="note">{t('goalHint')}</p>
+        <section class="sgroup" aria-labelledby="sg-conn">
+          <h2 id="sg-conn" class="gt">{t('gpGroupConn')}</h2>
+          <section class="card" aria-labelledby="con-title" data-testid="connections">
+            <h3 id="con-title" class="micro quiet">{t('conTitle')}</h3>
+            <p class="note">{t('conText')}</p>
+            {#if ui.me?.features?.cookidoo}
+              <div class="conn" role="group" aria-labelledby="con-ck">
+                <h4 id="con-ck" class="ct">{t('ckaTitleOwn')}</h4>
+                <p class="note">{t('ckaTextOwn')}</p>
+                <CookidooAccount scope="own" id="me-ck" />
+              </div>
+            {:else}
+              <p class="note">{t('ckaNeedsConnector')}</p>
+            {/if}
+          </section>
+          {#if ui.me?.features?.access_tokens !== false}<TokenCard />{/if}
+          {#if ui.me?.features?.webhooks !== false}<WebhookCard />{/if}
+        </section>
+        <section class="sgroup" aria-labelledby="sg-account">
+          <h2 id="sg-account" class="gt">{t('gpGroupAccount')}</h2>
+          {#if auth.mode === 'local' || auth.mode === 'oidc'}<AccountCard />{/if}
+          {#if ui.me?.demo_account?.can_switch}
+            <section class="card" aria-labelledby="dacct-title">
+              <h3 id="dacct-title" class="micro quiet">{t('demoAcctTitle')}</h3>
+              <p class="note">{t('demoAcctText')}</p>
+              <div class="chips"><button class="btn" type="button" onclick={() => switchDemo(true)}>{t('demoAcctSwitch')}</button></div>
+            </section>
+          {/if}
+          {#if ui.me?.is_admin}
+            <section class="card" aria-labelledby="admin-title">
+              <h3 id="admin-title" class="micro quiet">{t('admTitle')}</h3>
+              <p class="note">{t('admCardText')}</p>
+              <a class="row-pill link" href="#/admin"><span class="t"><strong>{t('admOpen')}</strong></span><span class="v">→</span></a>
+            </section>
+          {/if}
+          <section class="card">
+            <p class="note">{t('goalHint')}</p>
+          </section>
+        </section>
+        <section class="sgroup" aria-labelledby="sg-about">
+          <h2 id="sg-about" class="gt">{t('gpGroupAbout')}</h2>
+          <section class="card" aria-labelledby="cat-title">
+            <h3 id="cat-title" class="micro quiet">{t('gpCatalog')}</h3>
+            <p class="stand">
+              {#if ui.me && ui.me.catalog.products > 0 && ui.me.catalog.updated_at}
+                {t('catalogInfo', { n: fmt(ui.me.catalog.products), date: fmtDate(ui.me.catalog.updated_at) })}
+              {:else}
+                {t('catalogNone')}
+              {/if}
+            </p>
+            <p class="stand">
+              {#if ui.me && ui.me.catalog.bls.products > 0 && ui.me.catalog.bls.updated_at}
+                {t('catalogBls', { n: fmt(ui.me.catalog.bls.products), date: fmtDate(ui.me.catalog.bls.updated_at) })}
+              {:else}
+                {t('catalogBlsNone')}
+              {/if}
+            </p>
+            <p class="note credit">{t('credit')} <a href="https://world.openfoodfacts.org" rel="noopener">Open Food Facts</a> (ODbL) · {t('creditBls')}</p>
+          </section>
         </section>
       </div>
     </div>
@@ -740,6 +746,8 @@
 <style>
   .cols { display: flex; flex-direction: column; gap: 12px; }
   .goals, .settings { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .sgroup { display: flex; flex-direction: column; gap: 8px; }
+  .gt { font-family: var(--f-display); font-weight: 800; font-size: 20px; letter-spacing: -0.02em; margin-top: 4px; }
   .micro.lab { display: inline-flex; align-items: center; gap: 6px; }
 
   /* hero */
@@ -863,6 +871,8 @@
     .gp { max-width: 1640px; }
     .cols { grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.25fr); gap: 28px; }
     .settings { display: block; columns: 2; column-gap: 14px; }
-    .settings > :global(*) { break-inside: avoid; margin-bottom: 14px; }
+    .sgroup { margin-bottom: 14px; }
+    .gt { break-after: avoid; }
+    .sgroup > :global(*) { break-inside: avoid; }
   }
 </style>

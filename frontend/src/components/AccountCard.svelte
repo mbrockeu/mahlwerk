@@ -39,7 +39,7 @@
 </script>
 
 <section class="icard" aria-labelledby="acct-title">
-  <h2 id="acct-title" class="micro quiet">{t('acctTitle')}</h2>
+  <h3 id="acct-title" class="micro quiet">{t('acctTitle')}</h3>
   {#if auth.mode === 'oidc'}
     <p class="note">{t('oidcAcctNote')}</p>
     <div class="acts">
