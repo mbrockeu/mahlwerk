@@ -871,7 +871,7 @@
     .gp { max-width: 1640px; }
     .cols { grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.25fr); gap: 28px; }
     .settings { display: block; columns: 2; column-gap: 14px; }
-    .sgroup { margin-bottom: 14px; }
+    .sgroup { margin-bottom: 14px; break-inside: avoid; } /* a group never splits across the two columns, so both start level */
     .gt { break-after: avoid; }
     .sgroup > :global(*) { break-inside: avoid; }
   }
