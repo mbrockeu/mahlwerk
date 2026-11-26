@@ -767,6 +767,11 @@
             </p>
             <p class="note credit">{t('credit')} <a href="https://world.openfoodfacts.org" rel="noopener">Open Food Facts</a> (ODbL) · {t('creditBls')}</p>
           </section>
+          <section class="card" aria-labelledby="legal-title">
+            <h3 id="legal-title" class="micro quiet">{t('gpLegal')}</h3>
+            <p class="stand"><a href={lang === 'de' ? 'https://mbrockeu.github.io/mahlwerk/de/datenschutz.html' : 'https://mbrockeu.github.io/mahlwerk/privacy.html'} target="_blank" rel="noopener">{t('privacyLink')}</a></p>
+            <p class="stand"><a href="https://github.com/mbrockeu/mahlwerk" target="_blank" rel="noopener">{t('sourceLink')}</a></p>
+          </section>
         </div>
         {/if}
       </div>
