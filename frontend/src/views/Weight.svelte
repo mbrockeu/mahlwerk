@@ -1,12 +1,14 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { api, ApiError } from '../lib/api';
+  import WeightChart from '../components/WeightChart.svelte';
   import { bodyChange, bodyPoints, type BodyKey } from '../lib/body';
-  import { daysBetween, shiftDay, shortDate } from '../lib/date';
+  import { shiftDay, shortDate } from '../lib/date';
   import { fmt, fmt1, inputNumber, parseNumber, t } from '../lib/i18n';
   import { wide } from '../lib/media.svelte';
   import { checkBadges, toast, ui } from '../lib/store.svelte';
   import type { WeightPoint } from '../lib/types';
+  import { readingOf, trendOf } from '../lib/weightTrend';
 
   // the chart's period, remembered per browser; the change tiles always look back up to 90 days, so at least that is loaded
   const RANGES = [30, 90, 365, 0] as const; // 0 = everything
@@ -85,27 +87,10 @@
   const first = $derived(shown && shown.length ? shown[0] : null);
   const delta = $derived(latest && first && latest !== first ? latest.kg - first.kg : null);
 
-  // chart geometry
-  // a wider drawing box on wide windows, so that the type keeps its size and the chart gets room
-  const W = $derived(wide.on ? 720 : 340), H = $derived(wide.on ? 330 : 190);
-  const PL = 38, PR = 12, PT = 14, PB = 24;
-  const chart = $derived.by(() => {
-    if (!shown || shown.length === 0) return null;
-    const span = Math.max(1, daysBetween(start, ui.today));
-    const kgs = shown.map((p) => p.kg);
-    let lo = Math.floor(Math.min(...kgs) - 0.5);
-    let hi = Math.ceil(Math.max(...kgs) + 0.5);
-    if (hi - lo < 2) { lo -= 1; hi += 1; }
-    const x = (day: string) => PL + (daysBetween(start, day) / span) * (W - PL - PR);
-    const y = (kg: number) => PT + (1 - (kg - lo) / (hi - lo)) * (H - PT - PB);
-    const pts = shown.map((p) => ({ x: x(p.day), y: y(p.kg), p }));
-    const grid = [0, 1, 2, 3].map((i) => {
-      const v = lo + ((hi - lo) * i) / 3;
-      return { y: y(v), label: fmt(Math.round(v * 10) / 10, 1) };
-    });
-    const ticks = [0, 1, 2, 3].map((i) => shiftDay(start, Math.round((span * i) / 3))).map((day) => ({ x: x(day), day }));
-    return { pts, grid, ticks, end: pts[pts.length - 1], line: pts.map((q, i) => `${i ? 'L' : 'M'}${q.x.toFixed(1)} ${q.y.toFixed(1)}`).join('') };
-  });
+  // the trend over all loaded values (so its start in the chosen period is not cut off), and the latest value read against it
+  const trend = $derived(points ? trendOf(points) : []);
+  const reading = $derived(points ? readingOf(points, ui.today) : null);
+  const chartWeight = $derived(latest && first ? { first: first.kg, last: latest.kg, change: Math.round((latest.kg - first.kg) * 100) / 100, trend: trend.filter((p) => p.day >= start) } : null);
   // key figures, all from the stored values: the change since the latest value that is at least n days older
   const changeOver = (n: number) => {
     if (!points || !latest) return null;
@@ -139,7 +124,8 @@
     }) : [],
   );
   const signed = (v: number) => `${v > 0 ? '+' : ''}${fmt1(v)}`;
-  const shortLabel = (day: string) => shortDate(day).split(' ')[1];
+  const pace = (v: number) => `${v > 0 ? '+' : ''}${fmt(v, 2)}`;
+  const when = (day: string) => (day === ui.today ? t('trToday') : shortDate(day));
   const rangeLabel = (v: number) => (v === 0 ? t('rangeAll') : v === 365 ? t('range365') : t('wDays', { n: v }));
   const chartLabel = $derived(range === 0 ? t('weightChartAll') : t('weightChart', { n: range }));
 </script>
@@ -170,12 +156,22 @@
 
   {#if points && points.length === 0}
     <p class="note">{t('weightEmpty')}</p>
-  {:else if chart && latest}
+  {:else if shown && shown.length && chartWeight && latest}
     <section class="card on-dark">
       <div class="kpi">
         <div><span class="micro lab">{t('weightLatest')}</span><span class="val">{fmt1(latest.kg)}<small> {t('kg')}</small></span></div>
         {#if delta != null && first}<div class="chg"><span class="mono">{delta > 0 ? '+' : ''}{fmt1(Math.round(delta * 10) / 10)} {t('kg')}</span><span class="micro lab">{t('weightChange', { day: shortDate(first.day).split(' ')[1] })}</span></div>{/if}
       </div>
+      {#if reading && (reading.pace !== null || reading.spread !== null)}
+        <div class="reading" aria-label={t('trCard')}>
+          {#if reading.pace !== null}<span class="pace">{reading.steady ? t('trSteady') : t('trPace', { v: pace(reading.pace) })}</span>{/if}
+          {#if reading.spread !== null}
+            <p>{reading.deviation === 0 ? t('trOn', { when: when(reading.day) })
+              : t(reading.deviation > 0 ? 'trAbove' : 'trBelow', { when: when(reading.day), v: fmt1(Math.abs(reading.deviation)) })}
+              · {#if reading.unusual}<span class="unusual">{t('trUnusual', { v: fmt1(reading.spread) })}</span>{:else}{t('trUsual', { v: fmt1(reading.spread) })}{/if}</p>
+          {/if}
+        </div>
+      {/if}
     </section>
     <div class="ranges" role="group" aria-label={t('rangeLabel')}>
       {#each RANGES as v}
@@ -183,19 +179,7 @@
       {/each}
     </div>
     <figure>
-      <svg viewBox="0 0 {W} {H}" role="img" aria-label={chartLabel}>
-        {#each chart.grid as g}
-          <path d="M{PL} {g.y}H{W - PR}" stroke="var(--hairline)" stroke-width="1.5" stroke-dasharray="3 4" />
-          <text x={PL - 6} y={g.y + 4} text-anchor="end" class="axis">{g.label}</text>
-        {/each}
-        {#each chart.ticks as tk, ti}
-          <path d="M{tk.x} {H - PB}v5" stroke="var(--quiet)" stroke-width="2" stroke-linecap="round" />
-          <text x={ti === chart.ticks.length - 1 ? tk.x + 6 : tk.x} y={H - 4} text-anchor={ti === chart.ticks.length - 1 ? 'end' : 'middle'} class="axis">{shortLabel(tk.day)}</text>
-        {/each}
-        <path d={chart.line} fill="none" stroke="var(--bar)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
-        {#each chart.pts as q}<circle cx={q.x} cy={q.y} r="2.2" fill="var(--bar)" />{/each}
-        <circle cx={chart.end.x} cy={chart.end.y} r="7" fill="var(--weight-orange)" stroke="var(--paper)" stroke-width="3" />
-      </svg>
+      <WeightChart from={start} to={ui.today} today={ui.today} weight={chartWeight} raw={shown} spread={reading?.spread ?? null} />
       <figcaption class="micro quiet">{chartLabel}</figcaption>
     </figure>
   {/if}
@@ -261,10 +245,13 @@
   .lab { color: #d5ead0; }
   .val { font-family: var(--f-display); font-weight: 800; font-size: 44px; letter-spacing: -0.04em; line-height: 1; }
   .val small { font-family: var(--f-mono); font-size: 14px; font-weight: 500; letter-spacing: 0; }
+  .reading { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgb(255 255 255 / 0.22); display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+  .reading p { margin: 0; font-size: 14px; line-height: 1.45; }
+  .pace { background: #c9f04a; color: #17211c; border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 700; }
+  .unusual { background: #ffcf9e; color: #17211c; border-radius: 999px; padding: 1px 8px; font-weight: 600; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
   .chg { align-items: flex-end; font-family: var(--f-mono); font-weight: 600; font-size: 16px; }
   figure { margin: 0; background: var(--paper); border-radius: 28px 28px 28px 8px; padding: 14px 10px 12px; display: flex; flex-direction: column; gap: 6px; }
   figcaption { padding-left: 8px; }
-  svg { width: 100%; height: auto; display: block; }
   .main { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   .side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   .cols { display: flex; flex-direction: column; gap: 12px; }
@@ -310,5 +297,4 @@
     figure { padding: 22px 22px 16px; }
   }
   @media (min-width: 1800px) { .cols { grid-template-columns: minmax(0, 1.5fr) minmax(420px, 1fr); gap: 36px; } }
-  .axis { font-family: var(--f-mono); font-size: 10px; fill: var(--quiet); }
 </style>

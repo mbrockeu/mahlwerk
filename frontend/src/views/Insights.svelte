@@ -529,7 +529,7 @@
                   {/if}
                 </div>
                 {#if comp}<p class="comp">{compText}</p>{:else if compFew}<p class="note">{t('wtCompFew')}</p>{/if}
-                <WeightChart from={data.range.from} to={data.range.to} weight={data.weight} raw={rawWeights} />
+                <WeightChart from={data.range.from} to={data.range.to} today={ui.today} weight={data.weight} raw={rawWeights} />
               {:else}
                 <p class="note">{t('wtNone')} <a href="#/weight">{t('wtAdd')}</a></p>
                 {#if balance != null}
