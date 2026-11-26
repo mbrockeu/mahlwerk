@@ -21,7 +21,7 @@ test('local auth: first-admin setup, sign out, wrong password refused, sign in a
     await page.getByRole('button', { name: 'Create account' }).click();
     await expect(page.getByRole('heading', { name: 'Today' })).toBeVisible();   // signed in right after the setup
 
-    await page.goto('/#/profile');
+    await page.goto('/#/profile/account');
     await page.getByRole('button', { name: 'Sign out' }).click();
     await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
 

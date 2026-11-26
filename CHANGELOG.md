@@ -15,7 +15,7 @@ All notable changes to this project are documented here. The format follows
   Python and the TypeScript server. See "Yazio direct sign-in" in `docs/integrations.md` and `docs/api-v1.md`.
 
 ### Changed
-- **The profile settings are grouped under headings** (appearance and use, diary and training, data and import, connections, account, about), in the style of the admin page. Cards only moved; card titles are now one heading level lower.
+- **The profile is a settings page with sections**, like system settings: goals, appearance and use, diary and training, data and import, connections, account, about. On wide windows a sidebar (with your name) lists the sections and only the chosen one is shown; on a phone the profile is a list of rows and each section opens as its own page with a back link. The section is in the address (`#/profile/goals`, `look`, `diary`, `data`, `connections`, `account`, `about`), so links and the browser's back button work, and unsaved goals survive a switch between sections. Cards only moved; card titles are one heading level below the section title. Links from other pages (set a goal, badges, admin) lead to the right section.
 
 ## [0.4.1] - 2026-11-25
 

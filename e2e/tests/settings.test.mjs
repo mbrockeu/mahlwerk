@@ -15,9 +15,11 @@ test('profile: display name, a setting and the calorie goal survive a reload', a
     await page.getByLabel('Change display name').press('Enter');
     await expect(page.getByText('Smoke Tester').first()).toBeVisible();
 
+    await page.getByRole('navigation', { name: 'Profile sections' }).getByRole('link', { name: 'Appearance & use' }).click();                  // the settings are one section at a time
     await page.getByRole('switch', { name: /^Suggestions on the day view/ }).click();   // On -> Off
     await expect(page.getByRole('switch', { name: /^Suggestions on the day view/ })).toHaveAttr('aria-checked', 'false');
 
+    await page.getByRole('navigation', { name: 'Profile sections' }).getByRole('link', { name: 'Goals' }).click();
     await page.getByRole('textbox', { name: 'Calorie goal in kcal' }).fill('2300');
     await page.getByRole('textbox', { name: 'Calorie goal in kcal' }).blur();
     await page.getByRole('region', { name: 'Unsaved changes' }).getByRole('button', { name: 'Save' }).click();
@@ -33,7 +35,8 @@ test('profile: display name, a setting and the calorie goal survive a reload', a
     await page.goto('/#/profile');
     await page.reload();
     await expect(page.getByText('Smoke Tester').first()).toBeVisible();
-    await expect(page.getByRole('switch', { name: /^Suggestions on the day view/ })).toHaveAttr('aria-checked', 'false');
     assert.equal(await page.getByRole('textbox', { name: 'Calorie goal in kcal' }).inputValue(), '2,300');
+    await page.getByRole('navigation', { name: 'Profile sections' }).getByRole('link', { name: 'Appearance & use' }).click();
+    await expect(page.getByRole('switch', { name: /^Suggestions on the day view/ })).toHaveAttr('aria-checked', 'false');
   });
 });

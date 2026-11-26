@@ -1,4 +1,4 @@
-// Hash routing: #/, #/history?range=30, #/products, #/recipes, #/weight, #/profile, #/badges
+// Hash routing: #/, #/history?range=30, #/products, #/recipes, #/weight, #/profile, #/profile/<section>, #/badges
 import { t } from './i18n';
 export type Route = 'today' | 'history' | 'products' | 'recipes' | 'weight' | 'profile' | 'badges' | 'admin';
 const ROUTES: Record<string, Route> = {
@@ -14,9 +14,13 @@ const legacy = () => {
   const [path, query] = split();
   if (path === '/products' && new URLSearchParams(query).get('tab') === 'recipes') history.replaceState(null, '', '#/recipes');
 };
-const parse = (): Route => { legacy(); return ROUTES[split()[0]] ?? 'today'; };
+/** The sections of the profile page (#/profile/<id>); the page stays the same route, so its unsaved goals survive a switch. */
+export type ProfileSection = 'goals' | 'look' | 'diary' | 'data' | 'connections' | 'account' | 'about';
+const PROFILE_PREFIX = '/profile/';
+const parse = (): Route => { legacy(); const path = split()[0]; return ROUTES[path] ?? (path.startsWith(PROFILE_PREFIX) ? 'profile' : 'today'); };
+const parseSub = (): string => { const path = split()[0]; return path.startsWith(PROFILE_PREFIX) ? path.slice(PROFILE_PREFIX.length).replace(/\/+$/, '') : ''; };
 
-export const router = $state({ route: parse(), query: new URLSearchParams(split()[1]) });
+export const router = $state({ route: parse(), query: new URLSearchParams(split()[1]), sub: parseSub() });
 /** Every page gets its own document title (WCAG 2.4.2): "<page> – Mahlwerk". */
 const TITLE_KEY = { today: 'navToday', history: 'historyTitle', products: 'productsTitle', recipes: 'recipesTitle', weight: 'weightTitle', profile: 'gpTitle', badges: 'badgesTitle', admin: 'admTitle' } as const;
 const setTitle = () => { document.title = `${t(TITLE_KEY[router.route])} – Mahlwerk`; };
@@ -35,11 +39,13 @@ window.addEventListener('hashchange', () => {
   router.route = route;
   setTitle();
   router.query = new URLSearchParams(split()[1]);
+  router.sub = parseSub();
   if (changed) window.scrollTo({ top: 0 });
 });
 
 export const hrefOf = (route: Route) => (route === 'today' ? '#/' : `#/${route}`);
-export const navigate = (route: Route) => { location.hash = hrefOf(route); };
+export const profileHref = (section: ProfileSection) => `#/profile/${section}`;
+export const navigate = (route: Route, section?: ProfileSection) => { location.hash = route === 'profile' && section ? profileHref(section) : hrefOf(route); };
 
 /** Replace the query of the current route (no new history entry, no scroll). */
 export function setQuery(params: Record<string, string>) {

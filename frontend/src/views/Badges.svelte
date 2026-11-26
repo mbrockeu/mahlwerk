@@ -48,7 +48,7 @@
   </div>
 
   {#if !playful}
-    <p class="note">{t('badgesOff')} <a href="#/profile">{t('profile')}</a></p>
+    <p class="note">{t('badgesOff')} <a href="#/profile/look">{t('profile')}</a></p>
   {:else if error && !data}
     <div class="error-box"><p>{t('loadFailed', { reason: error })}</p></div>
   {:else if !data}

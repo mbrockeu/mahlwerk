@@ -35,7 +35,7 @@ function unzip(buf) {
 
 test('export: the data export is a ZIP with the expected files', async () => {
   await withPage(browser, 'export', async (page) => {
-    await page.goto('/#/profile');
+    await page.goto('/#/profile/data');
     const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Download ZIP' }).click()]);
     assert.match(download.suggestedFilename(), /^mahlwerk-export-.+\.zip$/);
     const buf = readFileSync(await download.path());

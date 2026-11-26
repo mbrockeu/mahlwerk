@@ -17,7 +17,7 @@ after(() => browser.close());
 
 test('import: export, lose an entry, import the file again (merge), then replace', async () => {
   await withPage(browser, 'import', async (page) => {
-    await page.goto('/#/profile');
+    await page.goto('/#/profile/data');
     await page.getByRole('heading', { name: 'Export my data' }).waitFor();
     if (PYTHON) {
       assert.equal(await page.getByTestId('data-import').count(), 0, 'the Python server offers no import');

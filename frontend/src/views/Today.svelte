@@ -304,7 +304,7 @@
     {#if !goal}
       <section class="nogoal">
         <div><strong>{t('noGoalTitle')}</strong><p>{t('noGoalText')}</p></div>
-        <button class="btn primary" onclick={() => navigate('profile')}>{t('setGoal')}</button>
+        <button class="btn primary" onclick={() => navigate('profile', 'goals')}>{t('setGoal')}</button>
       </section>
     {/if}
 

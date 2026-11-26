@@ -258,7 +258,7 @@
 </script>
 
 {#snippet nogoal()}
-  <p class="nogoal-note">{t('insNoGoalShort')} <a href="#/profile">{t('setGoal')}</a></p>
+  <p class="nogoal-note">{t('insNoGoalShort')} <a href="#/profile/goals">{t('setGoal')}</a></p>
 {/snippet}
 
 {#snippet rangeChips()}
@@ -406,7 +406,7 @@
                 {#if q.compare && D?.in_range_share}<li><Delta d={D.in_range_share} unit={t('deltaPp')} digits={0} dark /></li>{/if}
               </ul>
             {:else if !goal}
-              <p class="hero-note">{t('insNoGoal')} <a href="#/profile">{t('setGoal')}</a></p>
+              <p class="hero-note">{t('insNoGoal')} <a href="#/profile/goals">{t('setGoal')}</a></p>
             {:else}
               <span class="big">–</span>
             {/if}

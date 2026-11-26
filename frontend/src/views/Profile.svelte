@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import GoalCalc from '../components/GoalCalc.svelte';
   import NameCard from '../components/NameCard.svelte';
   import AccountCard from '../components/AccountCard.svelte';
@@ -23,7 +23,7 @@
   import { fromDay } from '../lib/date';
   import { fmt, fmtDate, lang, langPref, setLangPref, t, type LangPref } from '../lib/i18n';
   import { setThemePref, theme, type ThemePref } from '../lib/theme.svelte';
-  import { guard, navigate } from '../lib/router.svelte';
+  import { guard, navigate, profileHref, router, type ProfileSection } from '../lib/router.svelte';
   import { auth, changed, loadMe, resetTour, switchDemo, toast, ui, viewingDemo } from '../lib/store.svelte';
 
   interface Draft { kcal: number; protein: number; carbs: number; fat: number; water: number; steps: number }
@@ -87,6 +87,9 @@
   }
 
   // ---- settings (unchanged behaviour, saved at once) ----
+  // ---- sections: a sidebar on wide windows, a list of rows with one page per section on narrow ones ----
+  const wideQuery = typeof matchMedia === 'function' ? matchMedia('(min-width: 900px)') : null;
+  let wide = $state(wideQuery?.matches ?? true);
   let demoDays = $state(30);
   let demoBusy = $state(false);
   let demoConfirm = $state(false);
@@ -114,7 +117,32 @@
   let importError = $state('');
   let importInfo = $state<ImportInfo | null>(null);
 
+  const sections = $derived<{ id: ProfileSection; title: string }[]>([
+    { id: 'goals', title: t('gpGroupGoals') },
+    { id: 'look', title: t('gpGroupLook') },
+    { id: 'diary', title: t('gpGroupDiary') },
+    ...(showDataGroup ? [{ id: 'data' as const, title: t('gpGroupData') }] : []),
+    { id: 'connections', title: t('gpGroupConn') },
+    { id: 'account', title: t('gpGroupAccount') },
+    { id: 'about', title: t('gpGroupAbout') },
+  ]);
+  /** The open section: from the address; an unknown one falls back to the goals (wide) or the list (narrow). */
+  const active = $derived<ProfileSection | null>(sections.find((s) => s.id === router.sub)?.id ?? (wide ? 'goals' : null));
+  const activeTitle = $derived(sections.find((s) => s.id === active)?.title ?? '');
+  let heading: HTMLHeadingElement | undefined = $state();
+  let shown: ProfileSection | null | undefined;
+  // after a switch the section heading takes the focus (and a new page starts at the top)
+  $effect(() => {
+    const now = active;
+    if (shown === undefined) { shown = now; return; }
+    if (now === shown) return;
+    shown = now;
+    void tick().then(() => { window.scrollTo({ top: 0 }); if (now) heading?.focus({ preventScroll: true }); });
+  });
+
   onMount(() => {
+    const onWide = (e: MediaQueryListEvent) => { wide = e.matches; };
+    wideQuery?.addEventListener('change', onWide);
     guard.block = (target) => {
       if (!dirty) return false;
       leaving = target;
@@ -139,7 +167,7 @@
       }
       try { goalHistory = await api.goalHistory(); } catch { goalHistory = []; }
     })();
-    return () => { guard.block = null; window.removeEventListener('beforeunload', beforeUnload); };
+    return () => { guard.block = null; window.removeEventListener('beforeunload', beforeUnload); wideQuery?.removeEventListener('change', onWide); };
   });
 
   // ---- goals ----
@@ -369,8 +397,28 @@
   </div>
 
   {#if loaded}
-    {#if !viewingDemo()}<NameCard />{/if}
-    <div class="cols">
+    <div class="shell">
+      {#if wide || !active}
+        <aside class="side">
+          {#if !viewingDemo()}<NameCard />{/if}
+          <nav aria-label={t('gpSections')}>
+            <ul class="menu">
+              {#each sections as s (s.id)}
+                <li>
+                  <a href={profileHref(s.id)} class="mi" class:on={active === s.id} aria-current={active === s.id ? 'page' : undefined}>
+                    <span>{s.title}</span><Icon name="right" size={20} />
+                  </a>
+                </li>
+              {/each}
+            </ul>
+          </nav>
+        </aside>
+      {/if}
+      {#if active}
+      <section class="pane" aria-labelledby="gp-sec">
+        {#if !wide}<a class="backlink" href="#/profile"><Icon name="left" size={20} />{t('gpBackList')}</a>{/if}
+        <h2 id="gp-sec" class="gt sec" tabindex="-1" bind:this={heading}>{activeTitle}</h2>
+      {#if active === 'goals'}
       <div class="goals">
         <!-- calorie goal: the green block -->
         <section class="hero on-dark" aria-label={t('gpKcalLabel')}>
@@ -392,7 +440,7 @@
 
         <!-- macros -->
         <section class="macros" aria-labelledby="gp-macros">
-          <h2 id="gp-macros" class="sr-only">{t('gpMacros')}</h2>
+          <h3 id="gp-macros" class="sr-only">{t('gpMacros')}</h3>
           <div class="tiles">
             {#each tiles as tile}
               <div class="tile" style="background:{tile.bg}; border-radius:{tile.radius}; --track:{tile.track}">
@@ -427,7 +475,7 @@
 
         <!-- presets -->
         <section class="presets" aria-labelledby="gp-presets">
-          <h2 id="gp-presets" class="micro quiet">{t('gpPresets')}</h2>
+          <h3 id="gp-presets" class="micro quiet">{t('gpPresets')}</h3>
           <div class="chips">
             {#each PRESETS as p}
               <button type="button" class="chip pre" class:on={preset === p.id} aria-pressed={preset === p.id} onclick={() => applyPreset(p.id)}>
@@ -498,7 +546,7 @@
         {#if goalHistory.length}
           <!-- goal history: newest first, each goal from its day on -->
           <section class="card hist" aria-labelledby="gp-hist">
-            <h2 id="gp-hist" class="micro quiet">{t('gpHistTitle')}</h2>
+            <h3 id="gp-hist" class="micro quiet">{t('gpHistTitle')}</h3>
             <ul>
               {#each goalHistory as h, i (h.valid_from)}
                 <li aria-label={t('gpHistAria', { from: histFrom(h), kcal: fmt(h.kcal), p: fmt(h.protein), c: fmt(h.carbs), f: fmt(h.fat) })}>
@@ -517,10 +565,11 @@
         </button>
         {#if error}<p class="note warn" role="alert">{error}</p>{/if}
       </div>
-
+      {/if}
+      {#if active !== 'goals'}
       <div class="settings">
-        <section class="sgroup" aria-labelledby="sg-look">
-          <h2 id="sg-look" class="gt">{t('gpGroupLook')}</h2>
+        {#if active === 'look'}
+        <div class="sgroup">
           <section class="card" aria-labelledby="look-title">
             <h3 id="look-title" class="micro quiet">{t('displayTitle')}</h3>
             <div class="field">
@@ -562,9 +611,10 @@
               <span class="t"><strong>{t('tourReplay')}</strong><small>{t('tourReplayText')}</small></span><span class="v">→</span>
             </button>
           </section>
-        </section>
-        <section class="sgroup" aria-labelledby="sg-diary">
-          <h2 id="sg-diary" class="gt">{t('gpGroupDiary')}</h2>
+        </div>
+        {/if}
+        {#if active === 'diary'}
+        <div class="sgroup">
           <section class="card" aria-labelledby="act-title">
             <h3 id="act-title" class="micro quiet">{t('actTitle')}</h3>
             <Toggle checked={addToGoal} label={t('actSettingTitle')} sub={addToGoal ? t('playOn') : t('playOff')} disabled={actBusy} onchange={toggleAddToGoal} />
@@ -600,10 +650,10 @@
             <p class="note">{t('fastNote')}</p>
             {#if fastError}<p class="note warn" role="alert">{fastError}</p>{/if}
           </section>
-        </section>
-        {#if showDataGroup}
-        <section class="sgroup" aria-labelledby="sg-data">
-          <h2 id="sg-data" class="gt">{t('gpGroupData')}</h2>
+        </div>
+        {/if}
+        {#if active === 'data'}
+        <div class="sgroup">
           {#if !viewingDemo()}<YazioImport onimported={async () => { try { imports = await api.imports(); } catch { /* keep the list */ } await refresh(); }} />{/if}
           {#if imports.length > 0}
             <section class="card" aria-labelledby="import-title">
@@ -656,10 +706,10 @@
               {#if demoError}<p class="note warn" role="alert">{demoError}</p>{/if}
             </section>
           {/if}
-        </section>
+        </div>
         {/if}
-        <section class="sgroup" aria-labelledby="sg-conn">
-          <h2 id="sg-conn" class="gt">{t('gpGroupConn')}</h2>
+        {#if active === 'connections'}
+        <div class="sgroup">
           <section class="card" aria-labelledby="con-title" data-testid="connections">
             <h3 id="con-title" class="micro quiet">{t('conTitle')}</h3>
             <p class="note">{t('conText')}</p>
@@ -675,9 +725,10 @@
           </section>
           {#if ui.me?.features?.access_tokens !== false}<TokenCard />{/if}
           {#if ui.me?.features?.webhooks !== false}<WebhookCard />{/if}
-        </section>
-        <section class="sgroup" aria-labelledby="sg-account">
-          <h2 id="sg-account" class="gt">{t('gpGroupAccount')}</h2>
+        </div>
+        {/if}
+        {#if active === 'account'}
+        <div class="sgroup">
           {#if auth.mode === 'local' || auth.mode === 'oidc'}<AccountCard />{/if}
           {#if ui.me?.demo_account?.can_switch}
             <section class="card" aria-labelledby="dacct-title">
@@ -696,9 +747,10 @@
           <section class="card">
             <p class="note">{t('goalHint')}</p>
           </section>
-        </section>
-        <section class="sgroup" aria-labelledby="sg-about">
-          <h2 id="sg-about" class="gt">{t('gpGroupAbout')}</h2>
+        </div>
+        {/if}
+        {#if active === 'about'}
+        <div class="sgroup">
           <section class="card" aria-labelledby="cat-title">
             <h3 id="cat-title" class="micro quiet">{t('gpCatalog')}</h3>
             <p class="stand">
@@ -717,8 +769,12 @@
             </p>
             <p class="note credit">{t('credit')} <a href="https://world.openfoodfacts.org" rel="noopener">Open Food Facts</a> (ODbL) · {t('creditBls')}</p>
           </section>
-        </section>
+        </div>
+        {/if}
       </div>
+      {/if}
+      </section>
+      {/if}
     </div>
 
     {#if showBar}
@@ -744,8 +800,17 @@
 {#if calcOpen}<GoalCalc onclose={() => (calcOpen = false)} onuse={useSuggestion} />{/if}
 
 <style>
-  .cols { display: flex; flex-direction: column; gap: 12px; }
+  .shell { display: flex; flex-direction: column; gap: 12px; }
+  .side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .pane { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   .goals, .settings { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .gt.sec { font-size: 28px; margin: 0; }
+  .gt.sec:focus-visible { outline-offset: 4px; }
+  .backlink { align-self: flex-start; display: inline-flex; align-items: center; gap: 2px; min-height: 44px; padding: 0 14px 0 8px; margin-left: -8px; border-radius: 22px 22px 22px 8px; color: var(--text); font-weight: 600; text-decoration: none; }
+  .menu { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .mi { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 56px; padding: 0 16px 0 20px; border-radius: 28px 28px 28px 8px; background: var(--paper); color: var(--text); font-weight: 600; font-size: 16px; text-decoration: none; }
+  .mi:active { transform: scale(0.99); }
+  .mi.on { background: var(--lime); color: var(--on-lime); }
   .sgroup { display: flex; flex-direction: column; gap: 8px; }
   .gt { font-family: var(--f-display); font-weight: 800; font-size: 20px; letter-spacing: -0.02em; margin-top: 4px; }
   .micro.lab { display: inline-flex; align-items: center; gap: 6px; }
@@ -859,20 +924,18 @@
 
   @media (min-width: 900px) {
     .gp { max-width: 1120px; }
-    .cols { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); gap: 20px; align-items: start; }
-    .goals, .settings { gap: 14px; }
+    .shell { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 28px; align-items: start; }
+    .side { position: sticky; top: 16px; gap: 14px; }
+    .side :global(.who) { padding: 16px 16px 16px 14px; gap: 14px; }
+    .side :global(.av) { width: 56px; height: 56px; font-size: 26px; }
+    .side :global(.nm) { font-size: 26px; }
+    .mi { min-height: 48px; padding: 0 12px 0 18px; font-size: 15px; border-radius: 24px 24px 24px 8px; }
+    .mi :global(svg) { opacity: 0.5; }
+    .mi:hover:not(.on) { background: var(--stone); }
+    .pane, .goals, .settings { gap: 14px; }
     .hero { padding: 28px 30px 24px; }
     .bigrow :global(.big) { font-size: 96px; }
     .bar { bottom: 20px; max-width: 560px; margin: 0 auto; width: 100%; }
     .glasses { height: 38px; }
-  }
-  /* big windows: the settings cards flow into two columns next to the goals */
-  @media (min-width: 1800px) {
-    .gp { max-width: 1640px; }
-    .cols { grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.25fr); gap: 28px; }
-    .settings { display: block; columns: 2; column-gap: 14px; }
-    .sgroup { margin-bottom: 14px; break-inside: avoid; } /* a group never splits across the two columns, so both start level */
-    .gt { break-after: avoid; }
-    .sgroup > :global(*) { break-inside: avoid; }
   }
 </style>

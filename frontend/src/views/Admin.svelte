@@ -324,13 +324,13 @@
 <div class="page wide admin">
   <div class="page-head">
     <h1>{t('admTitle')}</h1>
-    <button class="round" onclick={() => navigate('profile')} aria-label={t('back')}><Icon name="close" size={22} /></button>
+    <button class="round" onclick={() => navigate('profile', 'account')} aria-label={t('back')}><Icon name="close" size={22} /></button>
   </div>
 
   {#if !loaded}
     <p class="note" role="status">{t('admLoading')}</p>
   {:else if !isAdmin}
-    <div class="error-box"><p>{t('admNoAccess')}</p><button class="btn" onclick={() => navigate('profile')}>{t('back')}</button></div>
+    <div class="error-box"><p>{t('admNoAccess')}</p><button class="btn" onclick={() => navigate('profile', 'account')}>{t('back')}</button></div>
   {:else if failed}
     <div class="error-box" role="alert"><p>{failed}</p><button class="btn" onclick={load}>{t('retry')}</button></div>
   {:else if overview}
