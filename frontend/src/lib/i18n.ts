@@ -433,7 +433,7 @@ const en = {
   admRefreshStarted: 'Refresh started', admRefreshBusy: 'A refresh is already running.', 
 
   // access keys
-  tokTitle: 'Access keys', tokText: 'A key lets scripts and home automation use your diary without your password. It acts as you, but cannot create keys or webhooks.',
+  tokTitle: 'Access keys', tokText: 'A key lets scripts and home automation use your diary without your password. It acts as you, but cannot create keys or webhooks. For the iPhone app with your server: create a key with “write”, copy it (it is shown only once) and paste it in the app under Settings → Server.',
   tokNone: 'No keys yet.', tokName: 'Name', tokNamePh: 'e.g. Home Assistant', tokScope: 'Access', tokRead: 'Read only', tokWrite: 'Read and write',
   tokExpiry: 'Expires', tokNever: 'Never', tokDays: '{n} days', tokYear: '1 year', tokCreate: 'Create key',
   tokKeyLabel: 'Your new key', tokShownOnce: 'Copy this key now. It is shown only once and cannot be recovered.',
@@ -1211,7 +1211,7 @@ const de: Record<Key, string> = {
   admRefreshStarted: 'Auffrischen gestartet', admRefreshBusy: 'Es läuft schon ein Durchlauf.', 
 
   // Zugriffsschlüssel
-  tokTitle: 'Zugriffsschlüssel', tokText: 'Mit einem Schlüssel greifen Skripte und Hausautomation auf dein Tagebuch zu, ohne dein Passwort. Er handelt als du, kann aber keine Schlüssel oder Webhooks anlegen.',
+  tokTitle: 'Zugriffsschlüssel', tokText: 'Mit einem Schlüssel greifen Skripte und Hausautomation auf dein Tagebuch zu, ohne dein Passwort. Er handelt als du, kann aber keine Schlüssel oder Webhooks anlegen. Für die iPhone-App mit deinem Server: Schlüssel mit „schreiben“ anlegen, kopieren (er wird nur einmal angezeigt) und in der App unter Einstellungen → Server einfügen.',
   tokNone: 'Noch keine Schlüssel.', tokName: 'Name', tokNamePh: 'z. B. Home Assistant', tokScope: 'Zugriff', tokRead: 'Nur lesen', tokWrite: 'Lesen und schreiben',
   tokExpiry: 'Läuft ab', tokNever: 'Nie', tokDays: '{n} Tage', tokYear: '1 Jahr', tokCreate: 'Schlüssel anlegen',
   tokKeyLabel: 'Dein neuer Schlüssel', tokShownOnce: 'Kopiere den Schlüssel jetzt. Er wird nur dieses eine Mal angezeigt und lässt sich nicht wiederherstellen.',
