@@ -243,7 +243,8 @@ export const api = {
   yazioPreview: (all_products = false) => request<YazioPreview>('POST', 'me/yazio/preview', { all_products }),
   yazioConfirm: (token: string, all_products = false) => request<YazioPreview>('POST', 'me/yazio/confirm', { token, all_products }),
   yazioDiscard: () => request<void>('DELETE', 'me/yazio'),
-  yazioLogin: (body: { email: string; password: string; months: number }) => request<YazioRun>('POST', 'me/yazio/login', body),
+  /** Exactly one of `months` (the whole period, once) or `days` (a refresh of the last 1 to 31 days). */
+  yazioLogin: (body: { email: string; password: string; months: number } | { email: string; password: string; days: number }) => request<YazioRun>('POST', 'me/yazio/login', body),
 
   enterDemoView: () => request<DemoAccountState>('POST', 'me/demo-view/enter'),
   leaveDemoView: () => request<void>('POST', 'me/demo-view/leave'),

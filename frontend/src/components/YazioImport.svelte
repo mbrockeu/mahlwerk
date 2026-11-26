@@ -14,6 +14,7 @@
 
   const LIMIT_MB = 24;
   const MONTHS = [3, 6, 12, 24];
+  const DAYS = [3, 7, 14, 30];
 
   let ystate = $state<YazioState | null>(null);
   let preview = $state<YazioPreview | null>(null);
@@ -25,6 +26,8 @@
   let email = $state('');
   let password = $state('');
   let months = $state(12);
+  let mode = $state<'full' | 'refresh'>('full');
+  let days = $state(7);
   let formBad = $state(false);
   let starting = $state(false);
   let poll = 0;
@@ -141,7 +144,7 @@
     done = null;
     preview = null;
     starting = true;
-    const sent = { email: email.trim(), password, months };
+    const sent = mode === 'refresh' ? { email: email.trim(), password, days } : { email: email.trim(), password, months };
     password = ''; // gone from this page at once; the server uses it for one request
     try {
       await api.yazioLogin(sent);
@@ -154,6 +157,8 @@
       starting = false;
     }
   }
+  const changes = (p: YazioPreview) => p.entries_total + p.foods_created + p.weights + p.water + p.activity_days + p.workouts
+    + p.entries_updated + p.entries_removed + p.workouts_updated + p.workouts_removed + p.weights_updated + p.water_updated + p.activity_updated;
   const runError = $derived(run?.state === 'error' ? t('yzRunFailed', { reason: run.error ?? '' }) : run?.state === 'cancelled' ? t('yzRunCancelled') : '');
 </script>
 
@@ -180,7 +185,7 @@
       <h3 id="yz-pv" class="micro">{t('yzPreviewTitle')}</h3>
       <dl class="grid">
         <div class="st"><dt>{t('yzDays')}</dt><dd class="display">{fmt(p.days)}</dd></div>
-        <div class="st"><dt>{t('yzEntries')}</dt><dd class="display">{fmt(p.entries_total)}</dd></div>
+        <div class="st"><dt>{p.refresh ? t('yzRefreshNew') : t('yzEntries')}</dt><dd class="display">{fmt(p.entries_total)}</dd></div>
         <div class="st"><dt>{t('yzFoods')}</dt><dd class="display">{fmt(p.foods_created)}</dd>{#if p.foods_reused}<small>{t('yzFoodsReused', { n: fmt(p.foods_reused) })}</small>{/if}</div>
         <div class="st"><dt>{t('yzWeights')}</dt><dd class="display">{fmt(p.weights)}</dd>{#if p.weights_kept}<small>{t('yzKept', { n: fmt(p.weights_kept) })}</small>{/if}</div>
         <div class="st"><dt>{t('yzWater')}</dt><dd class="display">{fmt(p.water)}</dd>{#if p.water_kept}<small>{t('yzKept', { n: fmt(p.water_kept) })}</small>{/if}</div>
@@ -189,6 +194,17 @@
       </dl>
       {#if p.entries_total > 0}<p class="note mono">{t('yzEntriesSplit', { p: fmt(p.entries.product), r: fmt(p.entries.recipe), q: fmt(p.entries.quick) })}</p>{/if}
       {#if p.already_imported}<p class="note">{t('yzAlready', { n: fmt(p.already_imported) })}</p>{/if}
+      {#if p.refresh}
+        <p class="note">{t('yzRefreshPeriod', { from: p.refresh.first_day, to: p.refresh.last_day, entries: fmt(p.refresh.entries_seen) })}</p>
+        <dl class="grid">
+          <div class="st"><dt>{t('yzRefreshChanged')}</dt><dd class="display">{fmt(p.entries_updated)}</dd></div>
+          <div class="st"><dt>{t('yzRefreshRemoved')}</dt><dd class="display">{fmt(p.entries_removed)}</dd></div>
+        </dl>
+        <p class="note mono">{t('yzRefreshWorkouts', { n: fmt(p.workouts), c: fmt(p.workouts_updated), r: fmt(p.workouts_removed) })}</p>
+        {#if p.weights_updated + p.water_updated + p.activity_updated > 0}<p class="note mono">{t('yzRefreshValues', { n: fmt(p.weights_updated + p.water_updated + p.activity_updated) })}</p>{/if}
+        {#if p.refresh.entries_seen === 0 && p.entries_removed > 0}<p class="note warnbox" role="alert">{t('yzRefreshEmpty', { n: fmt(p.entries_removed) })}</p>{/if}
+        <p class="note">{t('yzRefreshUndo')}</p>
+      {/if}
       <p class="note">{p.goal_set ? t('yzGoalSet') : t('yzGoalKept')}</p>
       {#if p.missing_files.length}<p class="note">{t('yzMissing', { files: p.missing_files.join(', ') })}</p>{/if}
       {#if p.skipped.length}
@@ -200,17 +216,19 @@
       <label class="check"><input type="checkbox" checked={allProducts} disabled={busy} onchange={toggleAll} />{t('yzAllProducts')}</label>
       <p class="note">{t('yzPreviewNote')}</p>
       <div class="acts">
-        <button type="button" class="btn primary" onclick={confirm} disabled={busy || (p.entries_total + p.foods_created + p.weights + p.water + p.activity_days + p.workouts === 0)}>
+        <button type="button" class="btn primary" onclick={confirm} disabled={busy || changes(p) === 0}>
           {step === 'importing' ? t('yzImporting') : t('yzImport')}
         </button>
         <button type="button" class="btn quiet-btn" onclick={discard} disabled={busy}>{t('yzDiscard')}</button>
       </div>
-      {#if p.entries_total + p.foods_created + p.weights + p.water + p.activity_days + p.workouts === 0}<p class="note">{t('yzNothing')}</p>{/if}
+      {#if changes(p) === 0}<p class="note">{t('yzNothing')}</p>{/if}
     </div>
   {/if}
 
   {#if done}
-    <p class="note ok" role="status">{t('yzDone', { entries: fmt(done.entries_total), foods: fmt(done.foods_created), weights: fmt(done.weights) })}</p>
+    <p class="note ok" role="status">{done.refresh
+      ? t('yzRefreshDone', { added: fmt(done.entries_total), changed: fmt(done.entries_updated), removed: fmt(done.entries_removed) })
+      : t('yzDone', { entries: fmt(done.entries_total), foods: fmt(done.foods_created), weights: fmt(done.weights) })}</p>
   {/if}
   {#if error}<p class="note warn" role="alert">{error}</p>{/if}
 
@@ -226,15 +244,27 @@
         </div>
         <PasswordField id="yz-pw" name="yazio-secret" label={t('yzPassword')} bind:value={password} invalid={formBad && !password} />
         <div class="field">
+          <span id="yz-mode">{t('yzMode')}</span>
+          <div class="chips" role="group" aria-labelledby="yz-mode">
+            <button type="button" class="chip" class:on={mode === 'full'} aria-pressed={mode === 'full'} onclick={() => (mode = 'full')}>{t('yzModeFull')}</button>
+            <button type="button" class="chip" class:on={mode === 'refresh'} aria-pressed={mode === 'refresh'} onclick={() => (mode = 'refresh')}>{t('yzModeRefresh')}</button>
+          </div>
           <span id="yz-months">{t('yzPeriod')}</span>
           <div class="chips" role="group" aria-labelledby="yz-months">
-            {#each MONTHS.filter((m) => m <= (ystate?.login.max_months ?? 24)) as m}
-              <button type="button" class="chip" class:on={months === m} aria-pressed={months === m} onclick={() => (months = m)}>{t('yzMonthsN', { n: m })}</button>
-            {/each}
+            {#if mode === 'full'}
+              {#each MONTHS.filter((m) => m <= (ystate?.login.max_months ?? 24)) as m}
+                <button type="button" class="chip" class:on={months === m} aria-pressed={months === m} onclick={() => (months = m)}>{t('yzMonthsN', { n: m })}</button>
+              {/each}
+            {:else}
+              {#each DAYS as n}
+                <button type="button" class="chip" class:on={days === n} aria-pressed={days === n} onclick={() => (days = n)}>{t('yzDaysN', { n })}</button>
+              {/each}
+            {/if}
           </div>
+          {#if mode === 'refresh'}<p class="note">{t('yzRefreshText')}</p>{/if}
         </div>
         <div class="acts">
-          <button type="submit" class="btn" disabled={busy}>{running || starting ? t('yzFetching') : t('yzFetch')}</button>
+          <button type="submit" class="btn" disabled={busy}>{running || starting ? (mode === 'refresh' ? t('yzRefreshing') : t('yzFetching')) : mode === 'refresh' ? t('yzRefresh') : t('yzFetch')}</button>
           {#if running}<button type="button" class="btn quiet-btn" onclick={discard}>{t('yzCancel')}</button>{/if}
         </div>
       </form>

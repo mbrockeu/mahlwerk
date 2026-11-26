@@ -51,6 +51,13 @@ class YazioState(BaseModel):
     max_file_bytes: int = yazio_stage.MAX_FILE
 
 
+class RefreshView(BaseModel):
+    first_day: str
+    last_day: str
+    entries_seen: int = Field(description="entry ids Yazio listed for these days (also those that cannot be imported)")
+    workouts_seen: int
+
+
 class Preview(BaseModel):
     token: str
     days: int
@@ -67,7 +74,15 @@ class Preview(BaseModel):
     workouts: int
     workouts_already: int
     goal_set: bool
-    already_imported: int
+    already_imported: int = Field(description="entries that exist already and are unchanged (or are not from Yazio / were changed by the person)")
+    refresh: RefreshView | None = Field(None, description="set when the staged days are a refresh of the last days (direct sign-in); see below")
+    entries_updated: int = Field(0, description="refresh: entries that came from Yazio and whose values Yazio changed")
+    entries_removed: int = Field(0, description="refresh: entries that came from Yazio, lie in the period and are gone in Yazio (deleted)")
+    workouts_updated: int = 0
+    workouts_removed: int = 0
+    weights_updated: int = Field(0, description="refresh: weights of Yazio origin that got Yazio's value")
+    water_updated: int = 0
+    activity_updated: int = 0
     skipped: list[dict]
     notes: list[dict]
     unknown_keys: int
@@ -91,7 +106,8 @@ class LoginIn(BaseModel):
 
     email: str = ""
     password: str = ""
-    months: int = yazio_live.DEFAULT_MONTHS
+    months: int | None = None  # the whole period (1 to 24 months) ...
+    days: int | None = None  # ... or a refresh of the last N days (1 to 31): exactly one of the two; neither means 12 months
 
     def __repr__(self) -> str:
         return "LoginIn(...)"
@@ -104,6 +120,11 @@ def _preview(summary: yazio.Summary, token: str) -> Preview:
         weights=summary.weights, weights_kept=summary.weights_kept, water=summary.water, water_kept=summary.water_kept,
         activity_days=summary.activity_days, activity_kept=summary.activity_kept, workouts=summary.workouts,
         workouts_already=summary.workouts_already, goal_set=summary.goal_set, already_imported=summary.already_imported,
+        refresh=(RefreshView(**summary.refresh, entries_seen=summary.entries_seen, workouts_seen=summary.workouts_seen)
+                 if summary.refresh else None),
+        entries_updated=summary.entries_updated, entries_removed=summary.entries_removed, workouts_updated=summary.workouts_updated,
+        workouts_removed=summary.workouts_removed, weights_updated=summary.weights_updated, water_updated=summary.water_updated,
+        activity_updated=summary.activity_updated,
         skipped=[{"reason": r, "count": n} for r, n in sorted(summary.skipped.items())],
         notes=[{"text": t, "count": n} for t, n in sorted(summary.notes.items())],
         unknown_keys=len(summary.unknown_keys), dropped_values=summary.dropped_values, missing_files=summary.missing_files,
@@ -196,7 +217,8 @@ async def _import(request: Request, user: dict, store: Store, all_products: bool
         raise _busy("the server is busy with another upload or import, try again in a few seconds")
     try:
         def work() -> yazio.Summary:
-            return yazio.run_import_from(store, user["id"], _loaded(stage.files), all_products, dry_run, "the uploaded files")
+            return yazio.run_import_from(store, user["id"], _loaded(stage.files), all_products, dry_run, "the uploaded files",
+                                         stage.refresh)
         try:
             summary = await run_in_threadpool(work)
         except yazio.YazioError as exc:
@@ -228,7 +250,10 @@ async def confirm(body: ConfirmIn, request: Request, user: dict = Depends(sessio
 def login(body: LoginIn, request: Request, user: dict = Depends(session_user)) -> RunView:
     """Direct one-time sign-in at Yazio (admin switch, off by default; unofficial interface). The server signs in ONCE,
     fetches the chosen period in the background and forgets e-mail address, password and token; what it fetched goes into
-    the staging area for preview and confirmation. Poll GET /me/yazio for the progress."""
+    the staging area for preview and confirmation. Poll GET /me/yazio for the progress. `months` fetches the whole period
+    once (entries already imported are skipped); `days` (1 to 31) is a refresh of the last N days: every day is asked for,
+    and for entries and workouts that came from Yazio the preview/confirmation updates what Yazio changed and removes what is
+    gone there (Yazio wins; own entries stay)."""
     if not request.app.state.features.yazio_login:
         raise HTTPException(404, "the direct Yazio sign-in is switched off (admin area)")
     if yazio_live.app_identity() is None:
@@ -236,10 +261,16 @@ def login(body: LoginIn, request: Request, user: dict = Depends(session_user)) -
     email, password = body.email.strip(), body.password
     if not email or not password or len(email) > 200 or len(password) > 500 or "\n" in email:
         raise HTTPException(422, "e-mail address and password are required")
-    if isinstance(body.months, bool) or not 1 <= body.months <= yazio_live.MAX_MONTHS:
+    if body.months is not None and body.days is not None:
+        raise HTTPException(422, "choose either months (the whole period) or days (a refresh of the last days), not both")
+    months = yazio_live.DEFAULT_MONTHS if body.months is None else body.months
+    if isinstance(months, bool) or not 1 <= months <= yazio_live.MAX_MONTHS:
         raise HTTPException(422, f"the period is 1 to {yazio_live.MAX_MONTHS} months")
+    if body.days is not None and (isinstance(body.days, bool) or not 1 <= body.days <= yazio_live.MAX_REFRESH_DAYS):
+        raise HTTPException(422, f"the refresh period is 1 to {yazio_live.MAX_REFRESH_DAYS} days")
     try:
-        run = request.app.state.yazio_runs.start(user["id"], yazio_live.Credentials(email, password), body.months)
+        extra = {} if body.days is None else {"days": body.days}
+        run = request.app.state.yazio_runs.start(user["id"], yazio_live.Credentials(email, password), months, **extra)
     except yazio_live.Refused as exc:
         text = {"running": "a fetch of yours is already running", "busy": "the server is busy with other fetches, try again in a few minutes",
                 "gap": f"wait {exc.wait} seconds before the next sign-in attempt",

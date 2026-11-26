@@ -29,6 +29,9 @@ const GOAL_WATER = [500, 6_000] as const;
 const DEFAULT_WATER_GOAL = 2000;
 const QUICK_PORTION = 100.0; // a quick entry is stored as 100 g with per 100 g = its absolute values
 
+/** The period of a refresh: the days Yazio was asked for, every one of them. */
+export interface Refresh { first_day: string; last_day: string }
+
 /** The export cannot be used (wrong shape, none of the files). */
 export class YazioError extends Error {}
 
@@ -44,6 +47,10 @@ export interface Summary {
   workouts: number; workouts_already: number;
   water: number; water_kept: number;
   goal_set: boolean; already_imported: number;
+  /** Refresh mode (direct sign-in, "last N days"), see yazio.py. */
+  refresh: Refresh | null; entries_seen: number; workouts_seen: number;
+  entries_updated: number; entries_removed: number; workouts_updated: number; workouts_removed: number;
+  weights_updated: number; water_updated: number; activity_updated: number;
   skipped: Counter; notes: Counter; unknown_keys: Counter;
   dropped_values: number; missing_files: string[];
   batch_id: number | null; dry_run: boolean;
@@ -52,7 +59,9 @@ export interface Summary {
 
 const newSummary = (dryRun: boolean): Summary => ({
   days: 0, entries: { product: 0, recipe: 0, quick: 0 }, foods_created: 0, foods_reused: 0, weights: 0, weights_kept: 0, activity_days: 0,
-  activity_kept: 0, workouts: 0, workouts_already: 0, water: 0, water_kept: 0, goal_set: false, already_imported: 0, skipped: new Map(),
+  activity_kept: 0, workouts: 0, workouts_already: 0, water: 0, water_kept: 0, goal_set: false, already_imported: 0, refresh: null, entries_seen: 0,
+  workouts_seen: 0, entries_updated: 0, entries_removed: 0, workouts_updated: 0, workouts_removed: 0, weights_updated: 0, water_updated: 0,
+  activity_updated: 0, skipped: new Map(),
   notes: new Map(), unknown_keys: new Map(), dropped_values: 0, missing_files: [], batch_id: null, dry_run: dryRun, total_entries: 0,
 });
 
@@ -141,8 +150,11 @@ function positive(value: unknown, top: number): number | null {
 
 type Loaded = Record<string, Record<string, any> | null | undefined>;
 
-/** Prepare everything `importYazio` writes from the parsed files (`FILES` -> object or null). */
-export function buildPlan(loaded: Loaded, allProducts: boolean, summary: Summary, where = 'the export'): Plan {
+/** Prepare everything `importYazio` writes from the parsed files (`FILES` -> object or null). With `refresh` (only from a direct sign-in that
+ * fetched every day of the period) the plan also carries the ids Yazio listed for these days, ALL of them, also those this importer skips
+ * (`seen_entries`: the entry ids; `seen_workouts`: `yazio:<id>`): a row whose id is not among them is gone in Yazio, a skipped but listed
+ * one is not. */
+export function buildPlan(loaded: Loaded, allProducts: boolean, summary: Summary, where = 'the export', refresh: Refresh | null = null): Plan {
   summary.missing_files = FILES.filter((name) => (loaded[name] ?? null) === null);
   if (summary.missing_files.length === FILES.length) throw new YazioError(`${where}: none of ${FILES.join(', ')} found`);
   const catalog = loaded['products.json'] ?? {};
@@ -193,6 +205,7 @@ export function buildPlan(loaded: Loaded, allProducts: boolean, summary: Summary
 
   const entries: PlanEntry[] = [];
   const skip = summary.skipped;
+  const seenEntries = new Set<string>(), seenWorkouts = new Set<string>();
   const water: Plan['water'] = [];
   const activity: Plan['activity'] = [];
   const workouts: PlanWorkout[] = [];
@@ -208,6 +221,7 @@ export function buildPlan(loaded: Loaded, allProducts: boolean, summary: Summary
     }
     found.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)); // by time of day; stable for equal times
     for (const [, item, kind] of found) {
+      if (isDict(item) && truthy(item.id)) seenEntries.add(text(item.id)); // before the importer may skip it
       const entry = makeEntry(item, kind, day, productFood, recipeFood, convert, skip, summary, truthy(catalog));
       if (entry) entries.push(entry);
     }
@@ -222,6 +236,7 @@ export function buildPlan(loaded: Loaded, allProducts: boolean, summary: Summary
     if (dayActivity) activity.push(dayActivity);
     for (const listName of ['training', 'custom_training']) {
       for (const item of Array.isArray(exercises[listName]) ? exercises[listName] : []) {
+        if (isDict(item) && truthy(item.id)) seenWorkouts.add(`yazio:${text(item.id)}`);
         const workout = makeWorkout(item, day, skip);
         if (workout) workouts.push(workout);
       }
@@ -238,7 +253,27 @@ export function buildPlan(loaded: Loaded, allProducts: boolean, summary: Summary
     else weights.push({ day, kg: roundHalfEven(value, 2) });
   }
 
-  return { foods, entries, weights, water, all_products: allProducts, goal: goalOf(days, validDays), activity, workouts };
+  if (refresh !== null) {
+    const wanted = dayRange(refresh.first_day, refresh.last_day);
+    if (!wanted.length || wanted.some((d) => !validDays.includes(d))) throw new YazioError(`${where}: the fetched days do not cover the period of the refresh`);
+    summary.refresh = { ...refresh };
+    summary.entries_seen = seenEntries.size;
+    summary.workouts_seen = seenWorkouts.size;
+  }
+
+  return {
+    foods, entries, weights, water, all_products: allProducts, goal: goalOf(days, validDays), activity, workouts,
+    refresh: refresh !== null ? { ...refresh } : null, seen_entries: seenEntries, seen_workouts: seenWorkouts,
+  };
+}
+
+/** Every day from `first` to `last` (inclusive); empty when either is no date or the order is wrong (or more than 400 days). */
+function dayRange(first: string, last: string): string[] {
+  const a = isDay(first) ? dayToDate(first) : null, b = isDay(last) ? dayToDate(last) : null;
+  if (a === null || b === null) return [];
+  const span = Math.round((b.getTime() - a.getTime()) / 86400000);
+  if (span < 0 || span > 400) return [];
+  return Array.from({ length: span + 1 }, (_, i) => new Date(a.getTime() + i * 86400000).toISOString().slice(0, 10));
 }
 
 /** Steps, active energy and distance of one day: the daily summary first, the day's activity as a fallback. */
@@ -344,9 +379,9 @@ function goalOf(days: Record<string, any>, validDays: string[]): PlanGoal | null
 }
 
 /** Import parsed export files into the account of one user (with `dryRun`: count only, write nothing). */
-export async function runImportFrom(db: Db, userId: number, loaded: Loaded, allProducts = false, dryRun = false, where = 'the export'): Promise<Summary> {
+export async function runImportFrom(db: Db, userId: number, loaded: Loaded, allProducts = false, dryRun = false, where = 'the export', refresh: Refresh | null = null): Promise<Summary> {
   const summary = newSummary(dryRun);
-  const plan = buildPlan(loaded, allProducts, summary, where);
+  const plan = buildPlan(loaded, allProducts, summary, where, refresh);
   const r = await importYazio(db, userId, plan, dryRun);
   summary.days = r.days;
   summary.entries = { product: r.product_entries, recipe: r.recipe_entries, quick: r.quick_entries };
@@ -354,9 +389,16 @@ export async function runImportFrom(db: Db, userId: number, loaded: Loaded, allP
   summary.foods_created = r.foods;
   summary.foods_reused = r.foods_reused;
   summary.weights = r.weights;
-  summary.weights_kept = plan.weights.length - r.weights;
+  summary.weights_updated = r.weights_updated;
+  summary.weights_kept = plan.weights.length - r.weights - r.weights_updated;
   summary.water = r.water;
-  summary.water_kept = plan.water.length - r.water;
+  summary.water_updated = r.water_updated;
+  summary.water_kept = plan.water.length - r.water - r.water_updated;
+  summary.entries_updated = r.entries_updated;
+  summary.entries_removed = r.entries_removed;
+  summary.workouts_updated = r.workouts_updated;
+  summary.workouts_removed = r.workouts_removed;
+  summary.activity_updated = r.activity_updated;
   summary.goal_set = r.goal_set;
   summary.activity_days = r.activity_days;
   summary.activity_kept = r.activity_kept;

@@ -1110,9 +1110,9 @@ function ckView(scope: 'shared' | 'own', admin: boolean) {
     key: admin ? 'file' : null, error: null,
   };
 }
-type YzStage = { token: string; source: 'upload' | 'login'; files: Record<string, number> };
+type YzStage = { token: string; source: 'upload' | 'login'; files: Record<string, number>; refresh?: { first_day: string; last_day: string } };
 let yzStage: YzStage | null = null;
-let yzRun: { startedAt: number; months: number; failAfter: number | null; cancelled: boolean } | null = null;
+let yzRun: { startedAt: number; months: number; days: number | null; failAfter: number | null; cancelled: boolean } | null = null;
 let yzTokenSeq = 1;
 const YZ_PHASES = ['discover', 'days', 'products', 'weights'] as const;
 function yzRunView() {
@@ -1122,7 +1122,11 @@ function yzRunView() {
   if (yzRun.failAfter != null && elapsed > yzRun.failAfter) return { state: 'error', phase: 'login', done: 0, total: 0, requests: 1, error: 'Yazio refused the sign-in (check the e-mail address and the password)', error_kind: 'auth' };
   const total = 5200;
   if (elapsed >= total) {
-    if (!yzStage) yzStage = { token: `t${yzTokenSeq++}`, source: 'login', files: { 'days.json': 4_812_330, 'products.json': 1_204_118, 'weight.json': 6_120 } };
+    if (!yzStage) {
+      const last = new Date(), first = new Date(Date.now() - ((yzRun.days ?? 1) - 1) * 86400000);
+      yzStage = { token: `t${yzTokenSeq++}`, source: 'login', files: { 'days.json': 4_812_330, 'products.json': 1_204_118, 'weight.json': 6_120 },
+        ...(yzRun.days ? { refresh: { first_day: first.toISOString().slice(0, 10), last_day: last.toISOString().slice(0, 10) } } : {}) };
+    }
     return { state: 'done', phase: 'done', done: 1, total: 1, requests: 1234, error: null, error_kind: null };
   }
   const f = elapsed / total;
@@ -1132,7 +1136,18 @@ function yzRunView() {
   return { state: 'running', phase, done: Math.round(within * sizes[phase]), total: sizes[phase], requests: Math.round(f * 1234), error: null, error_kind: null };
 }
 function yzPreviewData(): Record<string, unknown> {
+  const refresh = yzStage!.refresh;
+  const none = { refresh: null, entries_updated: 0, entries_removed: 0, workouts_updated: 0, workouts_removed: 0, weights_updated: 0, water_updated: 0, activity_updated: 0 };
+  if (refresh) {
+    return {
+      token: yzStage!.token, days: 1, entries: { product: 2, recipe: 0, quick: 0 }, entries_total: 2, foods_created: 0, foods_reused: 1, weights: 0, weights_kept: 3,
+      water: 0, water_kept: 1, activity_days: 0, activity_kept: 4, workouts: 0, workouts_already: 1, goal_set: false, already_imported: 21,
+      skipped: [], notes: [], unknown_keys: 0, dropped_values: 0, missing_files: [], batch_id: null, dry_run: true,
+      ...none, refresh: { ...refresh, entries_seen: 25, workouts_seen: 1 }, entries_updated: 3, entries_removed: 2, workouts_updated: 1, weights_updated: 1,
+    };
+  }
   return {
+    ...none,
     token: yzStage!.token, days: 412, entries: { product: 3100, recipe: 340, quick: 200 }, entries_total: 3640, foods_created: 520, foods_reused: 14,
     weights: 180, weights_kept: 12, water: 390, water_kept: 0, activity_days: 220, activity_kept: 0, workouts: 64, workouts_already: 0, goal_set: true,
     already_imported: 0, skipped: [{ reason: 'product not in products.json', count: 7 }, { reason: 'entry with an invalid amount', count: 2 }],
@@ -1185,17 +1200,19 @@ function mockConnections(method: string, p: string, body: unknown, raw?: Blob): 
     if (!yzStage) throw new ApiError(410, 'nothing is waiting to be imported (it may have expired): upload the files again');
     if ((body as { token: string }).token !== yzStage.token) throw new ApiError(409, 'the files changed since the preview: look at the preview again');
     const id = Math.max(0, ...importBatches.map((b) => b.id)) + 1;
+    if (yzStage.refresh) { const refreshed = { ...yzPreviewData(), batch_id: null, dry_run: false }; yzStage = null; return refreshed; } // a refresh with nothing new leaves no batch
     importBatches.unshift({ id, kind: 'yazio', created_at: Math.floor(Date.now() / 1000), counts: { days: 412, entries: 3640, product_entries: 3100, recipe_entries: 340, quick_entries: 200, foods: 520, weights: 180, water: 390, goal_set: true, activity_days: 220, workouts: 64 } });
     const done = { ...yzPreviewData(), batch_id: id, dry_run: false };
     yzStage = null;
     return done;
   }
   if (p === 'me/yazio/login' && method === 'POST') {
-    const b = body as { email: string; password: string; months: number };
+    const b = body as { email: string; password: string; months?: number; days?: number };
     if (!b.email?.trim() || !b.password) throw new ApiError(422, 'e-mail address and password are required');
+    if (b.months != null && b.days != null) throw new ApiError(422, 'choose either months (the whole period) or days (a refresh of the last days), not both');
     if (yzRun && yzRunView()?.state === 'running') throw new ApiError(409, 'a fetch of yours is already running');
     yzStage = null;
-    yzRun = { startedAt: Date.now(), months: b.months, failAfter: /wrong/i.test(b.password) ? 900 : null, cancelled: false };
+    yzRun = { startedAt: Date.now(), months: b.months ?? 12, days: b.days ?? null, failAfter: /wrong/i.test(b.password) ? 900 : null, cancelled: false };
     return yzRunView();
   }
   return NOT_MINE;

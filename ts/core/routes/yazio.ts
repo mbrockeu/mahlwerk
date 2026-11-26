@@ -7,10 +7,10 @@ import { sessionUser } from '../auth.ts';
 import { utf8 } from '../crypto.ts';
 import { featureOn } from '../features.ts';
 import { HttpError, parse, route, type Ctx, type Req, type Route } from '../http.ts';
-import { pyBool, pyInt, pyStr } from '../models/common.ts';
+import { nullish, pyBool, pyInt, pyStr } from '../models/common.ts';
 import { pyLen, pyStrip } from '../text.ts';
 import { FILES, YazioError, runImportFrom, type Summary } from '../yazio.ts';
-import { Credentials, DEFAULT_MONTHS, LiveError, MAX_MONTHS, Refused, Runs, appIdentity, runView } from '../yazioLive.ts';
+import { Credentials, DEFAULT_MONTHS, LiveError, MAX_MONTHS, MAX_REFRESH_DAYS, Refused, Runs, appIdentity, runView } from '../yazioLive.ts';
 import { MAX_FILE, StageError, Staging, UPLOAD_NAMES, decodeUpload, stageView } from '../yazioStage.ts';
 
 const URL = '/api/v1/me/yazio';
@@ -26,7 +26,8 @@ export function yazioOf(ctx: Ctx): YazioState {
   const runs = new Runs(ctx, async (userId, files) => {
     if (!(await featureOn(ctx, 'yazio_login.enabled'))) throw new LiveError('cancelled'); // switched off while the run was under way
     try {
-      stage.add(userId, Object.fromEntries(Object.entries(files).map(([name, value]) => [name, utf8(JSON.stringify(value))])), 'login', true);
+      const { 'refresh.json': refresh, ...exporter } = files; // the period of a refresh is not one of the exporter's files
+      stage.add(userId, Object.fromEntries(Object.entries(exporter).map(([name, value]) => [name, utf8(JSON.stringify(value))])), 'login', true, refresh ?? null);
     } catch (e) {
       if (e instanceof StageError) throw new LiveError('too_large');
       throw e;
@@ -56,7 +57,11 @@ function previewOf(summary: Summary, token: string) {
     entries_total: summary.total_entries, foods_created: summary.foods_created, foods_reused: summary.foods_reused, weights: summary.weights,
     weights_kept: summary.weights_kept, water: summary.water, water_kept: summary.water_kept, activity_days: summary.activity_days,
     activity_kept: summary.activity_kept, workouts: summary.workouts, workouts_already: summary.workouts_already, goal_set: summary.goal_set,
-    already_imported: summary.already_imported, skipped: sorted(summary.skipped).map(([reason, count]) => ({ reason, count })),
+    already_imported: summary.already_imported,
+    refresh: summary.refresh ? { ...summary.refresh, entries_seen: summary.entries_seen, workouts_seen: summary.workouts_seen } : null,
+    entries_updated: summary.entries_updated, entries_removed: summary.entries_removed, workouts_updated: summary.workouts_updated,
+    workouts_removed: summary.workouts_removed, weights_updated: summary.weights_updated, water_updated: summary.water_updated,
+    activity_updated: summary.activity_updated, skipped: sorted(summary.skipped).map(([reason, count]) => ({ reason, count })),
     notes: sorted(summary.notes).map(([text, count]) => ({ text, count })), unknown_keys: summary.unknown_keys.size,
     dropped_values: summary.dropped_values, missing_files: summary.missing_files, batch_id: summary.batch_id, dry_run: summary.dry_run,
   };
@@ -68,7 +73,7 @@ const busy = (text: string, seconds = 3) => new HttpError(429, text, { 'retry-af
 const confirmIn = z.object({ token: pyStr(0, 64), all_products: pyBool().default(false) });
 const previewIn = z.object({ all_products: pyBool().default(false) });
 // No limits declared on purpose: a validation error must never echo the password; the handler checks.
-const loginIn = z.object({ email: z.string().default(''), password: z.string().default(''), months: pyInt().default(DEFAULT_MONTHS) });
+const loginIn = z.object({ email: z.string().default(''), password: z.string().default(''), months: nullish(pyInt()), days: nullish(pyInt()) });
 
 /** The stored files as the parsed JSON objects of the exporter (null for a file that is not there). */
 const loaded = (files: Record<string, Uint8Array>) =>
@@ -92,7 +97,7 @@ async function importStaged(req: Req, allProducts: boolean, dryRun: boolean, tok
   }
   try {
     try {
-      return [await runImportFrom(ctx.db, user.id, loaded(stage.files), allProducts, dryRun, 'the uploaded files'), stage.token];
+      return [await runImportFrom(ctx.db, user.id, loaded(stage.files), allProducts, dryRun, 'the uploaded files', stage.refresh), stage.token];
     } catch (e) {
       if (e instanceof YazioError) throw new HttpError(422, e.message);
       if (e instanceof SyntaxError || e instanceof RangeError) throw new HttpError(422, 'the files cannot be read');
@@ -174,7 +179,8 @@ export const routes: Route[] = [
 
   // Direct one-time sign-in at Yazio (admin switch, off by default; unofficial interface). The server signs in ONCE, fetches the chosen
   // period in the background and forgets e-mail address, password and token; what it fetched goes into the staging area for preview and
-  // confirmation. Poll GET /me/yazio for the progress.
+  // confirmation. Poll GET /me/yazio for the progress. `months` fetches the whole period once; `days` (1 to 31) is a refresh of the last N days:
+  // every day is asked for, and entries and workouts that came from Yazio are updated or removed as Yazio says (Yazio wins; own entries stay).
   route('POST', `${URL}/login`, async (req) => {
     const user = await sessionUser(req);
     const body = parse(loginIn, req.body);
@@ -183,9 +189,12 @@ export const routes: Route[] = [
     if (appIdentity(ctx.env) === null) throw new HttpError(409, 'the direct Yazio sign-in is not set up (MAHLWERK_YAZIO_CLIENT_ID and MAHLWERK_YAZIO_CLIENT_SECRET)');
     const email = pyStrip(body.email), password = body.password;
     if (!email || !password || pyLen(email) > 200 || pyLen(password) > 500 || email.includes('\n')) throw new HttpError(422, 'e-mail address and password are required');
-    if (!(body.months >= 1 && body.months <= MAX_MONTHS)) throw new HttpError(422, `the period is 1 to ${MAX_MONTHS} months`);
+    if (body.months !== null && body.days !== null) throw new HttpError(422, 'choose either months (the whole period) or days (a refresh of the last days), not both');
+    const months = body.months ?? DEFAULT_MONTHS;
+    if (!(months >= 1 && months <= MAX_MONTHS)) throw new HttpError(422, `the period is 1 to ${MAX_MONTHS} months`);
+    if (body.days !== null && !(body.days >= 1 && body.days <= MAX_REFRESH_DAYS)) throw new HttpError(422, `the refresh period is 1 to ${MAX_REFRESH_DAYS} days`);
     try {
-      const run = yazioOf(ctx).runs.start(user.id, new Credentials(email, password), body.months);
+      const run = yazioOf(ctx).runs.start(user.id, new Credentials(email, password), months, body.days);
       // what waits is replaced when the run delivers; clearing here would race with a fast run
       return runView(run);
     } catch (e) {

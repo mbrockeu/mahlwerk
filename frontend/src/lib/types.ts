@@ -949,6 +949,15 @@ export interface YazioPreview {
   workouts_already: number;
   goal_set: boolean;
   already_imported: number;
+  /** Set when the staged days are a refresh of the last days (direct sign-in): Yazio wins for what came from Yazio. */
+  refresh: { first_day: string; last_day: string; entries_seen: number; workouts_seen: number } | null;
+  entries_updated: number;
+  entries_removed: number;
+  workouts_updated: number;
+  workouts_removed: number;
+  weights_updated: number;
+  water_updated: number;
+  activity_updated: number;
   skipped: { reason: string; count: number }[];
   notes: { text: string; count: number }[];
   unknown_keys: number;

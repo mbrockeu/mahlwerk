@@ -134,7 +134,9 @@ def create_app(
         if not app.state.features.yazio_login:  # switched off while the run was under way
             raise yazio_live.LiveError("cancelled")
         try:
-            app.state.yazio_stage.add(user_id, {n: json.dumps(v).encode() for n, v in files.items()}, "login", replace=True)
+            refresh = files.pop("refresh.json", None)  # the period of a refresh, not one of the exporter's files
+            app.state.yazio_stage.add(user_id, {n: json.dumps(v).encode() for n, v in files.items()}, "login", replace=True,
+                                      refresh=refresh)
         except yazio_stage.StageError:
             raise yazio_live.LiveError("too_large") from None
 

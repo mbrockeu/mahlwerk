@@ -262,7 +262,8 @@ export async function decodeUpload(name: string, upload: Uint8Array): Promise<Re
   return files;
 }
 
-export interface Stage { files: Record<string, Uint8Array>; token: string; source: string; expires: number }
+/** `refresh`: the period of a refresh fetched by the direct sign-in (never from an upload). */
+export interface Stage { files: Record<string, Uint8Array>; token: string; source: string; expires: number; refresh: { first_day: string; last_day: string } | null }
 
 export const stageSize = (s: Stage): number => Object.values(s.files).reduce((n, v) => n + v.length, 0);
 
@@ -302,11 +303,11 @@ export class Staging {
   }
 
   /** Put files into the person's area (a file of the same name replaces the old one; `replace` empties the area first). The token changes. */
-  add(userId: number, files: Record<string, Uint8Array>, source = 'upload', replace = false): Stage {
+  add(userId: number, files: Record<string, Uint8Array>, source = 'upload', replace = false, refresh: Stage['refresh'] = null): Stage {
     this.expire();
     const old = this.stages.get(userId);
     const keep = replace || !old || old.source !== source ? {} : { ...old.files };
-    const stage: Stage = { files: { ...keep, ...files }, token: tokenUrlsafe(12), source, expires: this.clock() + TTL };
+    const stage: Stage = { files: { ...keep, ...files }, token: tokenUrlsafe(12), source, expires: this.clock() + TTL, refresh: source === 'login' ? refresh : null };
     let others = 0;
     for (const [u, s] of this.stages) if (u !== userId) others += stageSize(s);
     if (stageSize(stage) > MAX_PERSON) throw new StageError('too_large', 'the files together are larger than allowed');
