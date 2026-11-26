@@ -84,7 +84,7 @@
 </script>
 
 <section class="icard" aria-labelledby="tok-title">
-  <h2 id="tok-title" class="micro quiet">{t('tokTitle')}</h2>
+  <h3 id="tok-title" class="micro quiet">{t('tokTitle')}</h3>
   <p class="note">{t('tokText')}</p>
 
   {#if fresh}

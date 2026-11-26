@@ -5,6 +5,9 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **The profile settings are grouped under headings** (appearance and use, diary and training, data and import, connections, account, about), in the style of the admin page. Cards only moved; card titles are now one heading level lower.
+
 ## [0.4.1] - 2026-11-25
 
 ### Changed

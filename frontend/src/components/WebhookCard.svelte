@@ -131,7 +131,7 @@
 </script>
 
 <section class="icard" aria-labelledby="wh-title">
-  <h2 id="wh-title" class="micro quiet">{t('whTitle')}</h2>
+  <h3 id="wh-title" class="micro quiet">{t('whTitle')}</h3>
   <p class="note">{t('whText')}</p>
 
   {#if secret}
@@ -201,7 +201,7 @@
           </div>
           {#if open === h.id}
             <div class="deliv">
-              <h3 class="micro quiet">{t('whDeliveries')}</h3>
+              <h4 class="micro quiet">{t('whDeliveries')}</h4>
               {#if deliveries.length === 0}
                 <p class="note">{t('whNoDeliveries')}</p>
               {:else}

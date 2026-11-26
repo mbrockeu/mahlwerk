@@ -158,7 +158,7 @@
 </script>
 
 <section class="icard yz" aria-labelledby="yz-title">
-  <h2 id="yz-title" class="micro quiet">{t('yzTitle')}</h2>
+  <h3 id="yz-title" class="micro quiet">{t('yzTitle')}</h3>
   <p class="note">{t('yzText')}</p>
   <!-- where the files come from: Yazio itself does not hand them out; the easier way is the direct sign-in (on a server) -->
   <p class="note">{t('yzSource')} {ystate?.login.available ? t('yzSourceLogin') : localApi() ? t('yzSourceApp') : ''}</p>
@@ -177,7 +177,7 @@
   {#if preview}
     {@const p = preview}
     <div class="pv" aria-labelledby="yz-pv">
-      <h3 id="yz-pv" class="micro">{t('yzPreviewTitle')}</h3>
+      <h4 id="yz-pv" class="micro">{t('yzPreviewTitle')}</h4>
       <dl class="grid">
         <div class="st"><dt>{t('yzDays')}</dt><dd class="display">{fmt(p.days)}</dd></div>
         <div class="st"><dt>{t('yzEntries')}</dt><dd class="display">{fmt(p.entries_total)}</dd></div>
@@ -216,7 +216,7 @@
 
   {#if ystate?.login.available}
     <div class="live" role="group" aria-labelledby="yz-live">
-      <h3 id="yz-live" class="micro quiet">{t('yzLoginTitle')}</h3>
+      <h4 id="yz-live" class="micro quiet">{t('yzLoginTitle')}</h4>
       <p class="note warnbox">{t('yzLoginWarn')}</p>
       <form onsubmit={login} novalidate autocomplete="off">
         <div class="field">
@@ -257,7 +257,7 @@
   input[type='file']:focus-visible + label { outline: 3px solid var(--focus); outline-offset: 2px; }
   .small { font-size: 11.5px; }
   .pv { background: var(--stone); border-radius: 24px 24px 24px 8px; padding: 16px 16px 14px 18px; display: flex; flex-direction: column; gap: 10px; }
-  .pv h3 { color: var(--green-text); }
+  .pv h4 { color: var(--green-text); }
   .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
   .st { background: var(--paper); border-radius: 18px 18px 18px 6px; padding: 10px 12px; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
   .st dt { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--quiet); }

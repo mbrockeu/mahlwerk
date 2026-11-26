@@ -83,7 +83,7 @@
 </script>
 
 <section class="icard im" aria-labelledby="im-title" data-testid="data-import">
-  <h2 id="im-title" class="micro quiet">{t('imTitle')}</h2>
+  <h3 id="im-title" class="micro quiet">{t('imTitle')}</h3>
   <p class="note">{t('imText')}</p>
   <div class="pick">
     <input bind:this={fileInput} id="im-file" class="sr-only" type="file" accept=".zip,.json,application/zip,application/json" disabled={busy}
@@ -98,7 +98,7 @@
   {#if preview}
     {@const p = preview}
     <div class="pv" aria-labelledby="im-pv" data-testid="import-preview">
-      <h3 id="im-pv" class="micro">{t('imPreviewTitle')}</h3>
+      <h4 id="im-pv" class="micro">{t('imPreviewTitle')}</h4>
       <p class="note">{t('imFrom', { name: p.account.display_name ?? p.account.username ?? '?', date: when(p.exported_at) })}</p>
       {#if p.range.from || p.range.to}<p class="note">{t('imRange', { from: p.range.from ?? '…', to: p.range.to ?? '…' })}</p>{/if}
       <div class="chips" role="radiogroup" aria-label={t('imPreviewTitle')}>
@@ -168,7 +168,7 @@
   input[type='file']:focus-visible + label { outline: 3px solid var(--focus); outline-offset: 2px; }
   .small { font-size: 11.5px; }
   .pv { background: var(--stone); border-radius: 24px 24px 24px 8px; padding: 16px 16px 14px 18px; display: flex; flex-direction: column; gap: 10px; }
-  .pv h3 { color: var(--green-text); }
+  .pv h4 { color: var(--green-text); }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .chip { border-radius: 22px 22px 22px 8px; }
   .scroll { overflow-x: auto; max-width: 100%; }
