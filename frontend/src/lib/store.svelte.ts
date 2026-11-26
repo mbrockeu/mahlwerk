@@ -128,11 +128,11 @@ export const endMoment = () => { ui.moment = null; };
 
 let toastTimer = 0;
 let toastMs = 0;
-/** A short message; with an action (e.g. undo) it stays at least 10 s so it can be found and used (WCAG 2.2.1). */
-export function toast(text: string, action?: ToastAction) {
+/** A short message; with an action (e.g. undo) it stays at least 10 s so it can be found and used (WCAG 2.2.1); `ms` asks for longer. */
+export function toast(text: string, action?: ToastAction, ms?: number) {
   ui.toast = text;
   ui.toastAction = action ?? null;
-  toastMs = action ? 10000 : 2600;
+  toastMs = Math.max(action ? 10000 : 2600, ms ?? 0);
   armToast();
 }
 function armToast() {

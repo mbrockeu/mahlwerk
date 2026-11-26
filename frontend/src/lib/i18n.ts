@@ -184,7 +184,7 @@ const en = {
 
   // quick logging: same as yesterday, templates
   sameAsYesterday: 'Same as yesterday', yesterdayPreview: '{names} · {kcal} kcal', copiedN: 'Entries copied: {n}',
-  undo: 'Undo', undone: 'Undone', copyFailed: 'Could not copy ({reason}).',
+  undo: 'Undo', undone: 'Undone', copyUndo: 'Undo “Same as yesterday”', copyUndoText: 'Removes the {n} copied entries again', copyFailed: 'Could not copy ({reason}).',
   saveAsTemplate: 'Save as template', templateName: 'Template name', templateSaved: 'Template saved: {name}',
   tabTemplates: 'Templates', templateFirst: 'Nothing saved yet. Open a meal with entries in the diary and tap "Save as template" to find it here.',
   templateAdded: 'Added: {name}', templateOptions: 'Options for {name}', rename: 'Rename', templateRenamed: 'Template renamed',
@@ -962,7 +962,7 @@ const de: Record<Key, string> = {
 
   // quick logging: same as yesterday, templates
   sameAsYesterday: 'Wie gestern', yesterdayPreview: '{names} · {kcal} kcal', copiedN: 'Einträge übernommen: {n}',
-  undo: 'Rückgängig', undone: 'Rückgängig gemacht', copyFailed: 'Übernehmen fehlgeschlagen ({reason}).',
+  undo: 'Rückgängig', undone: 'Rückgängig gemacht', copyUndo: '„Wie gestern“ rückgängig', copyUndoText: 'Entfernt die {n} übernommenen Einträge wieder', copyFailed: 'Übernehmen fehlgeschlagen ({reason}).',
   saveAsTemplate: 'Als Vorlage speichern', templateName: 'Name der Vorlage', templateSaved: 'Vorlage gespeichert: {name}',
   tabTemplates: 'Vorlagen', templateFirst: 'Noch nichts gespeichert. Öffne im Tagebuch eine Mahlzeit mit Einträgen und tippe auf „Als Vorlage speichern“, dann steht sie hier.',
   templateAdded: 'Hinzugefügt: {name}', templateOptions: 'Optionen für {name}', rename: 'Umbenennen', templateRenamed: 'Vorlage umbenannt',

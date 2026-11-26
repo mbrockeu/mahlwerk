@@ -95,20 +95,30 @@
     const names = y.names.length > 3 ? `${y.names.slice(0, 3).join(', ')} …` : y.names.join(', ');
     return t('yesterdayPreview', { names, kcal: fmt(Math.round(y.kcal)) });
   };
+  /** The last "same as yesterday": while the meal holds exactly these entries, the meal offers to take it back (the toast is gone soon). */
+  let lastCopy = $state<{ day: string; meal: Meal; ids: number[] } | null>(null);
+  const copyUndoable = (m: Meal) => {
+    const c = lastCopy;
+    if (!c || c.day !== ui.day || c.meal !== m) return false;
+    const now = data?.meals?.[m]?.entries.map((e) => e.id) ?? [];
+    return now.length === c.ids.length && c.ids.every((id) => now.includes(id));
+  };
+  async function undoCopy() {
+    const c = lastCopy;
+    if (!c) return;
+    lastCopy = null;
+    await Promise.allSettled(c.ids.map((id) => api.deleteEntry(id)));
+    changed();
+    toast(t('undone'));
+  }
   async function copyYesterday(m: Meal) {
     if (copying) return;
     copying = true;
     try {
       const { entries } = await api.copyEntries(ui.day, { from_day: shiftDay(ui.day, -1), meal: m });
+      lastCopy = { day: ui.day, meal: m, ids: entries.map((e) => e.id) };
       changed();
-      toast(t('copiedN', { n: entries.length }), {
-        label: t('undo'),
-        run: async () => {
-          await Promise.allSettled(entries.map((e) => api.deleteEntry(e.id)));
-          changed();
-          toast(t('undone'));
-        },
-      });
+      toast(t('copiedN', { n: entries.length }), { label: t('undo'), run: undoCopy }, 30000);
     } catch (err) {
       toast(t('copyFailed', { reason: err instanceof ApiError ? err.status || err.message : 'error' }));
     } finally {
@@ -379,6 +389,12 @@
               <button class="again" onclick={() => copyYesterday(m)} disabled={copying}>
                 <Icon name="repeat" size={20} />
                 <span class="t"><strong>{t('sameAsYesterday')}</strong><small>{preview(m)}</small></span>
+              </button>
+            {/if}
+            {#if has && copyUndoable(m)}
+              <button class="again" onclick={undoCopy}>
+                <Icon name="repeat" size={20} />
+                <span class="t"><strong>{t('copyUndo')}</strong><small>{t('copyUndoText', { n: lastCopy?.ids.length ?? 0 })}</small></span>
               </button>
             {/if}
             {#if has && expanded[m]}
