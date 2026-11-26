@@ -5,7 +5,7 @@
   import TickBar from '../components/TickBar.svelte';
   import { api, ApiError } from '../lib/api';
   import { fmtDate, t } from '../lib/i18n';
-  import { navigate } from '../lib/router.svelte';
+  import { profileHref } from '../lib/router.svelte';
   import { ui } from '../lib/store.svelte';
   import type { BadgeCode, Badges } from '../lib/types';
 
@@ -42,9 +42,9 @@
 </script>
 
 <div class="page">
+  <a class="backlink" href={profileHref('look')}><Icon name="left" size={20} />{t('gpGroupLook')}</a>
   <div class="page-head">
     <h1>{t('badgesTitle')}</h1>
-    <button class="round" onclick={() => navigate('today')} aria-label={t('back')}><Icon name="close" size={22} /></button>
   </div>
 
   {#if !playful}

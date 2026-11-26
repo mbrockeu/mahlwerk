@@ -209,7 +209,6 @@
     leaving = null;
     if (target) location.hash = target; else navigate('today');
   }
-  const close = () => { if (dirty) leaving = '#/'; else navigate('today'); };
 
   // ---- settings ----
   async function replayTour() {
@@ -393,7 +392,6 @@
 <div class="page wide gp">
   <div class="page-head">
     <h1>{t('gpTitle')}</h1>
-    <button class="round" onclick={close} aria-label={t('back')}><Icon name="close" size={22} /></button>
   </div>
 
   {#if loaded}
@@ -810,7 +808,6 @@
   .mic { display: inline-flex; flex: none; opacity: 0.75; }
   .mt { flex: 1; min-width: 0; }
   .chev { display: inline-flex; flex: none; }
-  .backlink { align-self: flex-start; display: inline-flex; align-items: center; gap: 2px; min-height: 44px; padding: 0 14px 0 8px; margin-left: -8px; border-radius: 22px 22px 22px 8px; color: var(--text); font-weight: 600; text-decoration: none; }
   .menu { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
   .mi { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 56px; padding: 0 16px 0 20px; border-radius: 28px 28px 28px 8px; background: var(--paper); color: var(--text); font-weight: 600; font-size: 16px; text-decoration: none; }
   .mi:active { transform: scale(0.99); }

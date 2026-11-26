@@ -11,7 +11,7 @@
   import { api, ApiError } from '../lib/api';
   import { localApi } from '../lib/local';
   import { fmt, fmtDate, lang, t } from '../lib/i18n';
-  import { navigate } from '../lib/router.svelte';
+  import { navigate, profileHref } from '../lib/router.svelte';
   import { auth, loadMe, toast, ui } from '../lib/store.svelte';
   import type { AdminOverview, AdminUser, Connector, ConnectorKey, RefreshState, TechItem } from '../lib/types';
 
@@ -322,9 +322,9 @@
 {/snippet}
 
 <div class="page wide admin">
+  <a class="backlink" href={profileHref('account')}><Icon name="left" size={20} />{t('gpGroupAccount')}</a>
   <div class="page-head">
     <h1>{t('admTitle')}</h1>
-    <button class="round" onclick={() => navigate('profile', 'account')} aria-label={t('back')}><Icon name="close" size={22} /></button>
   </div>
 
   {#if !loaded}
