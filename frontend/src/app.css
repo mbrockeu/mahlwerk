@@ -97,7 +97,7 @@
   color-scheme: dark;
 }
 /* dark surfaces get a fine green outline so that they do not sink into the ground */
-:root[data-theme='dark'] :is(nav:not(.jump), .fast.on, .meal.cta, .calc-open, .bar, .avatar, .pill, .btns .add, .go, .result:not(.on-dark), .moment-card, .review) {
+:root[data-theme='dark'] :is(nav:not(.jump):not(.secnav), .fast.on, .meal.cta, .calc-open, .bar, .avatar, .pill, .btns .add, .go, .result:not(.on-dark), .moment-card, .review) {
   outline: 1px solid var(--deep-edge); outline-offset: -1px;
 }
 

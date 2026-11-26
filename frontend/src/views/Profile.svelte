@@ -117,14 +117,14 @@
   let importError = $state('');
   let importInfo = $state<ImportInfo | null>(null);
 
-  const sections = $derived<{ id: ProfileSection; title: string }[]>([
-    { id: 'goals', title: t('gpGroupGoals') },
-    { id: 'look', title: t('gpGroupLook') },
-    { id: 'diary', title: t('gpGroupDiary') },
-    ...(showDataGroup ? [{ id: 'data' as const, title: t('gpGroupData') }] : []),
-    { id: 'connections', title: t('gpGroupConn') },
-    { id: 'account', title: t('gpGroupAccount') },
-    { id: 'about', title: t('gpGroupAbout') },
+  const sections = $derived<{ id: ProfileSection; title: string; icon: 'flame' | 'sliders' | 'dumbbell' | 'folder' | 'link' | 'user' | 'info' }[]>([
+    { id: 'goals', title: t('gpGroupGoals'), icon: 'flame' as const },
+    { id: 'look', title: t('gpGroupLook'), icon: 'sliders' as const },
+    { id: 'diary', title: t('gpGroupDiary'), icon: 'dumbbell' as const },
+    ...(showDataGroup ? [{ id: 'data' as const, title: t('gpGroupData'), icon: 'folder' as const }] : []),
+    { id: 'connections', title: t('gpGroupConn'), icon: 'link' as const },
+    { id: 'account', title: t('gpGroupAccount'), icon: 'user' as const },
+    { id: 'about', title: t('gpGroupAbout'), icon: 'info' as const },
   ]);
   /** The open section: from the address; an unknown one falls back to the goals (wide) or the list (narrow). */
   const active = $derived<ProfileSection | null>(sections.find((s) => s.id === router.sub)?.id ?? (wide ? 'goals' : null));
@@ -401,12 +401,12 @@
       {#if wide || !active}
         <aside class="side">
           {#if !viewingDemo()}<NameCard />{/if}
-          <nav aria-label={t('gpSections')}>
+          <nav class="secnav" aria-label={t('gpSections')}>
             <ul class="menu">
               {#each sections as s (s.id)}
                 <li>
                   <a href={profileHref(s.id)} class="mi" class:on={active === s.id} aria-current={active === s.id ? 'page' : undefined}>
-                    <span>{s.title}</span><Icon name="right" size={20} />
+                    <span class="mic"><Icon name={s.icon} size={20} /></span><span class="mt">{s.title}</span><span class="chev"><Icon name="right" size={20} /></span>
                   </a>
                 </li>
               {/each}
@@ -805,7 +805,11 @@
   .pane { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   .goals, .settings { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   .gt.sec { font-size: 28px; margin: 0; }
-  .gt.sec:focus-visible { outline-offset: 4px; }
+  /* focus lands here after a switch (screen readers start reading at the section); no ring, the heading is not a control */
+  .gt.sec:focus, .gt.sec:focus-visible { outline: none; }
+  .mic { display: inline-flex; flex: none; opacity: 0.75; }
+  .mt { flex: 1; min-width: 0; }
+  .chev { display: inline-flex; flex: none; }
   .backlink { align-self: flex-start; display: inline-flex; align-items: center; gap: 2px; min-height: 44px; padding: 0 14px 0 8px; margin-left: -8px; border-radius: 22px 22px 22px 8px; color: var(--text); font-weight: 600; text-decoration: none; }
   .menu { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
   .mi { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 56px; padding: 0 16px 0 20px; border-radius: 28px 28px 28px 8px; background: var(--paper); color: var(--text); font-weight: 600; font-size: 16px; text-decoration: none; }
@@ -930,7 +934,7 @@
     .side :global(.av) { width: 56px; height: 56px; font-size: 26px; }
     .side :global(.nm) { font-size: 26px; }
     .mi { min-height: 48px; padding: 0 12px 0 18px; font-size: 15px; border-radius: 24px 24px 24px 8px; }
-    .mi :global(svg) { opacity: 0.5; }
+    .mi .chev { opacity: 0.5; }
     .mi:hover:not(.on) { background: var(--stone); }
     .pane, .goals, .settings { gap: 14px; }
     .hero { padding: 28px 30px 24px; }
