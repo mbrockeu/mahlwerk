@@ -277,7 +277,9 @@ export function blockedHosts(env: Record<string, string | undefined>): string[] 
   const out: string[] = [];
   for (let name of names) {
     name = name.trim().toLowerCase().replace(/^\*+/, '').replace(/^\.+/, '').replace(/\.+$/, '');
-    if ((name.match(/:/g) ?? []).length === 1) name = name.split(':')[0]!;
+    const bracketed = /^\[([^\]]*)\](?::\d*)?$/.exec(name); // an IPv6 literal, with or without a port: [::1]:8110
+    if (bracketed) name = bracketed[1]!;
+    else if ((name.match(/:/g) ?? []).length === 1) name = name.split(':')[0]!;
     if (name && name !== '*' && !out.includes(name)) out.push(name);
   }
   return out;

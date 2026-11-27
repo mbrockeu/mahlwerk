@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import type { Outgoing, OutRequest } from '../core/outgoing.ts';
 import { dispatcher } from '../core/webhooks.ts';
+import { blockedHosts } from '../core/webrecipes.ts';
 import { makeWorld, type World } from './cookidooHarness.ts';
 
 const worlds: World[] = [];
@@ -59,8 +60,10 @@ test('guests have no webhooks, and the hooks they made as household members stay
   assert.equal((await member.get('/api/v1/me')).json.features.webhooks, true);
   const guest = w.who('cara'); // the same person without the group: now a guest
   assert.equal((await guest.get('/api/v1/me')).json.features.webhooks, false);
-  assert.equal((await guest.get('/api/v1/me/webhooks')).status, 403);
+  assert.equal((await guest.get('/api/v1/me/webhooks')).json.length, 1); // a guest still sees the old hook, and could remove it
   assert.equal((await guest.post('/api/v1/me/webhooks', hook('https://hooks.example.com/x'))).status, 403);
+  assert.equal((await guest.patch(`/api/v1/me/webhooks/${made.json.id}`, { name: 'x' })).status, 403);
+  assert.equal((await guest.post(`/api/v1/me/webhooks/${made.json.id}/test`)).status, 403);
   dispatcher(w.ctx).publish(made.json.user_id ?? (await w.ctx.db.get<{ id: number }>("SELECT id FROM user WHERE username = 'cara'"))!.id, 'cara', 'entry.created', {});
   assert.ok(await dispatcher(w.ctx).waitIdle(5));
   assert.equal(r.seen.length, 0);
@@ -69,4 +72,8 @@ test('guests have no webhooks, and the hooks they made as household members stay
   assert.equal((await member.post(`/api/v1/me/webhooks/${made.json.id}/test`)).status, 202);
   assert.ok(await dispatcher(w.ctx).waitIdle(5));
   assert.equal(r.seen.length, 1);
+});
+
+test('IPv6 literals in the own names are compared without brackets and port', () => {
+  assert.deepEqual(blockedHosts({ MAHLWERK_ALLOWED_HOSTS: '[::1]:8110,[fd00::5],Food.Example:443' }), ['::1', 'fd00::5', 'food.example']);
 });

@@ -13,7 +13,8 @@ const MAX_HOOKS = 20;
  * too), and the switch. */
 async function need(req: Req): Promise<void> {
   if (req.user!.via_token) throw new HttpError(403, 'not available with an access token');
-  if (!req.user!.household) throw new HttpError(403, 'webhooks are only for members of the household');
+  // a guest may still list and remove hooks made as a household member, but not make, change or test one
+  if (!req.user!.household && req.method !== 'GET' && req.method !== 'DELETE') throw new HttpError(403, 'webhooks are only for members of the household');
   if (!(await featureOn(req.ctx, 'webhooks.enabled'))) throw new HttpError(404, 'webhooks are switched off');
 }
 
