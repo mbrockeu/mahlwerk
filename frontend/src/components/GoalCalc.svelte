@@ -5,7 +5,8 @@
   import { ACTIVITY, CALC_LIMITS, calcValid, suggest, type Intent, type Sex } from '../lib/goals';
   import { fmt, inputNumber, parseNumber, t } from '../lib/i18n';
 
-  let { onclose, onuse }: { onclose: () => void; onuse: (kcal: number) => void } = $props();
+  // `welcome`: the first start of a new account (App.svelte): a greeting on top, a way to skip, and the weight typed here is handed on
+  let { onclose, onuse, welcome = false }: { onclose: () => void; onuse: (kcal: number, typedKg: number | null) => void; welcome?: boolean } = $props();
 
   const KEY = 'mahlwerk.calc';
   interface Saved { sex: Sex; age: string; height: string; weight: string; activity: number; intent: Intent }
@@ -44,8 +45,9 @@
   const intents: [Intent, string][] = [['keep', 'gpIntentKeep'], ['lose', 'gpIntentLose'], ['gain', 'gpIntentGain']];
 </script>
 
-<Sheet title={t('gpCalcTitle')} {onclose}>
+<Sheet title={welcome ? t('gpWelcomeTitle') : t('gpCalcTitle')} {onclose}>
   <div class="calc">
+    {#if welcome}<p class="lead">{t('gpWelcomeText')}</p>{/if}
     <div class="grp" role="radiogroup" aria-labelledby="c-sex">
       <span id="c-sex" class="lab">{t('gpSex')}</span>
       <div class="chips">
@@ -93,16 +95,19 @@
         </div>
         <div class="goalrow">
           <div class="big"><span class="micro">{t('gpSuggested')}</span><span class="display">{fmt(result.target)}<small class="mono"> kcal</small></span></div>
-          <button type="button" class="btn lime" onclick={() => onuse(result.target)}>{t('gpTake')}</button>
+          <button type="button" class="btn lime" onclick={() => onuse(result.target, fromLog ? null : num(weight))}>{t('gpTake')}</button>
         </div>
       {:else}
         <p class="need">{t('gpCalcNeed')}</p>
       {/if}
     </section>
+    {#if welcome}<button type="button" class="btn ghost skip" onclick={onclose}>{t('gpWelcomeSkip')}</button>{/if}
   </div>
 </Sheet>
 
 <style>
+  .lead { margin: 0; color: var(--ink-2, inherit); line-height: 1.45; }
+  .skip { align-self: center; }
   .calc { display: flex; flex-direction: column; gap: 16px; }
   .grp { display: flex; flex-direction: column; gap: 8px; }
   .lab { font-size: 13px; font-weight: 600; color: var(--quiet); }

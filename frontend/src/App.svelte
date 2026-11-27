@@ -8,11 +8,15 @@
   import Nav from './components/Nav.svelte';
   import PullRefresh from './components/PullRefresh.svelte';
   import Tour from './components/Tour.svelte';
+  import GoalCalc from './components/GoalCalc.svelte';
+  import { presetMacros } from './lib/goals';
+  import { api } from './lib/api';
+  import { fmt, t } from './lib/i18n';
   import ProductEditor from './components/ProductEditor.svelte';
   import RecipeEditor from './components/RecipeEditor.svelte';
   import WorkoutSheet from './components/WorkoutSheet.svelte';
   import { router } from './lib/router.svelte';
-  import { auth, endMoment, loadAuth, loadMe, loadVision, markTourSeen, mealByTime, holdToast, openAdd, releaseToast, runToastAction, tourSeen, ui, visionReady } from './lib/store.svelte';
+  import { auth, endMoment, loadAuth, loadMe, loadVision, markTourSeen, mealByTime, holdToast, openAdd, releaseToast, runToastAction, toast, tourSeen, ui, visionReady } from './lib/store.svelte';
   import { parseDeepLink, stripDeepLink } from './lib/deeplink';
   import Gate from './views/Gate.svelte';
   import ConnectApp from './views/ConnectApp.svelte';
@@ -48,6 +52,26 @@
   // leaving the day view (browser back) or a dialog opening ends the tour without counting it as seen
   $effect(() => { if (tourOpen && (router.route !== 'today' || ui.add || ui.amount || ui.recipe || ui.editor || ui.workout || ui.moment || ui.help)) tourOpen = false; });
   const endTour = () => { tourOpen = false; void markTourSeen(); };
+
+  // First start of a new account (no goal yet): the goal calculator as a welcome, before the tour. Skipping it leaves the goal empty;
+  // the tour follows either way. Only once per page load, so a skip does not bring it back on every return to the day view.
+  let welcomeOpen = $state(false);
+  let welcomeShown = false;
+  $effect(() => {
+    if (!tourDue || welcomeShown || ui.me?.goal != null || DEMO) return;
+    welcomeShown = true;
+    welcomeOpen = true;
+  });
+  async function useWelcome(kcal: number, typedKg: number | null) {
+    welcomeOpen = false;
+    try {
+      ui.me = { ...ui.me!, goal: await api.setGoal({ kcal, ...presetMacros(kcal, 'balanced'), water_ml: 2000, steps: 8000 }) };
+      if (typedKg != null && Number.isFinite(typedKg)) await api.setWeight(ui.today, typedKg);
+      toast(t('gpWelcomeSaved', { n: fmt(kcal) }));
+    } catch (err) {
+      toast(t('saveFailed', { reason: err instanceof Error ? err.message : String(err) }));
+    }
+  }
 
   // the phone's more menu (round avatar, top right) is on every main page; profile, badges and admin have their own close button there
   const hasMenu = $derived(['today', 'history', 'products', 'recipes', 'weight'].includes(router.route));
@@ -108,7 +132,8 @@
 
 {#if ui.help}<HelpSheet />{/if}
 
-{#if tourOpen}<Tour ondone={endTour} />{/if}
+{#if welcomeOpen}<GoalCalc welcome onclose={() => (welcomeOpen = false)} onuse={useWelcome} />{/if}
+{#if tourOpen && !welcomeOpen}<Tour ondone={endTour} />{/if}
 
 {#if ui.moment}<BadgeMoment codes={ui.moment} ondone={endMoment} />{/if}
 {/key}
