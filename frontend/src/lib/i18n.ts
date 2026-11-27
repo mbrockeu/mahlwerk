@@ -61,7 +61,9 @@ const en = {
 
   // editor
   editTitle: 'Product', newTitle: 'New product', photo: 'Photograph the nutrition table', fName: 'Name', fBrand: 'Brand',
-  fQuantity: 'Pack size', fServing: 'Serving', fUnit: 'Values per 100 …', per100: 'per 100 g / ml',
+  fQuantity: 'Pack size', fServing: 'Serving', fUnit: 'Unit', per100: 'per 100 g / ml',
+  basisLabel: 'The values are', basis100: 'per 100 {unit}', basisServing: 'per serving', basisPreview: '= {kcal} kcal per 100 {unit}, saved like this',
+  basisConvert: 'They are converted to 100 {unit} when saved.', basisNeedServing: 'Enter the serving in {unit} above, for example 350 {unit}.',
   remove: 'Remove from this server', confirmRemove: 'Remove this product from this server? Past diary entries stay.',
   rawText: 'Recognised text', reading: 'Reading the label …', readDone: '{n} of 8 values recognised. Please check them.',
   readNothing: 'No values recognised. Try again closer, straight on and without glare, or type them in.',
@@ -264,7 +266,7 @@ const en = {
 
   // additional nutrients
   grp_fat: 'Fats', grp_carb: 'Carbohydrates', grp_mineral: 'Minerals', grp_vitamin: 'Vitamins', grp_other: 'Other',
-  moreNutrients: 'More nutrition facts', moreNutrientsHint: 'Per 100 {unit}. Leave empty what you do not know.',
+  moreNutrients: 'More nutrition facts', moreNutrientsHint: 'Per 100 {unit}. Leave empty what you do not know.', moreNutrientsHintServing: 'Per serving, like the values above. Leave empty what you do not know.',
   microsToday: 'Vitamins & minerals', microsTitle: 'Vitamins and minerals',
   microTab_vitamin: 'Vitamins', microTab_mineral: 'Minerals', microTab_more: 'More',
   microCoverage: 'Data for {n} % of your calories', microNrv: '{n} % of the reference intake',
@@ -850,7 +852,9 @@ const de: Record<Key, string> = {
   per100Short: '{kcal} kcal je 100 {unit}',
 
   editTitle: 'Produkt', newTitle: 'Neues Produkt', photo: 'Nährwerttabelle fotografieren', fName: 'Name', fBrand: 'Marke',
-  fQuantity: 'Packungsgröße', fServing: 'Portion', fUnit: 'Werte je 100 …', per100: 'je 100 g / ml',
+  fQuantity: 'Packungsgröße', fServing: 'Portion', fUnit: 'Einheit', per100: 'je 100 g / ml',
+  basisLabel: 'Die Werte gelten', basis100: 'je 100 {unit}', basisServing: 'je Portion', basisPreview: '= {kcal} kcal je 100 {unit}, so wird es gespeichert',
+  basisConvert: 'Sie werden beim Speichern auf 100 {unit} umgerechnet.', basisNeedServing: 'Trag oben die Portion in {unit} ein, zum Beispiel 350 {unit}.',
   remove: 'Von diesem Server entfernen', confirmRemove: 'Dieses Produkt von diesem Server entfernen? Frühere Tagebuch-Einträge bleiben.',
   rawText: 'Erkannter Text', reading: 'Lese das Etikett …', readDone: '{n} von 8 Werten erkannt. Bitte prüfen.',
   readNothing: 'Keine Werte erkannt. Noch einmal näher, gerade und ohne Spiegelung fotografieren – oder eintippen.',
@@ -1049,7 +1053,7 @@ const de: Record<Key, string> = {
 
   // zusätzliche Nährwerte
   grp_fat: 'Fette', grp_carb: 'Kohlenhydrate', grp_mineral: 'Mineralstoffe', grp_vitamin: 'Vitamine', grp_other: 'Sonstiges',
-  moreNutrients: 'Weitere Nährwerte', moreNutrientsHint: 'Je 100 {unit}. Lass leer, was du nicht weißt.',
+  moreNutrients: 'Weitere Nährwerte', moreNutrientsHint: 'Je 100 {unit}. Lass leer, was du nicht weißt.', moreNutrientsHintServing: 'Je Portion, wie die Werte oben. Lass leer, was du nicht weißt.',
   microsToday: 'Vitamine & Mineralstoffe', microsTitle: 'Vitamine und Mineralstoffe',
   microTab_vitamin: 'Vitamine', microTab_mineral: 'Mineralstoffe', microTab_more: 'Weitere',
   microCoverage: 'Angaben für {n} % deiner Kalorien', microNrv: '{n} % der Referenzmenge',

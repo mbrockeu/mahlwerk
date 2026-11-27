@@ -5,6 +5,7 @@
   import { inputNumber, parseNumber, t } from '../lib/i18n';
   import { directory, ensureNutrients, GROUP_ORDER, nutrientName } from '../lib/nutrients.svelte';
   import { ROWS } from '../lib/nutrition';
+  import { per100Of, servingAmount } from '../lib/basis';
   import { changed, ui, type EditorRequest } from '../lib/store.svelte';
   import type { Extra, FoodIn, NutrientInfo, Per100 } from '../lib/types';
   import Sheet from './Sheet.svelte';
@@ -24,6 +25,15 @@
   let quantity = $state(food?.quantity ?? '');
   let serving = $state(food?.serving_size ?? '');
   let unit = $state<'g' | 'ml'>(food?.unit ?? 'g');
+  // what the typed values mean: stored is always per 100; "per serving" is converted on saving (switching keeps the numbers,
+  // so values typed under the wrong choice are fixed by switching)
+  let basis = $state<'100' | 'serving'>('100');
+  let servingInput: HTMLInputElement;
+  const servingQty = $derived(servingAmount(serving, unit));
+  const previewKcal = $derived.by(() => {
+    const v = parseNumber(values.kcal ?? '');
+    return servingQty && v !== null && !Number.isNaN(v) ? per100Of(v, servingQty) : null;
+  });
   let values = $state<Record<string, string>>(Object.fromEntries(ROWS.map(([k]) => [k, inputNumber(food?.per_100[k])])));
   // additional nutrients: text per directory key; the section stays closed as long as nothing is filled in
   let extraValues = $state<Record<string, string>>(Object.fromEntries(Object.entries(food?.extra ?? {}).map(([k, v]) => [k, inputNumber(v)])));
@@ -59,6 +69,7 @@
         const v = scan.per_100[key];
         if (v != null) { values[key] = inputNumber(v); recognised += 1; }
       }
+      if (recognised) basis = '100'; // a label is read per 100
       status = recognised ? t('readDone', { n: recognised }) : t('readNothing');
       statusWarn = !recognised;
       warnings = recognised ? scan.warnings : [];
@@ -83,6 +94,7 @@
       per_100[key] = v;
     }
     if (!name.trim()) { status = t('nameRequired'); statusWarn = true; nameInput.focus(); return; }
+    if (basis === 'serving' && !servingQty) { status = t('basisNeedServing', { unit }); statusWarn = true; servingInput.focus(); return; }
     const extra: Extra = {};
     for (const n of directory.list) {
       const v = parseNumber(extraValues[n.key] ?? '');
@@ -96,6 +108,10 @@
       const id = Array.isArray(bad) ? bad[0] : bad.key;
       setTimeout(() => document.getElementById(`e-${id}`)?.focus());
       return;
+    }
+    if (basis === 'serving' && servingQty) {
+      for (const [key] of ROWS) per_100[key] = per100Of(per_100[key] ?? null, servingQty);
+      for (const k of Object.keys(extra)) extra[k] = per100Of(extra[k], servingQty)!;
     }
     const body: FoodIn = {
       name: name.trim(), brand: brand.trim() || null, quantity: quantity.trim() || null,
@@ -152,13 +168,20 @@
     <label class="field"><span>{t('fBrand')}</span><input bind:value={brand} maxlength="200" autocomplete="off" /></label>
     <div class="pair">
       <label class="field"><span>{t('fQuantity')}</span><input bind:value={quantity} maxlength="60" autocomplete="off" placeholder="500 g" /></label>
-      <label class="field"><span>{t('fServing')}</span><input bind:value={serving} maxlength="60" autocomplete="off" placeholder="30 g" /></label>
+      <label class="field"><span>{t('fServing')}</span><input bind:this={servingInput} bind:value={serving} maxlength="60" autocomplete="off" placeholder="30 g" aria-invalid={basis === 'serving' && !servingQty && serving.trim() ? 'true' : undefined} /></label>
     </div>
     <label class="field"><span>{t('fUnit')}</span>
       <select bind:value={unit}><option value="g">g</option><option value="ml">ml</option></select>
     </label>
 
-    <p class="micro quiet">{t('per100')}</p>
+    <div class="basis" role="group" aria-label={t('basisLabel')}>
+      <span class="micro quiet">{t('basisLabel')}</span>
+      <button type="button" class="chip" class:on={basis === '100'} aria-pressed={basis === '100'} onclick={() => (basis = '100')}>{t('basis100', { unit })}</button>
+      <button type="button" class="chip" class:on={basis === 'serving'} aria-pressed={basis === 'serving'} onclick={() => (basis = 'serving')}>{t('basisServing')}</button>
+    </div>
+    {#if basis === 'serving'}
+      <p class="note" class:warn={!servingQty} role="status">{!servingQty ? t('basisNeedServing', { unit }) : previewKcal !== null ? t('basisPreview', { kcal: inputNumber(Math.round(previewKcal)), unit }) : t('basisConvert', { unit })}</p>
+    {/if}
     <div class="values">
       {#each ROWS as [key, u, indent]}
         <label class="field" class:indent>
@@ -170,7 +193,7 @@
 
     <details class="more" bind:open={extraOpen}>
       <summary>{t('moreNutrients')}</summary>
-      <p class="note">{t('moreNutrientsHint', { unit })}</p>
+      <p class="note">{basis === 'serving' ? t('moreNutrientsHintServing') : t('moreNutrientsHint', { unit })}</p>
       {#each extraGroups as g (g.group)}
         <p class="micro quiet group">{t(`grp_${g.group}`)}</p>
         <div class="values">
@@ -206,6 +229,9 @@
   form { display: flex; flex-direction: column; gap: 12px; }
   .pair, .values { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .field.indent span { padding-left: 10px; }
+  .basis { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .basis .micro { margin-right: 4px; }
+  .basis .chip { min-height: 40px; padding: 0 14px; font-size: 13px; }
   .warnings { background: var(--paper); border-left: 6px solid var(--orange); border-radius: 8px 20px 20px 8px; padding: 12px 16px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--warn); }
   details { font-size: 13px; }
   summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 600; }
