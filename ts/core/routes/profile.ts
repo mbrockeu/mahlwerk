@@ -108,7 +108,7 @@ async function me(req: Req, user: User) {
     demo: { available: Boolean(ctx.services.demoDataOn) && !isDemo, ...(await demoCounts(ctx.db, user.id)) },
     demo_account: { can_switch: canSwitch, viewing: isDemo, real_username: real?.username ?? null, real_display_name: real?.display_name ?? null },
     catalog: catalog ? await catalog.info() : { products: 0, updated_at: null, bls: { products: 0, updated_at: null } },
-    features: { access_tokens: tokens && !isDemo, webhooks: webhooks && !isDemo, cookidoo: cookidoo && !isDemo, web_recipes: webRecipes && !isDemo },
+    features: { access_tokens: tokens && !isDemo, webhooks: webhooks && !isDemo && Boolean(user.household ?? true), cookidoo: cookidoo && !isDemo, web_recipes: webRecipes && !isDemo },
   };
 }
 

@@ -5,6 +5,7 @@
 // between), never follows redirects and gives up after a timeout of five seconds per try. A broken or slow hook therefore can
 // neither slow down nor fail a request. Each delivery is logged (`webhook_delivery`, the last 20 per hook are kept). The body is
 // signed with the hook's secret: header `X-Mahlwerk-Signature: sha256=<hex HMAC-SHA256 of the raw body>`.
+import { configOf, effectiveHousehold } from './auth.ts';
 import { featureOn, hostAllowed, hostListed } from './features.ts';
 import type { Ctx, Req, User } from './http.ts';
 import { pickAddress, sameHostEverywhere } from './netguard.ts';
@@ -13,6 +14,7 @@ import {
   getWebhook, hooksForEvent, pruneDeliveries, startDelivery, updateDelivery, webhookById, type Hook,
 } from './store/webhooks.ts';
 import { urlsplit } from './urlsplit.ts';
+import { blockedHosts, isBlocked } from './webrecipes.ts';
 
 export const PING = 'ping';
 const TIMEOUT = 5.0;
@@ -49,9 +51,12 @@ export function hostOf(url: string): string | null {
 }
 
 /** The address to connect to, or false when the target may not be called. Checked at EVERY delivery: a hook made before this
- * check existed, or whose DNS name now points inside, is refused too. */
+ * check existed, or whose DNS name now points inside, is refused too. The server's own names (as for web recipes: its public
+ * URL, MAHLWERK_ALLOWED_HOSTS and their subdomains) are refused even when the admin lists them: they reach the server and the
+ * gateway in front of it from the outside. */
 export async function target(ctx: Ctx, url: string, host: string | null): Promise<string | false> {
   if (checkUrl(url) || !(await hostAllowed(ctx, host)) || !sameHostEverywhere(url)) return false;
+  if (isBlocked(host!, blockedHosts(ctx.env))) return false;
   try {
     const parts = urlsplit(url);
     const port = parts.port || (url.toLowerCase().startsWith('https') ? 443 : 80);
@@ -113,6 +118,9 @@ export class Dispatcher {
   private async fanOut(job: Job): Promise<void> {
     const { db } = this.ctx;
     if (!(await featureOn(this.ctx, 'webhooks.enabled'))) return;
+    // guests have no webhooks: hooks they made before they became guests stay quiet
+    const owner = await db.get<{ household: number; local_admin: number }>('SELECT household, local_admin FROM user WHERE id = ?', [job.user_id]);
+    if (!owner || !effectiveHousehold(configOf(this.ctx), Boolean(owner.household), Boolean(owner.local_admin))) return;
     let hooks: Hook[];
     if (job.hook_id !== null) {
       const hook = await webhookById(db, job.hook_id);
