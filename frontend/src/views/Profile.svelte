@@ -939,6 +939,9 @@
     .mi .chev { opacity: 0.5; }
     .mi:hover:not(.on) { background: var(--stone); }
     .pane, .goals, .settings { gap: 14px; }
+    /* the sidebar already shows which section is open: the title stays for screen readers and as the focus target, but takes no room, so both columns start level */
+    .pane { position: relative; }
+    .gt.sec { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
     .hero { padding: 28px 30px 24px; }
     .bigrow :global(.big) { font-size: 96px; }
     .bar { bottom: 20px; max-width: 560px; margin: 0 auto; width: 100%; }
