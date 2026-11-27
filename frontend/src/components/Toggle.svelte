@@ -14,10 +14,10 @@
   /* very narrow: the label keeps a readable width, the switch drops under it when they do not fit side by side */
   @media (max-width: 299px) { .sw:not(.bare) { flex-wrap: wrap; justify-content: flex-start; padding-left: 12px; } .txt { flex: 1 1 100px; } }
   small { font-family: var(--f-mono); font-size: 12px; font-weight: 500; color: var(--quiet); }
-  .track { width: 60px; height: 40px; border-radius: 20px; background: var(--paper); border: 2px solid var(--quiet); position: relative; flex-shrink: 0; transition: background 160ms, border-color 160ms; margin-right: 4px; }
-  .knob { position: absolute; top: 4px; left: 4px; width: 28px; height: 28px; border-radius: 14px; background: var(--quiet); transition: transform 200ms cubic-bezier(0.2, 0.9, 0.3, 1.2), background 160ms; }
+  .track { width: 46px; height: 28px; border-radius: 14px; background: var(--paper); border: 2px solid var(--quiet); position: relative; flex-shrink: 0; transition: background 160ms, border-color 160ms; margin-right: 10px; }
+  .knob { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 10px; background: var(--quiet); transition: transform 200ms cubic-bezier(0.2, 0.9, 0.3, 1.2), background 160ms; }
   .sw[aria-checked='true'] .track { background: var(--toggle-on); border-color: var(--toggle-on); }
-  .sw[aria-checked='true'] .knob { transform: translateX(20px); background: var(--lime); }
+  .sw[aria-checked='true'] .knob { transform: translateX(18px); background: var(--lime); }
   /* only the track (the connector cards put one switch in their header; the name is the aria-label) */
   .sw.bare { width: auto; min-height: 48px; padding: 4px 0; background: transparent; border-radius: 24px; }
   .sw.bare .track { margin-right: 0; }
