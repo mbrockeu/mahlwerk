@@ -5,7 +5,7 @@
   import { inputNumber, parseNumber, t } from '../lib/i18n';
   import { directory, ensureNutrients, GROUP_ORDER, nutrientName } from '../lib/nutrients.svelte';
   import { ROWS } from '../lib/nutrition';
-  import { per100Of, servingAmount } from '../lib/basis';
+  import { per100Of, servingAmount, servingText } from '../lib/basis';
   import { changed, ui, type EditorRequest } from '../lib/store.svelte';
   import type { Extra, FoodIn, NutrientInfo, Per100 } from '../lib/types';
   import Sheet from './Sheet.svelte';
@@ -115,7 +115,7 @@
     }
     const body: FoodIn = {
       name: name.trim(), brand: brand.trim() || null, quantity: quantity.trim() || null,
-      serving_size: serving.trim() || null, unit, per_100, extra,
+      serving_size: servingText(serving, unit) || null, unit, per_100, extra,
     };
     saving = true;
     try {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { per100Of, servingAmount } from '../src/lib/basis.ts';
+import { per100Of, servingAmount, servingText } from '../src/lib/basis.ts';
 
 test('the serving amount is the leading number in the product unit', () => {
   assert.equal(servingAmount('350 g', 'g'), 350);
@@ -10,6 +10,14 @@ test('the serving amount is the leading number in the product unit', () => {
   assert.equal(servingAmount('1 Stück', 'g'), null);
   assert.equal(servingAmount('0 g', 'g'), null);
   assert.equal(servingAmount('', 'g'), null);
+  assert.equal(servingAmount('466', 'g'), 466); // a bare number is meant in the product unit
+  assert.equal(servingAmount(' 0,5 ', 'ml'), 0.5);
+});
+
+test('a bare serving number is saved with the unit, anything else as typed', () => {
+  assert.equal(servingText(' 466 ', 'g'), '466 g');
+  assert.equal(servingText('2 Scheiben (50 g)', 'g'), '2 Scheiben (50 g)');
+  assert.equal(servingText('', 'g'), '');
 });
 
 test('values per serving become values per 100, empty ones stay empty', () => {
