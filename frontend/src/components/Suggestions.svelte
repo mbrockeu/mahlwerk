@@ -146,6 +146,7 @@
   .body { display: flex; flex-direction: column; gap: 10px; padding: 0 6px 6px; }
   .foci { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px; margin: 0 -2px; }
   .foci::-webkit-scrollbar { display: none; }
+  .foci .chip:focus-visible { outline-offset: -3px; } /* the scrolling row clips a ring outside */
   .foci .chip { flex-shrink: 0; background: var(--stone); }
   .foci .chip.on { background: var(--sel-bg); }
   .calm { font-size: 14px; color: var(--text); }

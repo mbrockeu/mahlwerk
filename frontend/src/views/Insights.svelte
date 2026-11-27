@@ -671,6 +671,7 @@
      below and makes the bar scroll up and down on a phone */
   .tabs { display: flex; gap: 4px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none; box-shadow: inset 0 -2px 0 var(--hairline); margin: 2px -4px 0; padding: 0 4px; }
   .tabs::-webkit-scrollbar { display: none; }
+  .tab:focus-visible { outline-offset: -3px; border-radius: 10px; } /* the scrolling row clips a ring outside */
   .tab { flex-shrink: 0; min-height: 46px; padding: 0 14px; font-size: 15px; font-weight: 600; color: var(--quiet); border-bottom: 3px solid transparent; }
   /* very narrow: the tabs wrap onto further lines instead of scrolling out of view */
   @media (max-width: 299px) { .tabs { flex-wrap: wrap; overflow: visible; box-shadow: none; } .tab { flex-shrink: 1; min-height: 44px; padding: 0 10px; } }

@@ -30,6 +30,7 @@
 <style>
   .wrap { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .chips { position: relative; display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px; flex: 1; min-width: 0; scrollbar-width: none; overscroll-behavior-x: contain; }
+  .chips :focus-visible { outline-offset: -3px; } /* the scrolling row clips a ring outside */
   .chips::-webkit-scrollbar { display: none; }
   .chip { flex-shrink: 0; gap: 8px; max-width: 240px; }
   .lab { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

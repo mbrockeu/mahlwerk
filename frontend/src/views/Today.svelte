@@ -497,6 +497,9 @@
   .body > :global(*) { flex: 1; }
   .rows { gap: 6px; }
   .meal { background: var(--paper); border-radius: 20px; overflow: hidden; }
+  /* the card clips (overflow: hidden): the focus ring goes inside, with the card's rounding, or only a corner of it shows */
+  .meal :focus-visible, .micros :focus-visible { outline-offset: -3px; }
+  .meal .main:focus-visible, .meal .entries button:focus-visible, .micros > button:focus-visible { border-radius: 20px; }
   .meal.cta { background: var(--deep); color: var(--on-deep); border-radius: 20px 20px 20px 8px; --focus: var(--lime); }
   .head { display: flex; align-items: center; min-height: 52px; }
   .main { flex: 1; min-width: 0; min-height: 52px; padding: 6px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; }
