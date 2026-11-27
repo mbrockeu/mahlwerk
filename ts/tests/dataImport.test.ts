@@ -528,3 +528,23 @@ test('a waiting file goes when its time is up, also when no further import reque
   await send(w, 'ben', 'GET', '/api/v1/me'); // any request of anybody
   assert.equal(stage.held(), 0);
 });
+
+test('health=0 leaves out the values from Apple Health, also with a read-only key (the shortcut action of the app)', async () => {
+  const w = await world();
+  const s = (m: string, p: string, b?: unknown) => send(w, 'ann', m, p, b);
+  const sync = await s('POST', '/api/v1/health/sync', { days: [{ day: '2026-03-08', steps: 5000, weight_kg: 80, water_ml: 1500,
+    workouts: [{ external_id: 'hk-1', kind: 'run', minutes: 30 }] }] });
+  assert.equal(sync.status, 200, sync.text);
+  await s('PUT', `/api/v1/weights/${DAY}`, { kg: 71.5 });
+  const full = await jsonOf(await exportZip(w, 'ann'));
+  assert.equal(full.health_excluded, undefined);
+  assert.equal(full.weight.length, 2);
+  const key = (await s('POST', '/api/v1/me/tokens', { name: 'shortcut', scope: 'read' })).json.token;
+  const res = await fetch(`http://127.0.0.1:${w.port}/api/v1/me/export?health=0`, { headers: { authorization: `Bearer ${key}` } });
+  assert.equal(res.status, 200);
+  const lean = await jsonOf(new Uint8Array(await res.arrayBuffer()));
+  assert.equal(lean.health_excluded, true);
+  assert.deepEqual(lean.weight.map((x: any) => x.day), [DAY]);
+  assert.deepEqual([lean.water.length, lean.activity.length, lean.workouts.length], [0, 0, 0]);
+  assert.equal((await call(w, 'ann', 'GET', '/api/v1/me/export?health=no')).status, 422);
+});

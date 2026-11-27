@@ -133,9 +133,10 @@ const jsonText = (value: unknown): Uint8Array => new TextEncoder().encode(JSON.s
 // the archive ------------------------------------------------------------------------------------------------------------
 
 /** The whole archive in memory. `first`/`last` limit the day-based data; the demo rows of an own account are left out, the
- * demo account itself exports its sample data. */
-export async function buildExport(db: Db, user: { id: number; username: string; display_name: string; is_demo?: unknown; household?: unknown }, first: string | null, last: string | null, lang: string, nowSeconds: number): Promise<Uint8Array> {
-  return zipExport(await exportData(db, user, first, last, nowSeconds), lang, nowSeconds);
+ * demo account itself exports its sample data. `health` false leaves out what came from Apple Health (`withoutHealth`). */
+export async function buildExport(db: Db, user: { id: number; username: string; display_name: string; is_demo?: unknown; household?: unknown }, first: string | null, last: string | null, lang: string, nowSeconds: number, health = true): Promise<Uint8Array> {
+  const data = await exportData(db, user, first, last, nowSeconds);
+  return zipExport(health ? data : withoutHealth(data), lang, nowSeconds);
 }
 
 /** Leaves out what came from Apple Health (App Review 5.1.3: no personal health information in iCloud; the iCloud backup of the app):
