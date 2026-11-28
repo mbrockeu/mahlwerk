@@ -16,8 +16,8 @@
   import { api, ApiError } from '../lib/api';
   import {
     DEFAULT_ALT_WEEKDAYS, DEFAULT_GLASSES, GLASS_LIMITS, KCAL_LIMITS, MACRO_LIMITS, PRESETS, STEPS_LIMITS, WATER_LIMITS, alignCarbs, clamp, macroGap, macroShares, matchingPreset,
-    maskToWeekdays, presetMacros, scaleMacros, toggleWeekday, weekdaysToMask,
-    type MacroKey, type PresetId,
+    followKcal, maskToWeekdays, presetMacros, scaleMacros, toggleWeekday, weekdaysToMask,
+    type MacroBase, type MacroKey, type PresetId,
   } from '../lib/goals';
   import { MAX_WORKOUTS_WEEK } from '../lib/training';
   import { GOAL_SINCE_START, type DaysGoal, type GoalChange, type ImportBatch, type ImportInfo } from '../lib/types';
@@ -56,11 +56,11 @@
   const aligned = $derived(alignCarbs(draft.kcal, macros));
   const preset = $derived(matchingPreset(draft.kcal, macros));
   const glasses = $derived(clamp(Math.round(draft.water / 250), 4, 24));
-  const gapText = $derived(
-    Math.abs(gap.diff) < 5
-      ? t('gpMacroSum', { total: fmt(gap.total) })
-      : t(gap.diff < 0 ? 'gpMacroUnder' : 'gpMacroOver', { total: fmt(gap.total), diff: fmt(Math.abs(gap.diff)) }),
-  );
+  const gapTextOf = (g: { total: number; diff: number }) => Math.abs(g.diff) < 5
+    ? t('gpMacroSum', { total: fmt(g.total) })
+    : t(g.diff < 0 ? 'gpMacroUnder' : 'gpMacroOver', { total: fmt(g.total), diff: fmt(Math.abs(g.diff)) });
+  const gapText = $derived(gapTextOf(gap));
+  const altGapText = $derived(gapTextOf(macroGap(draft.altKcal, altMacros)));
 
   const tiles: { key: MacroKey; label: () => string; bg: string; track: string; radius: string }[] = [
     { key: 'protein', label: () => t('protein'), bg: '#ff8a1f', track: '#b85e0c', radius: '28px 28px 8px 28px' },
@@ -189,11 +189,27 @@
   // ---- goals ----
   /** The calorie buttons (also those of the weekday goal): the big and the small step each way. */
   const KCAL_STEPS = [-50, -10, 10, 50];
-  const setKcal = (v: number) => { draft.kcal = clamp(Math.round(v), KCAL_LIMITS.min, KCAL_LIMITS.max); fieldError = ''; };
+  // the macros follow the calories in proportion (see followKcal); one base per goal
+  let kcalBase: MacroBase | null = null, altKcalBase: MacroBase | null = null;
+  const setKcal = (v: number) => {
+    const kcal = clamp(Math.round(v), KCAL_LIMITS.min, KCAL_LIMITS.max);
+    if (kcal !== draft.kcal) { kcalBase = followKcal(kcalBase, macros, draft.kcal, kcal); Object.assign(draft, kcalBase.out); }
+    draft.kcal = kcal;
+    fieldError = '';
+  };
   const setMacro = (k: MacroKey, v: number) => { draft[k] = clamp(v, MACRO_LIMITS.min, MACRO_LIMITS.max); fieldError = ''; };
   const setSteps = (v: number) => { draft.steps = clamp(Math.round(v), STEPS_LIMITS.min, STEPS_LIMITS.max); fieldError = ''; };
   const setWater = (v: number) => { draft.water = clamp(Math.round(v), WATER_LIMITS.min, WATER_LIMITS.max); fieldError = ''; };
-  const setAltKcal = (v: number) => { draft.altKcal = clamp(Math.round(v), KCAL_LIMITS.min, KCAL_LIMITS.max); fieldError = ''; };
+  const setAltKcal = (v: number) => {
+    const kcal = clamp(Math.round(v), KCAL_LIMITS.min, KCAL_LIMITS.max);
+    if (kcal !== draft.altKcal) {
+      altKcalBase = followKcal(altKcalBase, altMacros, draft.altKcal, kcal);
+      const m = altKcalBase.out;
+      Object.assign(draft, { altProtein: m.protein, altCarbs: m.carbs, altFat: m.fat });
+    }
+    draft.altKcal = kcal;
+    fieldError = '';
+  };
   const setAltMacro = (k: MacroKey, v: number) => {
     const key = k === 'protein' ? 'altProtein' : k === 'carbs' ? 'altCarbs' : 'altFat';
     draft[key] = clamp(v, MACRO_LIMITS.min, MACRO_LIMITS.max);
@@ -577,6 +593,7 @@
               {/each}
             </div>
             {#if fieldError === 'altMacro'}<p class="note warn" role="alert">{t('goalBad')}</p>{/if}
+            <p class="sum" aria-live="polite">{altGapText}</p>
           {/if}
           <p class="note">{t('gpAltText')}</p>
         </section>

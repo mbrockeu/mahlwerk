@@ -110,6 +110,16 @@ export function scaleMacros(from: Macros & { kcal: number }, kcal: number): Macr
   return { protein: g(from.protein), carbs: g(from.carbs), fat: g(from.fat) };
 }
 
+/** Where the macros were scaled from (`kcal` and the grams the person set) and what came out (`out`). */
+export type MacroBase = Macros & { kcal: number; out: Macros };
+/** When the calories change, the three macros follow in proportion (the split stays). They are scaled from the values the person last set
+ * themselves, so many small steps do not drift; macros that changed in another way since (by hand, a preset, "adjust") start a new base. */
+export function followKcal(base: MacroBase | null, now: Macros, nowKcal: number, kcal: number): MacroBase {
+  const same = base !== null && base.out.protein === now.protein && base.out.carbs === now.carbs && base.out.fat === now.fat;
+  const from = same ? base : { kcal: nowKcal, protein: now.protein, carbs: now.carbs, fat: now.fat };
+  return { kcal: from.kcal, protein: from.protein, carbs: from.carbs, fat: from.fat, out: scaleMacros(from, kcal) };
+}
+
 // ---- energy need ----
 
 export type Sex = 'f' | 'm' | 'x';

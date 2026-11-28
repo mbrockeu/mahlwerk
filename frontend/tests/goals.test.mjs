@@ -44,3 +44,15 @@ test('presets', () => {
   assert.equal(g.matchingPreset(2100, { protein: 120, carbs: 230, fat: 70 }), null);
   assert.equal(g.matchingPreset(2100, g.presetMacros(2100, 'lowcarb')), 'lowcarb');
 });
+
+test('followKcal: the macros follow the calories in proportion without drifting over many steps', async () => {
+  const { followKcal } = await import('../src/lib/goals.ts');
+  let base = null, kcal = 2100, m = { protein: 120, carbs: 230, fat: 70 };
+  for (let i = 0; i < 20; i++) { base = followKcal(base, m, kcal, kcal + 10); m = base.out; kcal += 10; } // 20 × +10
+  assert.deepEqual(m, followKcal(null, { protein: 120, carbs: 230, fat: 70 }, 2100, 2300).out); // same as one step of +200
+  assert.deepEqual(m, { protein: 131, carbs: 252, fat: 77 });
+  // a macro changed by hand since is the new base
+  m = { ...m, protein: 150 };
+  base = followKcal(base, m, kcal, kcal);
+  assert.equal(base.out.protein, 150);
+});

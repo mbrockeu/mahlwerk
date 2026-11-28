@@ -355,7 +355,7 @@ const en = {
 
   // goals and profile page
   gpTitle: 'Goals & profile', gpKcalLabel: 'Calorie goal', gpKcalUnit: 'kcal a day', gpKcalAria: 'Calorie goal in kcal',
-  gpScaleAria: 'Calorie goal', gpScaleHint: 'Drag the scale, use the arrow keys, or tap the number to type.',
+  gpScaleAria: 'Calorie goal', gpScaleHint: 'Drag the scale, use the arrow keys, or tap the number to type. Protein, carbs and fat follow in proportion.',
   gpFromToday: 'Counts from today – past days keep the goal they had.',
   gpHistTitle: 'History', gpHistSince: 'since the start', gpHistFrom: 'from {date}', gpHistNow: 'now',
   gpHistAria: 'Goal from {from}: {kcal} kcal, protein {p} g, carbohydrates {c} g, fat {f} g',
@@ -1150,7 +1150,7 @@ const de: Record<Key, string> = {
 
   // goals and profile page
   gpTitle: 'Ziele & Profil', gpKcalLabel: 'Kalorienziel', gpKcalUnit: 'kcal am Tag', gpKcalAria: 'Kalorienziel in kcal',
-  gpScaleAria: 'Kalorienziel', gpScaleHint: 'Skala ziehen, Pfeiltasten benutzen oder auf die Zahl tippen und eintippen.',
+  gpScaleAria: 'Kalorienziel', gpScaleHint: 'Skala ziehen, Pfeiltasten benutzen oder auf die Zahl tippen und eintippen. Eiweiß, Kohlenhydrate und Fett gehen im selben Verhältnis mit.',
   gpFromToday: 'Gilt ab heute – vergangene Tage behalten ihr damaliges Ziel.',
   gpHistTitle: 'Verlauf', gpHistSince: 'seit Beginn', gpHistFrom: 'ab {date}', gpHistNow: 'aktuell',
   gpHistAria: 'Ziel ab {from}: {kcal} kcal, Eiweiß {p} g, Kohlenhydrate {c} g, Fett {f} g',
