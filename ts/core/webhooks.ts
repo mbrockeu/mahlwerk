@@ -147,10 +147,12 @@ export class Dispatcher {
   private drop(userId: number): void {
     const n = (this.dropped.get(userId) ?? 0) + 1;
     this.dropped.set(userId, n);
-    if (n === 1) setTimeout(() => {
+    if (n !== 1) return;
+    const t: unknown = setTimeout(() => {
       console.warn(`webhooks: ${this.dropped.get(userId)} deliveries of user ${userId} dropped, too many were waiting`);
       this.dropped.delete(userId);
-    }, 60_000).unref?.();
+    }, 60_000);
+    (t as { unref?: () => void }).unref?.(); // Node: do not keep the process alive for a log line (the app host gets a number)
   }
 
   /** A place for one of this person's deliveries; a retry (`first`) goes to the front of the person's own queue, so its backoff
