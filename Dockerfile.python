@@ -23,7 +23,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     MAHLWERK_DB=/data/mahlwerk.db \
-    MAHLWERK_WEB_DIR=/app/web
+    MAHLWERK_WEB_DIR=/app/web \
+    MAHLWERK_AUTH=local
 
 WORKDIR /app
 COPY pyproject.toml README.md LICENSE ./

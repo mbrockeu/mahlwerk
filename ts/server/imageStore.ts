@@ -64,6 +64,15 @@ export function nodeImageStore(dir: string, maxBytes: number, clock: () => numbe
   const has = (digest: string) => Object.keys(SIZES).every((s) => { const p = pathOf(digest, s); return p !== null && existsSync(p) && statSync(p).isFile(); });
 
   return {
+    maxBytes,
+    async bytes(digest) {
+      let n = 0;
+      for (const key of Object.keys(SIZES)) {
+        const p = pathOf(digest, key);
+        try { if (p !== null) { const st = lstatSync(p); if (st.isFile()) n += st.size; } } catch { /* not there */ }
+      }
+      return n;
+    },
     async read(digest, size) {
       const p = pathOf(digest, size);
       if (p === null) return null;

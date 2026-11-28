@@ -64,7 +64,7 @@ async function ready(req: Req): Promise<[Hub, Access]> {
   return [cookidooHub(ctx), access];
 }
 
-const fail = (e: CookidooError): HttpError => new HttpError(['busy', 'wait', 'locked'].includes(e.kind) ? 429 : 502, e.message);
+const fail = (e: CookidooError): HttpError => new HttpError(['busy', 'wait', 'locked', 'person'].includes(e.kind) ? 429 : 502, e.message);
 
 /** Runs `fn`; a failure at Cookidoo becomes its neutral 502 (or 429). */
 async function neutral<T>(fn: () => Promise<T>): Promise<T> {

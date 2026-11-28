@@ -10,12 +10,16 @@
 // The provider's address is controlled by the provider, so it is fetched with the same hardened fetcher as web pages and then decoded in
 // a limited child process. A picture that fails for any reason is simply not there: taking over a recipe never fails because of its picture.
 import type { Ctx } from './http.ts';
-import { ImageRejected, processImage, type ImageRunner } from './imageproc.ts';
+import { ImageRejected, processImage, type ImageRunner, type Processed } from './imageproc.ts';
 import { StoreError, type ImageFiles } from './imagestore.ts';
 import { checkAddress, FetchFailed, LinkRejected, type Fetcher } from './webrecipes.ts';
 import { clearFoodImage, getFood, imageHashes, imageRefs, setFoodImage } from './store/foods.ts';
 
 export const ORIGINS = ['own', 'cookidoo', 'web'];
+
+/** What one person's own photos may take at most: a quarter of the folder, never more than 200 MB (the folder has one limit for all). */
+export const PERSON_SHARE_MB = 200;
+const personShare = (maxBytes: number): number => Math.min(PERSON_SHARE_MB * 1024 * 1024, Math.floor(maxBytes / 4));
 
 /** Everything that links or unlinks a picture takes this lock, so a file is never deleted between the moment another recipe starts to
  * use it and the moment that is saved. */
@@ -40,10 +44,11 @@ export class RecipeImages {
 
   /** Process `data` and make it the picture of the food. Throws ImageRejected, StoreError or a RangeError for an unknown food. A
    * provider's picture is dropped (null) when, meanwhile, somebody set an own photo or took the picture away. */
-  async attach(foodId: number, data: Uint8Array, origin: string, url: string | null = null): Promise<string | null> {
+  async attach(foodId: number, data: Uint8Array, origin: string, url: string | null = null, uploader: number | null = null): Promise<string | null> {
     const processed = await processImage(this.runner, data); // outside the lock: this takes a moment
     return this.lock.run(async () => {
       if (origin !== 'own' && !(await this.wants(foodId))) return null; // checked again under the lock: an own photo set during the fetch wins
+      if (origin === 'own') await this.checkShare(foodId, processed, uploader);
       await this.files.put(processed);
       const before = await setFoodImage(this.db, foodId, processed.hash, origin, url);
       if (before === false) { // the food is gone: nothing refers to the new files then
@@ -54,6 +59,31 @@ export class RecipeImages {
       await this.maybeSweep();
       return processed.hash;
     });
+  }
+
+  /** One person cannot fill the folder for everybody: the own photos on the foods the UPLOADER made (a picture taken from a provider
+   * counts to nobody) may take `personShare` bytes at most. The uploader is charged, whoever owns the food (also a household food or a
+   * food of somebody else the uploader may edit). There is no uploader column, so the pictures counted are those on foods the uploader
+   * created. The food's own current picture is not counted (it is replaced), a picture that is among them already costs nothing.
+   * Without an uploader (no person behind the call) the owner of the food is charged, and a food without owner is not checked. Throws StoreError. */
+  async checkShare(foodId: number, processed: Processed, uploader: number | null = null): Promise<void> {
+    const { maxBytes, bytes } = this.files;
+    if (!maxBytes || !bytes) return;
+    let who = uploader;
+    if (who === null) {
+      const row = await getFood(this.db, foodId);
+      if (!row || row.owner === null) return;
+      who = row.owner;
+    }
+    const hashes = (await this.db.all(
+      "SELECT DISTINCT image_hash FROM food WHERE image_origin = 'own' AND image_hash IS NOT NULL AND id != ? "
+      + 'AND COALESCE(created_by, (SELECT recipe.created_by FROM recipe WHERE recipe.food_id = food.id)) = ?', [foodId, who])).map((r) => r.image_hash as string);
+    if (hashes.includes(processed.hash)) return;
+    let used = Object.values(processed.files).reduce((n, b) => n + b.length, 0);
+    for (const h of hashes) used += await bytes.call(this.files, h);
+    if (used > personShare(maxBytes)) {
+      throw new StoreError(`your own recipe pictures take too much space (at most ${Math.floor(personShare(maxBytes) / 1048576)} MB per person): remove some before adding more`);
+    }
   }
 
   /** Take the picture away. `mark`: say that a person did it to a provider's picture (a reload does not bring it back). */

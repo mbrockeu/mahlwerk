@@ -548,3 +548,37 @@ test('health=0 leaves out the values from Apple Health, also with a read-only ke
   assert.deepEqual([lean.water.length, lean.activity.length, lean.workouts.length], [0, 0, 0]);
   assert.equal((await call(w, 'ann', 'GET', '/api/v1/me/export?health=no')).status, 422);
 });
+
+test('a guest\'s import carries no provider id, no group binding and no future times; the household keeps its own', async () => {
+  const w = await world();
+  await fill(w, 'ann');
+  const file = await jsonOf(await exportZip(w, 'ann'));
+  const base = file.foods.find((f: any) => f.code === '4006381333931');
+  const own = (n: number, over: any) => ({ ...base, uid: n.toString(16).padStart(32, '0'), code: null, own: true, source: 'own', ...over, data: { ...base.data, name: `Own ${n}` } });
+  const future = '2099-01-01T00:00:00Z';
+  const foods = [own(1, { external_id: 'bls:C999999', fetched_at: future }), own(2, { external_id: 'web:example.org/x' })];
+  const groups = [{ uid: 'cd'.repeat(16), name: 'Collection', source: 'cookidoo:col1', members: [], created_at: future }];
+  const gast = await preview(w, 'gast', JSON.stringify({ ...file, foods, recipe_groups: groups }), '');
+  assert.equal(gast.status, 200, gast.text);
+  assert.equal((await confirm(w, 'gast', gast.json.token, 'merge', '')).status, 200);
+  const rows = await w.ctx.db.all<any>("SELECT external_id, fetched_at, created_by FROM food WHERE json_extract(data, '$.name') IN ('Own 1', 'Own 2')");
+  assert.equal(rows.length, 2);
+  for (const row of rows) {
+    assert.equal(row.external_id, null); // a plain own product: no key for the household's take-overs
+    assert.equal(row.created_by, await idOf(w, 'gast'));
+    assert.ok(row.fetched_at <= Date.now() / 1000);
+  }
+  const g = await w.ctx.db.get<any>("SELECT source, created_at FROM recipe_group WHERE name = 'Collection'");
+  assert.equal(g!.source, null);
+  assert.ok(g!.created_at <= Date.now() / 1000);
+  // a household member: the id stays, the time is cut to now, a dismissed collection is not bound again
+  await w.ctx.db.run("INSERT INTO recipe_group_dismissed (source) VALUES ('cookidoo:gone')");
+  const more = [{ ...groups[0], uid: 'ef'.repeat(16), name: 'Gone', source: 'cookidoo:gone' }, { ...groups[0], uid: '12'.repeat(16), name: 'Kept', source: 'cookidoo:col2' }];
+  const p = await preview(w, 'ann', JSON.stringify({ ...file, foods: [own(3, { external_id: 'bls:C999998', fetched_at: future })], recipe_groups: more }));
+  assert.equal((await confirm(w, 'ann', p.json.token)).status, 200);
+  const ann = await w.ctx.db.get<any>("SELECT external_id, fetched_at FROM food WHERE json_extract(data, '$.name') = 'Own 3'");
+  assert.equal(ann!.external_id, 'bls:C999998');
+  assert.ok(ann!.fetched_at <= Date.now() / 1000);
+  assert.equal((await w.ctx.db.get<any>("SELECT source FROM recipe_group WHERE name = 'Gone'"))!.source, null);
+  assert.equal((await w.ctx.db.get<any>("SELECT source FROM recipe_group WHERE name = 'Kept'"))!.source, 'cookidoo:col2');
+});

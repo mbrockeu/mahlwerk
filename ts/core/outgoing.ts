@@ -42,6 +42,8 @@ export interface Outgoing {
   fetch(purpose: Purpose, req: OutRequest): Promise<OutResponse>;
   /** All addresses of a host as the system resolves them (netguard.system_resolver); rejects when it does not resolve. */
   resolve(host: string, port: number): Promise<string[]>;
+  /** The same for the server's own names, with places of its own so that names chosen by users cannot starve it (falls back to `resolve`). */
+  resolveOwn?(host: string, port: number): Promise<string[]>;
 }
 
 export function outgoing(ctx: Ctx): Outgoing {

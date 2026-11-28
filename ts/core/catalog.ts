@@ -33,6 +33,19 @@ export const nameKey = (name: string): string => words(name).join(' ');
 /** The name without spaces and hyphens ('Hafer Flocken' -> 'haferflocken'), so that a compound word finds it. */
 export const nameCompact = (name: string | null | undefined): string | null => (name ? words(name).join('') : null);
 
+/** Longest search text and most distinct words one search looks at; more only costs time (every word is a prefix term of the full text query). */
+export const MAX_QUERY_CHARS = 200;
+export const MAX_QUERY_WORDS = 8;
+
+/** The words of a search text that are worth a prefix term: the first 200 characters, no one-letter words, no repeats, at most 8. When only
+ * one-letter words are left (or none), the first two of them keep the search working for a short text like "a b". */
+export function searchWords(query: string): string[] {
+  const all = words([...query].slice(0, MAX_QUERY_CHARS).join(''));
+  const unique = [...new Set(all)];
+  const long = unique.filter((w) => [...w].length >= 2);
+  return (long.length ? long : unique.slice(0, 2)).slice(0, MAX_QUERY_WORDS);
+}
+
 /** A catalogue entry in the shape stored in `food.data`. */
 export function foodData(item: CatalogItem) {
   return {
@@ -130,7 +143,7 @@ export class Catalog {
    * that one. `skip` gets a list of hits and returns the "source/code" keys to leave out (those already stored as a food). */
   async search(query: string, limit = 25, source: string | null = null,
     skip: ((hits: CatalogItem[]) => Promise<Set<string>>) | null = null): Promise<CatalogItem[]> {
-    const tokens = words(query);
+    const tokens = searchWords(query);
     if (!tokens.length || limit < 1) return [];
     const take = async (src: string, n: number): Promise<CatalogItem[]> => {
       if (n < 1) return [];

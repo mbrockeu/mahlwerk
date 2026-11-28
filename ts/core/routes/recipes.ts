@@ -1,6 +1,7 @@
 // Recipes: a shared food of the household that is calculated from its ingredients (routes/recipes.py), and the reading of a pasted
 // ingredient list (POST /recipes/ingredients/match).
 import { addDays, today } from '../dates.ts';
+import { brake } from '../brakes.ts';
 import { buildFood } from '../foodView.ts';
 import { HttpError, parse, pathInt, route, type Req, type Route, type User } from '../http.ts';
 import * as ingredients from '../ingredients.ts';
@@ -76,14 +77,17 @@ export const routes: Route[] = [
     const body = parse(ingredientsIn, req.body);
     const { db } = req.ctx;
     const user = req.user!;
+    const wait = brake(req.ctx, 'match').allow(user.id); // at most 30 lists per person in 10 minutes
+    if (wait) throw new HttpError(429, 'too many ingredient lists lately, try again in a few minutes', { 'Retry-After': String(wait) });
     const { lines: parsed, ignored } = ingredients.parseText(body.text);
     const own: ingredients.OwnFood[] = await listOwnFoods(db, ['recipe', 'cookidoo', 'web'], Boolean(user.is_demo));
     const eaten = body.recent ? await eatenSince(db, user.id, addDays(today(), -(ingredients.RECENT_DAYS - 1))) : null;
-    const catalog = req.ctx.services.catalog as ingredients.CatalogSearch | undefined;
+    const catalog = ingredients.budgeted(req.ctx.services.catalog as ingredients.CatalogSearch | undefined); // one list gets a fixed number of searches
+    const memo: ingredients.TokenMemo = new Map(); // food names are split into words once per list
     const skip = (hits: ingredients.CatalogHit[]) => knownCatalog(db, hits);
     const lines: IngredientLine[] = [];
     for (const [number, line] of parsed) {
-      const found = await ingredients.candidates(line.name, own, catalog, skip, line.text, line.canned, eaten);
+      const found = await ingredients.candidates(line.name, own, catalog, skip, line.text, line.canned, eaten, memo);
       const out = found.map(candidateOut);
       lines.push({
         line: number, text: line.text, quantity: line.quantity, unit: line.unit, name: line.name, note: line.note, optional: line.optional,

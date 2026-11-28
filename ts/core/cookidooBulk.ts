@@ -36,7 +36,7 @@ export const SECONDS_PER_RECIPE = BULK_GAP + 1.0; // the gap plus a typical call
 export const MAX_STREAK = 3; // failures in a row (not refusals) after which the run stops
 const MAX_FAILURES_LISTED = 40;
 const KEEP_FINISHED = 3600; // a finished run's state is kept this long
-const STOP_KINDS = ['auth', 'busy', 'wait', 'locked', 'gone'];
+const STOP_KINDS = ['auth', 'busy', 'wait', 'locked', 'person', 'gone'];
 const PICTURES_EVERY = 600.0; // a catch-up for pictures may be started at most this often per account
 const IMAGE_GAP = 1.0; // seconds between two picture fetches when no call to Cookidoo is made in between
 export const GROUP_PREFIX = 'cookidoo:';
@@ -318,7 +318,7 @@ export class BulkRuns {
     } catch (e) {
       if (e instanceof Stop) return 'end';
       if (!(e instanceof CookidooError)) throw e;
-      if (!['busy', 'wait', 'locked', 'gone'].includes(e.kind)) lastCall[0] = this.clock(); // a call was made
+      if (!['busy', 'wait', 'locked', 'person', 'gone'].includes(e.kind)) lastCall[0] = this.clock(); // a call was made
       if (STOP_KINDS.includes(e.kind)) { this.stop(run, e.kind); return 'end'; }
       run.counts.failed += 1;
       this.fail(run, item, e.kind);

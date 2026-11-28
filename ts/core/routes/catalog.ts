@@ -1,6 +1,6 @@
 // The local catalogue: search by name and adopt an item as a food (routes/catalog.py).
 import { z } from 'zod';
-import { BLS, catalogOf, externalId, foodData } from '../catalog.ts';
+import { BLS, catalogOf, MAX_QUERY_CHARS, externalId, foodData } from '../catalog.ts';
 import { buildFood } from '../foodView.ts';
 import { HttpError, parse, queryObject, respond, route, type Route } from '../http.ts';
 import { catalogRef, type CatalogItem } from '../models/catalog.ts';
@@ -16,8 +16,9 @@ export const routes: Route[] = [
   route('GET', '/api/v1/catalog', async (req): Promise<CatalogItem[]> => {
     const q = parse(z.object({ q: z.string().default(''), source: SOURCES.optional(), limit: pyInt().pipe(z.number().min(1).max(50)).default(25) }),
       queryObject(req.query), 'query');
-    if ([...q.q.trim()].length < MIN_QUERY) return [];
-    return catalogOf(req.ctx).search(q.q, q.limit, q.source ?? null, (hits) => knownCatalog(req.ctx.db, hits));
+    const text = [...q.q.trim()].slice(0, MAX_QUERY_CHARS).join(''); // a longer text is cut, not refused
+    if ([...text].length < MIN_QUERY) return [];
+    return catalogOf(req.ctx).search(text, q.limit, q.source ?? null, (hits) => knownCatalog(req.ctx.db, hits));
   }),
 
   // Store a catalogue item as a regular food (201), or return the food that already exists (200).

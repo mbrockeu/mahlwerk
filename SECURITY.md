@@ -25,7 +25,8 @@ maintainer, so replies may take a few days.
 - In `proxy` mode the service must be reachable only through the trusted reverse proxy, which has to remove or
   overwrite **`Remote-User`, `Remote-Name` and `Remote-Groups`** on every request. If `Remote-Groups` is not
   overwritten, any signed-in user can make themselves an admin by sending it. See the README for an nginx example.
-  **Access keys do not pass the proxy's sign-in:** someone removed at the proxy keeps working keys. Block them in the admin area
+  **Access keys are checked by Mahlwerk, not by the proxy:** someone removed at the proxy keeps working keys. A proxy route
+  that lets key requests (or an API path) through without its login must overwrite the three headers with empty values too. Block them in the admin area
   (keys stop, their name in the headers gets 403; works in every mode) or revoke all their keys and sessions there
   (`POST /api/v1/admin/users/{username}/revoke-access`). An admin cannot block themself.
 - The interactive API docs (`/docs`, `/redoc`, `/openapi.json`) list every route: they are off in every mode unless
@@ -39,9 +40,10 @@ maintainer, so replies may take a few days.
   inside), the check cannot know: leave the connector off or filter outgoing traffic at the network. **Hairpin NAT:** your own public name
   can lead back into the home network through the router, where it may meet permissions that go by address; the server's own names
   (`MAHLWERK_PUBLIC_URL`, `MAHLWERK_ALLOWED_HOSTS`) are blocked automatically and `MAHLWERK_WEB_RECIPES_BLOCKED_HOSTS` takes further ones (name and
-  subdomains): list all your domains before you switch the connector on. IP addresses are refused by the syntax check and, as names, by the
-  resolution check. The whole fetch of an address (name resolution, connection, TLS, headers, body, redirects) is cut off after 10 seconds; a
-  name resolution cannot be interrupted, so its thread lives on until the resolver answers (at most 8 such threads exist). The saved address
+  subdomains): list all your domains before you switch the connector on. A target whose resolved addresses include an address of one of the server's own names (`MAHLWERK_PUBLIC_URL` and `MAHLWERK_ALLOWED_HOSTS`, not the extra blocked names) is refused as well (also for webhooks, except hosts the admin listed as internal), so a foreign name pointing at your public IP does not get through; if an own name cannot be resolved because of a timeout or error, the target is refused (fails closed). IP addresses are refused by the syntax check and, as names, by the resolution check. The whole fetch of
+  an address (name resolution, connection, TLS, headers, body, redirects) is cut off after 10 seconds. Names are resolved with the DNS client
+  (not the system thread pool), at most two at a time (the server's own names have places of their own), each given up after 3 seconds and then cancelled; only after a
+  definitive "no such name" (never after a timeout) the system resolver is asked too. The saved address
   including its query is visible to the household: do not use links with personal tokens. Report bypasses privately.
 - **Photo recognition** (off by default) sends photos to an image model that the **operator** configures in the environment
   (`MAHLWERK_VISION_URL`, `MAHLWERK_VISION_MODEL`, optional `MAHLWERK_VISION_KEY`, and the same for a fallback model with `MAHLWERK_VISION_FALLBACK_*`). The address may be internal (a local model): nobody but the operator

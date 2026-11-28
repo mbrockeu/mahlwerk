@@ -8,6 +8,8 @@ const make = {
   web: (ctx: Ctx) => new Brake(() => ctx.now()),
   image: (ctx: Ctx) => new Brake(() => ctx.now(), 30, 120), // fetches of Cookidoo pictures
   upload: (ctx: Ctx) => new Brake(() => ctx.now(), 20, 200), // own photos
+  match: (ctx: Ctx) => new Brake(() => ctx.now(), 30, 100000), // pasted ingredient lists: 30 per person in 10 minutes
+  export: (ctx: Ctx) => new Brake(() => ctx.now(), 6, 100000), // personal data exports: 6 per person in 10 minutes
 } as const;
 
 export function brake(ctx: Ctx, name: keyof typeof make): Brake {

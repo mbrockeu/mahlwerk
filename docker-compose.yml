@@ -48,6 +48,7 @@ services:
     environment:
       MAHLWERK_DB: /data/mahlwerk.db
       MAHLWERK_WEB_DIR: /app/web
+      MAHLWERK_AUTH: ${MAHLWERK_AUTH:-local}
     volumes:
       - mahlwerk-data:/data
 

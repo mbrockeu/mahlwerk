@@ -18,6 +18,7 @@ ENV NODE_ENV=production \
     MAHLWERK_DB=/data/mahlwerk.db \
     MAHLWERK_WEB_DIR=/app/web \
     MAHLWERK_HOST=0.0.0.0 \
+    MAHLWERK_AUTH=local \
     MAHLWERK_PORT=8110
 
 WORKDIR /app/ts

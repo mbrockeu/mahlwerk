@@ -508,15 +508,33 @@ function expand(context: Set<string>): [Set<string>, boolean] {
   return [expanded, named];
 }
 
+/** Tokens of food names, kept for one request so that a name is split into words once, not once per search variant and line. */
+export type TokenMemo = Map<string, string[]>;
+const memoTokens = (memo: TokenMemo, name: string): string[] => {
+  let t = memo.get(name);
+  if (!t) memo.set(name, (t = tokensOf(name)));
+  return t;
+};
+
+/** Most catalogue searches (basic foods + packaged products) one request may make; further lines just get fewer suggestions. */
+export const CATALOG_BUDGET = 300;
+
+/** The catalogue, but answering nothing after `max` searches (one pasted list must not keep the server busy for long). */
+export function budgeted(catalog: CatalogSearch | undefined, max = CATALOG_BUDGET): CatalogSearch | undefined {
+  if (!catalog) return catalog;
+  let used = 0;
+  return { search: async (query, limit, source, skip) => (used++ >= max ? [] : catalog.search(query, limit, source, skip)) };
+}
+
 type Scored = { score: number; confident: boolean; credit: boolean; close: boolean };
 
 /** (score, confident, says the preparation of the line, close) of a food for the search words; smaller is better. null when a word does not occur
  * in any of the names. `close`: every search word is a whole word or the end of a compound of the name. `sure` false: the search words leave out
  * part of the line, so no food can be a confident match. */
-function score(ws: string[], names: string[], context: Set<string>, code: string | null, source: string, said: Set<string>, sure = true): Scored | null {
+function score(ws: string[], names: string[], context: Set<string>, code: string | null, source: string, said: Set<string>, sure = true, memo?: TokenMemo): Scored | null {
   let best: { score: number; confident: boolean; credit: boolean; close: boolean } | null = null;
   for (const name of names) {
-    const tokens = tokensOf(name);
+    const tokens = memo ? memoTokens(memo, name) : tokensOf(name);
     if (!tokens.length) continue;
     const classes = ws.map((w) => wordClass(w, tokens));
     if (classes.some((c) => c === null)) continue;
@@ -598,12 +616,12 @@ const fromItem = (item: CatalogHit, good = true): Candidate => ({
 
 type Skip = (hits: CatalogHit[]) => Promise<Set<string>>;
 
-async function packaged(catalog: CatalogSearch | undefined, tokens: string[], limit: number, skip: Skip | undefined, context: Set<string>, sure: boolean): Promise<Candidate[]> {
+async function packaged(catalog: CatalogSearch | undefined, tokens: string[], limit: number, skip: Skip | undefined, context: Set<string>, sure: boolean, memo?: TokenMemo): Promise<Candidate[]> {
   const query = tokens.join(' ');
   if (!catalog || [...query].length < 2) return [];
   const result: Candidate[] = [];
   for (const item of await catalog.search(query, limit, 'openfoodfacts', skip)) {
-    const hit = score(tokens, [item.name], context, item.code, 'openfoodfacts', new Set(), sure);
+    const hit = score(tokens, [item.name], context, item.code, 'openfoodfacts', new Set(), sure, memo);
     result.push(fromItem(item, hit !== null && hit.confident));
   }
   return result;
@@ -614,7 +632,7 @@ async function packaged(catalog: CatalogSearch | undefined, tokens: string[], li
  * ranked together by `score`; packaged products come only after those, and alone only when nothing else was found. `context` is the whole line
  * (what it says about the preparation); `canned` says the line is about a can. `catalog` may be missing. `eaten` (food id -> {count, last}, the
  * person's diary of the last days): a stored food eaten lately whose name holds every word of the line comes first and counts as a confident match. */
-export async function candidates(name: string, ownFoods: OwnFood[], catalog: CatalogSearch | undefined, skip?: Skip, context = '', canned = false, eaten?: Eaten | null): Promise<Candidate[]> {
+export async function candidates(name: string, ownFoods: OwnFood[], catalog: CatalogSearch | undefined, skip?: Skip, context = '', canned = false, eaten?: Eaten | null, memo: TokenMemo = new Map()): Promise<Candidate[]> {
   let contextWords = new Set(tokensOf(context));
   if (canned) { contextWords.add('konserve'); contextWords.add('canned'); }
   const said = new Set([...contextWords, ...[...PREPARED].filter((t) => [...t].length >= 5 && [...contextWords].some((c) => c.startsWith(t)))]); // "gebratenes" says "gebraten"
@@ -642,7 +660,7 @@ export async function candidates(name: string, ownFoods: OwnFood[], catalog: Cat
   const stored = (tokens: string[], position: number): [number, number, Candidate][] => {
     const found: [number, number, Candidate][] = [];
     ownFoods.forEach((food, index) => {
-      const hit = score(tokens, [food.data.name || ''], contextWords, food.code, food.source, said, sure[position]);
+      const hit = score(tokens, [food.data.name || ''], contextWords, food.code, food.source, said, sure[position], memo);
       if (hit === null) return;
       const candidate = fromFood(food, good(hit));
       let s = hit.score;
@@ -674,7 +692,7 @@ export async function candidates(name: string, ownFoods: OwnFood[], catalog: Cat
     if (catalog && [...tokens.join(' ')].length >= 2) {
       const items = await catalog.search(tokens.join(' '), BASIC_POOL, 'bls', skip);
       items.forEach((item, i) => {
-        const hit = score(tokens, [item.name, item.name_en || ''], contextWords, item.code, 'bls', said, sure[position]);
+        const hit = score(tokens, [item.name, item.name_en || ''], contextWords, item.code, 'bls', said, sure[position], memo);
         if (hit !== null) scored.push([hit.score, ownFoods.length + i, fromItem(item, good(hit))]);
       });
     }
@@ -682,14 +700,14 @@ export async function candidates(name: string, ownFoods: OwnFood[], catalog: Cat
       const found = scored.sort(byScore).slice(0, MAX_CANDIDATES).map((r) => r[2]);
       if (loose) for (const c of found) c.good = false;
       if (found.length < MAX_CANDIDATES && !found[0].good) { // packaged products only where the basic foods give no confident answer
-        found.push(...await packaged(catalog, tokens, MAX_CANDIDATES - found.length, skip, contextWords, sure[position]));
+        found.push(...await packaged(catalog, tokens, MAX_CANDIDATES - found.length, skip, contextWords, sure[position], memo));
       }
       return found;
     }
   }
   if (ownHits.length) return ownHits.sort(byScore).slice(0, MAX_CANDIDATES).map((r) => r[2]);
   for (let p = 0; p < steps.length; p++) {
-    const found = await packaged(catalog, steps[p], MAX_CANDIDATES, skip, contextWords, sure[p]);
+    const found = await packaged(catalog, steps[p], MAX_CANDIDATES, skip, contextWords, sure[p], memo);
     if (found.length) return found;
   }
   return [];

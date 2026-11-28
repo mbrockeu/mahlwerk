@@ -5,7 +5,7 @@
 // then sent to exactly the address that was checked (`OutRequest.address`), so a DNS answer that changes between the check
 // and the connection (DNS rebinding) gains nothing. A host the admin lists in the allowed webhook hosts may be internal.
 import type { Ctx } from './http.ts';
-import { outgoing } from './outgoing.ts';
+import { OutError, outgoing } from './outgoing.ts';
 import { urlsplit } from './urlsplit.ts';
 
 /** The target is not a public address (or cannot be resolved). */
@@ -120,9 +120,57 @@ export function isPublic(text: string): boolean {
   return !priv && !(loopback || inNet(addr, V6_LINK_LOCAL) || inNet(addr, V6_MULTICAST) || inAny(addr, V6_RESERVED) || addr.n === 0n);
 }
 
+const OWN_TTL_MS = 60_000;
+interface OwnState { cache: Map<string, { at: number; addrs: string[] }>; inflight: Map<string, Promise<string[]>> }
+const ownState = new WeakMap<object, OwnState>(); // per Outgoing, so stubs never share answers
+
+/** The addresses the server's own names resolve to. Answers (also "no such name") are cached for 60 s; a timeout or error is never remembered. Lookups of
+ * one name in flight are shared. A name that definitively does not exist (OutError `connect`) counts as no address (the name check in the
+ * callers still applies); a name that could not be resolved because of a timeout or error throws TargetNotAllowed: the check fails closed. */
+async function ownAddresses(ctx: Ctx, names: string[]): Promise<Set<string>> {
+  const out = outgoing(ctx);
+  let st = ownState.get(out);
+  if (!st) ownState.set(out, st = { cache: new Map(), inflight: new Map() });
+  const { cache, inflight } = st;
+  const ask = out.resolveOwn?.bind(out) ?? out.resolve.bind(out); // own places first: names chosen by users must not starve this check
+  const all = new Set<string>();
+  await Promise.all(names.map(async (name) => {
+    const hit = cache.get(name);
+    let addrs: string[];
+    if (hit && Date.now() - hit.at <= OWN_TTL_MS) addrs = hit.addrs;
+    else {
+      let p = inflight.get(name);
+      if (!p) {
+        p = ask(name, 443).then(
+          (r) => { if (r.length) cache.set(name, { at: Date.now(), addrs: r }); return r; },
+          (e) => {
+            // a definitive "no such name" is an answer too (remembered, so an unknown local name costs no lookup per fetch)
+            if (e instanceof OutError && e.kind === 'connect') { cache.set(name, { at: Date.now(), addrs: [] }); return []; }
+            console.warn(`netguard: own name ${name} could not be resolved, outgoing fetches are refused until it resolves again`);
+            throw new TargetNotAllowed('own name not resolvable');
+          },
+        ).finally(() => inflight.delete(name));
+        inflight.set(name, p);
+      }
+      addrs = await p;
+    }
+    for (const a of addrs) all.add(normalize(a));
+  }));
+  return all;
+}
+
+/** Same address in one spelling (IPv6 case/compression, IPv4-mapped), to compare answers of different names. */
+function normalize(text: string): string {
+  const a = parseAddress(text);
+  if (!a) return text.toLowerCase();
+  const v4 = a.v === 6 ? embeddedV4(a) : null;
+  return v4 && inNet(a, V6_MAPPED) ? `4:${v4.n}` : `${a.v}:${a.n}`;
+}
+
 /** The address to connect to. Throws TargetNotAllowed for a host that does not resolve or has any non-public address
- * (unless `allowInternal`, for hosts the admin listed). */
-export async function pickAddress(ctx: Ctx, host: string, port: number, allowInternal = false): Promise<string> {
+ * (unless `allowInternal`, for hosts the admin listed), or any address that one of the server's own names (`ownNames`) resolves
+ * to: a public name that is routed back to the server (WAN address, hairpin NAT) is refused even when the name is not listed. */
+export async function pickAddress(ctx: Ctx, host: string, port: number, allowInternal = false, ownNames: string[] = []): Promise<string> {
   let addresses: string[];
   try {
     addresses = await outgoing(ctx).resolve(host, port);
@@ -131,6 +179,10 @@ export async function pickAddress(ctx: Ctx, host: string, port: number, allowInt
   }
   if (!addresses.length) throw new TargetNotAllowed();
   if (!allowInternal && !addresses.every(isPublic)) throw new TargetNotAllowed();
+  if (ownNames.length) {
+    const own = await ownAddresses(ctx, ownNames);
+    if (addresses.some((a) => own.has(normalize(a)))) throw new TargetNotAllowed();
+  }
   return addresses[0]!;
 }
 

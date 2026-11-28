@@ -271,9 +271,21 @@ export interface Page { url: string; text: string; data: Uint8Array }
 /** Names that may not be fetched: MAHLWERK_WEB_RECIPES_BLOCKED_HOSTS, the host of MAHLWERK_PUBLIC_URL and the names in
  * MAHLWERK_ALLOWED_HOSTS (the server's own names). An entry blocks the name and all its subdomains. */
 export function blockedHosts(env: Record<string, string | undefined>): string[] {
-  const names: string[] = [...(env.MAHLWERK_WEB_RECIPES_BLOCKED_HOSTS ?? '').split(','), ...(env.MAHLWERK_ALLOWED_HOSTS ?? '').split(',')];
+  return normalizeNames([...(env.MAHLWERK_WEB_RECIPES_BLOCKED_HOSTS ?? '').split(','), ...ownNames(env)]);
+}
+
+/** Only the server's own names: the host of MAHLWERK_PUBLIC_URL and the names in MAHLWERK_ALLOWED_HOSTS. Their addresses are compared
+ * with the addresses of a target (pickAddress); the other blocked names stay name-only blocks. */
+export function ownHosts(env: Record<string, string | undefined>): string[] { return normalizeNames(ownNames(env)); }
+
+function ownNames(env: Record<string, string | undefined>): string[] {
+  const names: string[] = (env.MAHLWERK_ALLOWED_HOSTS ?? '').split(',');
   const pub = (env.MAHLWERK_PUBLIC_URL ?? '').trim();
   if (pub) { try { names.push(urlsplit(pub).hostname ?? ''); } catch { /* not a URL */ } }
+  return names;
+}
+
+function normalizeNames(names: string[]): string[] {
   const out: string[] = [];
   for (let name of names) {
     name = name.trim().toLowerCase().replace(/^\*+/, '').replace(/^\.+/, '').replace(/\.+$/, '');
@@ -339,7 +351,7 @@ export class Fetcher {
         let host: string, port: number;
         [current, host, port] = checkAddress(current);
         if (isBlocked(host, this.blocked())) throw new TargetNotAllowed();
-        ip = await pickAddress(this.ctx, host, port); // throws TargetNotAllowed unless every address is public
+        ip = await pickAddress(this.ctx, host, port, false, ownHosts(this.ctx.env)); // throws TargetNotAllowed unless every address is public
       } catch {
         throw new FetchFailed('target');
       }
@@ -481,7 +493,7 @@ export function cleanText(input: unknown, limit = MAX_LINE): string {
   if (isObj(value)) value = value.name || value['@value'] || '';
   if (typeof value === 'number') value = String(value);
   if (typeof value !== 'string') return '';
-  let text = unescapeHtml(cut(value, limit * 8).replace(/<[^>]{0,300}>/g, ' '));
+  let text = unescapeHtml(cut(value, limit * 8).replace(/<[^<>]{0,300}>/g, ' '));
   text = chars(text).filter((c) => !CONTROL.test(c) || '\n\t '.includes(c)).join('');
   return cut(text.split(/\s+/).filter(Boolean).join(' '), limit);
 }

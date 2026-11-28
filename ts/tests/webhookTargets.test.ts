@@ -1,6 +1,7 @@
 // Who may have webhooks and where they may go (finding S4 of the review of 22.11.): never to the server's own names (not even
 // when an admin lists them), and not for guests; a guest's old hooks stay quiet.
 import assert from 'node:assert/strict';
+import { isIP } from 'node:net';
 import { after, test } from 'node:test';
 import type { Outgoing, OutRequest } from '../core/outgoing.ts';
 import { dispatcher } from '../core/webhooks.ts';
@@ -10,12 +11,12 @@ import { makeWorld, type World } from './cookidooHarness.ts';
 const worlds: World[] = [];
 after(async () => { for (const w of worlds) { dispatcher(w.ctx).stop(); await w.close(); } });
 
-/** Every name resolves to one public address; every POST is recorded and answered with 200. */
+/** Every name resolves to one public address (the server's own names to another one, as in a real setup); every POST is recorded and answered with 200. */
 function receiver() {
   const seen: OutRequest[] = [];
   const out: Outgoing = {
     async fetch(_purpose, req) { seen.push(req); return { status: 200, headers: {}, body: new Uint8Array() }; },
-    async resolve() { return ['93.184.216.34']; },
+    async resolve(host) { if (isIP(host)) return [host]; return /(^|\.)(mahlwerk|food)\.example\.(org|net)$/.test(host) ? ['93.184.216.99'] : ['93.184.216.34']; },
   };
   return { out, seen };
 }
@@ -76,4 +77,11 @@ test('guests have no webhooks, and the hooks they made as household members stay
 
 test('IPv6 literals in the own names are compared without brackets and port', () => {
   assert.deepEqual(blockedHosts({ MAHLWERK_ALLOWED_HOSTS: '[::1]:8110,[fd00::5],Food.Example:443' }), ['::1', 'fd00::5', 'food.example']);
+});
+
+test('a name that resolves to the address of an own name is no webhook target', async () => {
+  const { w } = await world();
+  w.ctx.services.out = { ...receiver().out, async resolve(host: string) { if (isIP(host)) return [host]; return /^(sneaky|mahlwerk|food)\.example\.(com|org|net)$/.test(host) ? ['93.184.216.99'] : ['93.184.216.34']; } };
+  assert.equal((await w.ann.post('/api/v1/me/webhooks', hook('https://sneaky.example.com/in'))).status, 422);
+  assert.equal((await w.ann.post('/api/v1/me/webhooks', hook('https://hooks.example.com/in'))).status, 201);
 });

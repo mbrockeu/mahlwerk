@@ -34,6 +34,8 @@ export const RECIPE_CACHE_MAX = 200;
 export const AUTH_COOLDOWN = 300; // after a failed sign-in no new attempt for this long
 export const FAIL_LIMIT: [number, number] = [5, 3600]; // refused sign-ins tolerated per account holder per hour
 export const LOGIN_LIMIT: [number, number] = [20, 3600]; // sign-in attempts per hour for all accounts together
+export const PERSON_LOGIN_LIMIT: [number, number] = [8, 3600]; // sign-ins the person triggered directly (new/changed account, "check the connection") per own account per hour
+export const SHARED_LOGIN_RESERVE = 5; // of LOGIN_LIMIT, only the shared household account may use these; own accounts stop short of them
 export const LOGIN_GAP = 30; // a new sign-in after a refusal, and two "check the connection" in a row, are held back this long
 export const CALL_LIMIT: [number, number] = [30, 300]; // at most 30 calls to Cookidoo in 300 seconds for each account
 export const GLOBAL_CALL_LIMIT: [number, number] = [120, 300]; // and for all accounts together
@@ -60,6 +62,7 @@ export const MESSAGES: Record<string, string> = {
   unavailable: 'Cookidoo is not reachable',
   unexpected: 'Cookidoo answered in an unexpected way (the unofficial interface may have changed)',
   busy: 'too many requests to Cookidoo, try again in a minute',
+  person: 'too many sign-in checks for your Cookidoo account, try again in an hour',
   wait: 'a sign-in was tried a moment ago, wait half a minute before the next try',
   locked: 'too many refused sign-ins within the last hour, no new try for now (change nothing and wait)',
   gone: 'the account was changed or removed meanwhile, try again',
@@ -280,6 +283,7 @@ class AccountState {
   blockedUntil = 0.0;
   lastFail = -1e12; // when a sign-in of this account was refused
   lastCheck = -1e12; // when "check the connection" signed in last
+  directLogin = true; // the next sign-in was triggered by the person (first one, changed account, check) and counts for their budget; idle drops and evictions do not
   lastError: string | null = null;
   lastUsed = 0.0;
   gen = 0; // bumped whenever the account is changed or forgotten: an older answer is then not cached
@@ -313,6 +317,7 @@ export class Hub {
   // account nor the eviction of an idle account forgets them
   private fails = new Map<string, number[]>();
   private logins: number[] = [];
+  private personLogins = new Map<string, number[]>(); // sign-ins per own account (the shared account has no such budget)
 
   constructor(opts: HubOptions) { this.factory = opts.factory; this.clock = opts.clock; }
 
@@ -372,6 +377,7 @@ export class Hub {
       account.recipes.clear();
       account.blockedUntil = 0.0;
       account.lastError = null;
+      account.directLogin = true;
     }
     account.settings = access.settings;
     this.accounts.delete(access.key); // move to the end
@@ -391,10 +397,32 @@ export class Hub {
     }
   }
 
-  private checkLoginAllowed(key: string, now: number): void {
+  private checkLoginAllowed(key: string, now: number, direct: boolean): void {
     const fails = this.fails.get(key);
     if (fails !== undefined && recent(fails, FAIL_LIMIT[1], now) >= FAIL_LIMIT[0]) throw new CookidooError('locked');
-    if (recent(this.logins, LOGIN_LIMIT[1], now) >= LOGIN_LIMIT[0]) throw new CookidooError('busy');
+    const shared = key === SHARED;
+    // own accounts leave part of the server-wide pool to the household account, so they cannot use it up for the household
+    const pool = shared ? LOGIN_LIMIT[0] : Math.max(0, LOGIN_LIMIT[0] - SHARED_LOGIN_RESERVE);
+    if (recent(this.logins, LOGIN_LIMIT[1], now) >= pool) throw new CookidooError('busy');
+    if (!shared && direct) {
+      const own = this.personLogins.get(key);
+      if (own !== undefined && recent(own, PERSON_LOGIN_LIMIT[1], now) >= PERSON_LOGIN_LIMIT[0]) throw new CookidooError('person');
+    }
+  }
+
+  private forgiveLogin(key: string): void {
+    this.personLogins.get(key)?.pop();
+  }
+
+  private noteLogin(key: string, now: number, direct: boolean): void {
+    this.logins.push(now);
+    if (key === SHARED || !direct) return;
+    let own = this.personLogins.get(key);
+    if (own === undefined) this.personLogins.set(key, (own = []));
+    own.push(now);
+    if (this.personLogins.size > 5000) { // bounded: forget the holders whose sign-ins are all out of the window
+      for (const [k, list] of this.personLogins) if (recent(list, PERSON_LOGIN_LIMIT[1], now) === 0) this.personLogins.delete(k);
+    }
   }
 
   private noteRefusal(key: string, now: number): void {
@@ -414,13 +442,16 @@ export class Hub {
     const gen = account.gen;
     if (settings === null) throw new CookidooError('gone');
     if (account.client === null) {
-      this.checkLoginAllowed(account.key, now);
+      this.checkLoginAllowed(account.key, now, account.directLogin);
       if (now - account.lastFail < LOGIN_GAP) throw new CookidooError('wait'); // new credentials after a refusal: not at once
     }
     this.reserveCall(account, bulk);
+    let signedIn = false; // this call made a new sign-in that counted for the person's budget
     if (account.client === null) {
       await this.makeRoom(account);
-      this.logins.push(now);
+      signedIn = account.directLogin && account.key !== SHARED;
+      this.noteLogin(account.key, now, account.directLogin);
+      account.directLogin = false;
       account.client = this.factory(settings);
     }
     const client = account.client;
@@ -440,6 +471,7 @@ export class Hub {
             account.lastFail = this.clock();
             account.blockedUntil = this.clock() + AUTH_COOLDOWN;
             this.noteRefusal(account.key, this.clock());
+            if (signedIn) this.forgiveLogin(account.key); // refusals have their own brake (FAIL_LIMIT); the budget is for sign-ins that worked
             await this.drop(account);
           }
         }
@@ -506,6 +538,7 @@ export class Hub {
       const now = this.clock();
       if (now - account.lastCheck < LOGIN_GAP) throw new CookidooError('wait');
       account.lastCheck = now;
+      account.directLogin = true; // the person asked for this sign-in
       await this.drop(account);
       await this.run(account, (c) => c.ping());
     });
@@ -519,6 +552,7 @@ export class Hub {
       await this.drop(account);
       account.gen += 1;
       account.settings = null;
+      account.directLogin = true;
       account.lists.clear();
       account.recipes.clear();
       account.blockedUntil = 0.0;

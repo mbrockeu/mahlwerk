@@ -59,7 +59,7 @@ export const routes: Route[] = [
     const wait = brake(req.ctx, 'upload').allow(req.user!.id); // at most 20 photos per person in 10 minutes
     if (wait) throw new HttpError(429, 'too many photos lately, try again in a few minutes', { 'Retry-After': String(wait) });
     try {
-      await images(req).attach(foodId, data, 'own', null);
+      await images(req).attach(foodId, data, 'own', null, req.user!.id);
     } catch (e) {
       if (e instanceof ImageRejected) throw new HttpError(STATUS_OF[e.kind] ?? 422, e.message, e.kind === 'busy' ? { 'Retry-After': '5' } : undefined);
       if (e instanceof StoreError) throw new HttpError(507, e.message);

@@ -112,14 +112,53 @@ test('the global call limit covers all accounts', async () => {
   assert.equal(await kind(hub.recipe(access('user:9', 9), 'r100009')), 'busy');
 });
 
-test('at most 20 sign-ins an hour for all accounts together', async () => {
+test('at most 20 sign-ins an hour for all accounts together; 5 of them are kept for the shared account', async () => {
   const { hub, built, clock } = setup();
-  for (let n = 0; n < 20; n++) await hub.week(access(`user:${n}`, n));
+  for (let n = 0; n < 15; n++) await hub.week(access(`user:${n}`, n)); // own accounts stop at 15 ...
   assert.equal(await kind(hub.week(access('user:99', 99))), 'busy');
   await hub.week(access('user:3', 3)); // an existing sign-in needs no new attempt
+  for (let n = 0; n < 5; n++) { clock.now += 1; await hub.week(access('shared', 100 + n)); await hub.forget('shared'); } // ... the household account gets the rest
+  assert.equal(built.length, 20);
+  assert.equal(await kind(hub.week(access('shared', 200))), 'busy'); // 20 in the hour: nobody gets another
   clock.now += 3601;
   await hub.week(access('user:99', 99));
   assert.equal(built.length, 21);
+});
+
+test('an own account gets 8 direct sign-ins an hour (check); idle drops and evictions are not counted; the refusal says so', async () => {
+  const { hub, built, clock } = setup();
+  const a = access('user:1', 1);
+  for (let n = 0; n < 8; n++) { clock.now += LOGIN_GAP + 1; await hub.check(a); }
+  clock.now += LOGIN_GAP + 1;
+  assert.equal(await kind(hub.check(a)), 'person');
+  assert.match(MESSAGES.person!, /sign-in checks for your Cookidoo account/);
+  assert.equal(built.length, 8);
+  await hub.week(access('user:2', 2)); // another person has a budget of their own
+  await hub.week(access('shared', 3)); // the household account has none of this kind
+  clock.now += 3601;
+  await hub.check(a);
+  assert.equal(built.length, 11);
+});
+
+test('re-sign-ins after an idle drop do not use the per-person budget', async () => {
+  const { hub, built, clock } = setup();
+  const a = access('user:1', 1);
+  await hub.week(a); // the first sign-in counts (1)
+  for (let n = 0; n < 12; n++) { // idle drops by another account's use: never counted
+    clock.now += IDLE_SECONDS + 1;
+    await hub.week(access('shared', 50));
+    clock.now += 1;
+    assert.equal(await kind(hub.week(a)), 'ok');
+  }
+  assert.ok(built.length > 8);
+  const counted = (hub as unknown as { personLogins: Map<string, number[]> }).personLogins.get('user:1')!;
+  assert.equal(counted.length, 1);
+});
+
+test('own accounts cannot use up the pool: the shared account can still sign in', async () => {
+  const { hub } = setup();
+  for (let n = 0; n < 40; n++) await kind(hub.week(access(`user:${n}`, n)));
+  assert.equal(await kind(hub.week(access('shared', 1000))), 'ok');
 });
 
 test('five refusals an hour per holder lock the holder, changing the account does not help', async () => {

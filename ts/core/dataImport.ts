@@ -239,6 +239,12 @@ function canon(v: unknown): string {
 }
 const same = (a: unknown, b: unknown) => canon(a) === canon(b);
 const seconds = (s: string | null | undefined): number | null => (s ? Math.floor(Date.parse(s) / 1000) : null);
+/** A time of the file that says when something was made or changed: never later than now (a future time would make a row look newer
+ * than every later change, or fresh for ever). Uses the wall clock, not the run's: a file's times come from real clocks. */
+const past = (s: string | null | undefined): number | null => {
+  const t = seconds(s);
+  return t === null ? null : Math.min(t, Math.floor(Date.now() / 1000));
+};
 const parseJson = (s: string | null) => (s ? JSON.parse(s) : {});
 const asciiLower = (s: string) => s.replace(/[A-Z]/g, (c) => c.toLowerCase()); // COLLATE NOCASE
 const flag = (b: boolean | undefined) => (b ? 1 : 0);
@@ -291,9 +297,12 @@ async function importFoods(r: Run): Promise<Foods> {
     // an own one into (the routes give a guest's lookup to the household too)
     const sharedByGuest = x.source !== 'own' && !user.household;
     const data = foodView(x.data);
-    const changedAt = seconds(x.fetched_at) ?? r.now;
+    const changedAt = past(x.fetched_at) ?? r.now;
     const want = { source: x.source, data, piece_label: x.piece_label ?? null, piece_grams: x.piece_grams ?? null, drink: x.drink ?? null };
-    const row = (x.code ? local.code.get(x.code) : undefined) ?? (x.external_id ? local.ext.get(x.external_id) : undefined) ?? local.uid.get(x.uid);
+    // the id of a provider (bls:, web:, cookidoo:, yazio:) still matches an existing row, but a NEW own product of a guest is stored
+    // without it: that id is the key by which the household's catalogue, web and Cookidoo take-overs find their row
+    const externalId = x.external_id ?? null;
+    const row = (x.code ? local.code.get(x.code) : undefined) ?? (externalId ? local.ext.get(externalId) : undefined) ?? local.uid.get(x.uid);
     if (row) {
       m.byUid.set(x.uid, row.id);
       if (row.source === 'recipe') { skip(r, 'foods', 'recipe_food'); continue; }
@@ -321,7 +330,7 @@ async function importFoods(r: Run): Promise<Foods> {
     let id = m.nextFake--;
     if (r.write) {
       id = (await db.run('INSERT INTO food (uid, code, source, found, data, fetched_at, external_id, piece_label, piece_grams, drink, created_by) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)',
-        [newUid, x.code ?? null, x.source, toJson(data), changedAt, x.external_id ?? null, want.piece_label, want.piece_grams, want.drink === null ? null : flag(want.drink), owner])).lastId;
+        [newUid, x.code ?? null, x.source, toJson(data), changedAt, user.household ? externalId : null, want.piece_label, want.piece_grams, want.drink === null ? null : flag(want.drink), owner])).lastId;
     }
     if (newUid) m.takenUids.add(newUid);
     m.byUid.set(x.uid, id);
@@ -429,7 +438,7 @@ async function importRecipes(r: Run, m: Foods): Promise<void> {
     const row = x.uid ? byUid.get(x.uid) : byName.get(asciiLower(x.name ?? ''));
     const fileItems: [FileItem, number | null][] = x.items.map((i) => [i, itemFood(r, m, i, true)]);
     const data = { ...recipeFood(fileItems.map(([i]) => itemView(i)) as any, x.portions, x.total_weight ?? null), name: x.name };
-    const updated = seconds(x.updated_at) ?? r.now;
+    const updated = past(x.updated_at) ?? r.now;
     if (row) {
       if (x.food_uid) m.byUid.set(x.food_uid, row.food_id);
       const given = recipeFoodGiven(x);
@@ -440,7 +449,7 @@ async function importRecipes(r: Run, m: Foods): Promise<void> {
       if (isSample(parseJson(row.data))) { skip(r, 'recipes', 'demo'); continue; }
       if (same(have, want)) { count(r, 'recipes', 'unchanged'); continue; }
       if (!canEdit(user, row.food_owner ?? row.created_by)) { skip(r, 'recipes', 'not_editable'); continue; }
-      if (row.updated_at > (seconds(x.updated_at) ?? 0)) { skip(r, 'recipes', 'newer_here'); continue; } // changed here after the file's version
+      if (row.updated_at > (past(x.updated_at) ?? 0)) { skip(r, 'recipes', 'newer_here'); continue; } // changed here after the file's version
       count(r, 'recipes', 'changed');
       if (r.write) {
         const sets = given.map((k) => `, ${k} = ?`).join('');
@@ -479,6 +488,7 @@ async function importGroups(r: Run, m: Foods): Promise<void> {
     members.get(row.group_id)!.add(row.food_id);
   }
   const bySource = new Map(groups.filter((g) => g.source).map((g) => [g.source as string, g]));
+  const dismissed = new Set((await db.all('SELECT source FROM recipe_group_dismissed')).map((d) => d.source as string));
   const byName = new Map(groups.map((g) => [asciiLower(g.name), g]));
   const byUid = new Map(groups.filter((g) => g.uid).map((g) => [g.uid as string, g]));
   let position = Math.max(0, ...groups.map((g) => g.position as number));
@@ -490,7 +500,9 @@ async function importGroups(r: Run, m: Foods): Promise<void> {
       if (id !== undefined && recipeSources.has(m.source.get(id) ?? '')) wanted.push(id);
       else warn(r, 'group_members_unknown');
     }
-    const row = (g.source ? bySource.get(g.source) : undefined) ?? byName.get(asciiLower(g.name)) ?? byUid.get(g.uid);
+    // the collection binding (`source`) is the household's: a guest's group has none, and a collection the household took away stays so
+    const source = user.household && g.source && !dismissed.has(g.source) ? g.source : null;
+    const row = (source ? bySource.get(source) : undefined) ?? byName.get(asciiLower(g.name)) ?? byUid.get(g.uid);
     if (row) {
       const have = members.get(row.id) ?? new Set();
       const missing = wanted.filter((id) => !have.has(id));
@@ -513,7 +525,7 @@ async function importGroups(r: Run, m: Foods): Promise<void> {
     position++;
     if (r.write) {
       const id = (await db.run('INSERT INTO recipe_group (uid, name, position, source, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-        [byUid.has(g.uid) ? null : g.uid, g.name, position, g.source ?? null, user.id, seconds(g.created_at) ?? r.now])).lastId;
+        [byUid.has(g.uid) ? null : g.uid, g.name, position, source, user.id, past(g.created_at) ?? r.now])).lastId;
       for (const foodId of new Set(wanted)) await db.run('INSERT OR IGNORE INTO recipe_group_item (group_id, food_id) VALUES (?, ?)', [id, foodId]);
     }
     byName.set(asciiLower(g.name), { name: g.name });
@@ -552,7 +564,7 @@ async function importDiary(r: Run, m: Foods): Promise<void> {
   const find = matcher(rows);
   const fresh: unknown[][] = [];
   for (const e of f.diary) {
-    const created = seconds(e.logged_at);
+    const created = past(e.logged_at);
     const want = { day: e.day, meal: e.meal, amount: e.amount, unit: e.unit, name: e.name, brand: e.brand ?? null, per_100: e.per_100, extra: e.extra_per_100 ?? {} };
     const linked = Boolean(e.food_uid || e.food_code);
     const foodId = resolve(m, e.food_uid, e.food_code);
@@ -593,7 +605,7 @@ async function importTemplates(r: Run, m: Foods): Promise<void> {
   const find = matcher(rows);
   for (const t of f.templates) {
     const fileItems: [FileItem, number | null][] = t.items.map((i) => [i, itemFood(r, m, i, false)]);
-    const created = seconds(t.created_at);
+    const created = past(t.created_at);
     const row = find(t.uid);
     if (row === 'taken') { skip(r, 'templates', 'duplicate'); continue; }
     if (row) {
@@ -711,7 +723,7 @@ async function importGoal(r: Run): Promise<void> {
   const merged = new Map(hist.map((h) => [h.valid_from as string, { ...goalOf(h), changed_at: h.changed_at as number | null }]));
   const rows = f.goal_history.length || !f.goal ? f.goal_history : [{ valid_from: SINCE_START, ...f.goal, changed_at: null }];
   for (const h of rows) {
-    const want = { ...goalOf(h), changed_at: seconds(h.changed_at) };
+    const want = { ...goalOf(h), changed_at: past(h.changed_at) };
     const have = merged.get(h.valid_from);
     merged.set(h.valid_from, want);
     if (have && same(have, want)) { count(r, 'goal_history', 'unchanged'); continue; }
@@ -780,7 +792,7 @@ async function importBadges(r: Run): Promise<void> {
     if (!(BADGE_CODES as readonly string[]).includes(b.code)) { skip(r, 'badges', 'unknown'); continue; }
     if (have.has(b.code)) { count(r, 'badges', 'unchanged'); continue; }
     count(r, 'badges', 'new');
-    if (r.write) await db.run('INSERT INTO badge_earned (user_id, code, earned_at, seen, demo) VALUES (?, ?, ?, 1, 0)', [user.id, b.code, seconds(b.earned_at) ?? r.now]);
+    if (r.write) await db.run('INSERT INTO badge_earned (user_id, code, earned_at, seen, demo) VALUES (?, ?, ?, 1, 0)', [user.id, b.code, past(b.earned_at) ?? r.now]);
   }
 }
 

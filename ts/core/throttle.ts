@@ -10,6 +10,10 @@
 // about one per second per name is the ceiling however many addresses the attacker has. The right password is always checked
 // and always lets the owner in; the worst they see is a short wait (if the queue of checks for the name is full they get 429).
 //
+// Attempts that are still being checked (the scrypt run waits in a queue) count as failures that have not been recorded yet: an
+// attempt may start only while recorded failures + attempts in flight stay within FREE for its address and pair, and a name with
+// that many in flight is under pressure. So a burst of concurrent guesses is held back like the same guesses one after the other.
+//
 // The state lives in the memory of this process: a restart forgets it. The clock is injectable so that tests do not sleep.
 
 export const FREE = 4; // failures without delay
@@ -52,18 +56,43 @@ export class LoginThrottle {
   sleep: (seconds: number) => Promise<void>;
   private state = new Map<string, State>();
   private names = new Map<string, Turn>();
+  private pending = new Map<string, number>(); // attempts in flight per key (address, pair, 'n:' + name)
 
   constructor(clock: () => number, sleep: (seconds: number) => Promise<void> = (s) => new Promise((r) => setTimeout(r, s * 1000))) {
     this.clock = clock;
     this.sleep = sleep;
   }
 
-  /** Seconds the caller must still wait (0 = may try). */
+  /** Seconds the caller must still wait (0 = may try). Attempts in flight count as failures not recorded yet. */
   wait(...keys: string[]): number {
     const now = this.clock();
     let left = 0;
-    for (const k of keys) { const s = this.state.get(k); if (s) left = Math.max(left, s[1] - now); }
+    for (const k of keys) {
+      const s = this.state.get(k);
+      if (s) left = Math.max(left, s[1] - now);
+      const flying = this.pending.get(k) ?? 0;
+      if (flying > 0) {
+        const recorded = s && now - s[2] <= FORGET_AFTER ? s[0] : 0;
+        if (recorded + flying > FREE) left = Math.max(left, Math.min(MAX_DELAY, 2 ** (recorded + flying - FREE)));
+      }
+    }
     return Math.max(0, Math.trunc(left) + (left > Math.trunc(left) ? 1 : 0));
+  }
+
+  /** An attempt starts (call it right after `wait` said yes, before anything is awaited). The returned function ends it; call it
+   * once the outcome is recorded (`fail` / `success`), in a `finally`. Safe to call more than once. */
+  begin(keys: string[], name?: string): () => void {
+    const all = name === undefined ? keys : [...keys, 'n:' + name];
+    for (const k of all) this.pending.set(k, (this.pending.get(k) ?? 0) + 1);
+    let ended = false;
+    return () => {
+      if (ended) return;
+      ended = true;
+      for (const k of all) {
+        const n = (this.pending.get(k) ?? 0) - 1;
+        if (n > 0) this.pending.set(k, n); else this.pending.delete(k);
+      }
+    };
   }
 
   private bump(key: string, now: number, block: boolean): void {
@@ -92,7 +121,8 @@ export class LoginThrottle {
   underPressure(name: string): boolean {
     const now = this.clock();
     const state = this.state.get('n:' + name);
-    return state !== undefined && state[0] >= PRESSURE_AFTER && now - state[2] <= PRESSURE_WINDOW;
+    const recorded = state !== undefined && now - state[2] <= PRESSURE_WINDOW ? state[0] : 0;
+    return recorded + (this.pending.get('n:' + name) ?? 0) >= PRESSURE_AFTER;
   }
 
   /** The lock that serialises the checks of one name under pressure. */

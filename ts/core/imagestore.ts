@@ -22,4 +22,8 @@ export interface ImageFiles {
   /** Delete files no food refers to (older than an hour) and old temporary files; at most `limit`. Returns how many. */
   sweep(referenced: Set<string>, limit?: number): Promise<number>;
   sweepDue(): boolean;
+  /** The folder-wide limit in bytes, and the bytes the files of one picture take (0 when missing): both let RecipeImages bound what one
+   * person's own pictures may take. A store without them has no per-person bound. */
+  maxBytes?: number;
+  bytes?(digest: string): Promise<number>;
 }

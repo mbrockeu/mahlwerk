@@ -169,24 +169,29 @@ export const routes: Route[] = [
     const body = parse(login, req.body);
     const [address, pair, name] = brake(req, body.username);
     const { throttle, hasher } = authState(ctx);
-    const pressure = throttle.underPressure(name);
-    const turn = pressure ? throttle.nameTurn(name) : null;
-    if (turn !== null && !(await turn.acquire(QUEUE_WAIT))) throw new HttpError(429, 'too many attempts for this user name, try again in a moment', { 'Retry-After': '5' });
     let row;
+    const pressure = throttle.underPressure(name); // attempts of this name that are still being checked count too
+    const end = throttle.begin([address, pair], name); // in flight until the outcome is recorded: a burst is held back like a sequence
     try {
-      row = await localUser(ctx.db, name);
-      if (row !== undefined && isReservedName(row.username)) row = undefined; // the demo account has no password and nobody signs in as it
-      // an unknown name still costs one scrypt run, so timing does not tell it apart from a wrong password
-      const ok = await hasher.verify(body.password, row ? row.password_hash : null);
-      if (row === undefined || !ok || row.disabled) { // a blocked account answers like a wrong password
-        throttle.fail([address, pair], name);
-        if (pressure) await throttle.sleep(PRESSURE_DELAY);
-        throw new HttpError(401, GENERIC);
+      const turn = pressure ? throttle.nameTurn(name) : null;
+      if (turn !== null && !(await turn.acquire(QUEUE_WAIT))) throw new HttpError(429, 'too many attempts for this user name, try again in a moment', { 'Retry-After': '5' });
+      try {
+        row = await localUser(ctx.db, name);
+        if (row !== undefined && isReservedName(row.username)) row = undefined; // the demo account has no password and nobody signs in as it
+        // an unknown name still costs one scrypt run, so timing does not tell it apart from a wrong password
+        const ok = await hasher.verify(body.password, row ? row.password_hash : null);
+        if (row === undefined || !ok || row.disabled) { // a blocked account answers like a wrong password
+          throttle.fail([address, pair], name);
+          if (pressure) await throttle.sleep(PRESSURE_DELAY);
+          throw new HttpError(401, GENERIC);
+        }
+      } finally {
+        if (turn !== null) turn.release();
       }
+      throttle.success(pair); // the address keeps its count: one's own login must not wipe a guessing run
     } finally {
-      if (turn !== null) turn.release();
+      end();
     }
-    throttle.success(pair); // the address keeps its count: one's own login must not wipe a guessing run
     if (hasher.needsRehash(row.password_hash)) await setPassword(ctx.db, row.id, await hasher.hash(body.password));
     await startSession(req, row.id);
     return account({ username: row.username, display_name: await effectiveName(ctx, row.id, row.display_name, row.username), is_admin: Boolean(row.local_admin) });

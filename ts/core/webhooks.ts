@@ -14,7 +14,7 @@ import {
   getWebhook, hooksForEvent, pruneDeliveries, startDelivery, updateDelivery, webhookById, type Hook,
 } from './store/webhooks.ts';
 import { urlsplit } from './urlsplit.ts';
-import { blockedHosts, isBlocked } from './webrecipes.ts';
+import { blockedHosts, isBlocked, ownHosts } from './webrecipes.ts';
 
 export const PING = 'ping';
 const TIMEOUT = 5.0;
@@ -64,7 +64,8 @@ export async function target(ctx: Ctx, url: string, host: string | null): Promis
   try {
     const parts = urlsplit(url);
     const port = parts.port || (url.toLowerCase().startsWith('https') ? 443 : 80);
-    return await pickAddress(ctx, host!, port, await hostListed(ctx, host));
+    const listed = await hostListed(ctx, host);
+    return await pickAddress(ctx, host!, port, listed, listed ? [] : ownHosts(ctx.env));
   } catch {
     return false; // TargetNotAllowed, or a port that is no number (ValueError in Python)
   }
@@ -179,49 +180,74 @@ export class Dispatcher {
     });
   }
 
+  /** The hook as it is NOW, or why this delivery must not go out: the hook was removed or changed (disabled, no longer listening
+   * to the event), webhooks were switched off, or the owner is no guest-free household member any more. A hook that was asked
+   * for by id (the ping) needs neither to be enabled nor to listen to the event, as in `fanOut`. A failed lookup gives up too. */
+  private async current(hook: Hook, job: Job): Promise<Hook | string> {
+    try {
+      const { db } = this.ctx;
+      if (!(await featureOn(this.ctx, 'webhooks.enabled'))) return 'webhooks switched off';
+      const owner = await db.get<{ household: number; local_admin: number }>('SELECT household, local_admin FROM user WHERE id = ?', [job.user_id]);
+      if (!owner || !effectiveHousehold(configOf(this.ctx), Boolean(owner.household), Boolean(owner.local_admin))) return 'hook changed (owner is no household member)';
+      const live = await getWebhook(db, job.user_id, hook.id, true);
+      if (!live) return 'hook removed';
+      if (job.hook_id === null && (!live.enabled || !live.events.includes(job.event))) return 'hook changed';
+      return live;
+    } catch (e) {
+      console.error('webhook re-check failed', e);
+      return 'hook changed (could not be checked)';
+    }
+  }
+
   private async deliver(hook: Hook, deliveryId: number, job: Job): Promise<void> {
     const { db } = this.ctx;
     let status: number | null = null;
     let error: string | null = null;
     let attempts = 0;
     try {
-      const host = hostOf(hook.url);
       // json.dumps(separators=(",", ":"), ensure_ascii=False, allow_nan=False)
       const body = new TextEncoder().encode(JSON.stringify({
         event: job.event, occurred_at: new Date(job.at * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
         user: { username: job.username }, data: job.data,
       }, (_k, v) => { if (typeof v === 'number' && !Number.isFinite(v)) throw new RangeError('NaN'); return v; }));
-      const headers = {
-        'Content-Type': 'application/json', 'User-Agent': 'Mahlwerk-Webhook', 'X-Mahlwerk-Event': job.event,
-        'X-Mahlwerk-Delivery': String(deliveryId), 'X-Mahlwerk-Signature': await sign(hook.secret!, body),
-      };
-      const address = await target(this.ctx, hook.url, host);
-      if (address === false) error = 'target not allowed';
-      else {
-        while (attempts < MAX_ATTEMPTS && !this.stopped) {
-          attempts++;
-          status = null;
-          error = null;
-          try {
-            // one POST; redirects are not followed, environment proxies are not used; the connection goes to the address that was
-            // checked, Host and TLS keep the name of the URL
-            status = (await outgoing(this.ctx).fetch('webhook', { method: 'POST', url: hook.url, headers, body, timeout: this.timeout, address, maxBytes: MAX_ANSWER })).status;
-          } catch {
-            error = 'delivery failed'; // one text for every network problem: it must not tell a closed port from a filtered one or a timeout
-          }
-          if (status !== null) {
-            if (status >= 200 && status < 300) break;
-            error = `HTTP ${status}`;
-            if (status < 500 && status !== 429) break; // the receiver said no; asking again will not help
-          }
-          await updateDelivery(db, deliveryId, attempts, status, error, false);
-          if (attempts < MAX_ATTEMPTS) {
-            // the wait before the next try gives the place to others; the next try then waits for this person's next turn
-            this.release();
-            const stop = await this.sleep(this.backoff[Math.min(attempts - 1, this.backoff.length - 1)]!);
-            await this.slot(job.user_id, true);
-            if (stop) break;
-          }
+      let checkedUrl: string | null = null; // the URL `address` was resolved for
+      let address: string | false = false;
+      while (attempts < MAX_ATTEMPTS && !this.stopped) {
+        // The hook is read again right before EVERY attempt (the first one and each retry, once the place is won): what the owner
+        // or the admin changed while the delivery waited counts, the snapshot from fan-out time does not.
+        const live = await this.current(hook, job);
+        if (typeof live === 'string') { error = live; break; }
+        if (live.url !== checkedUrl) {
+          checkedUrl = live.url;
+          address = await target(this.ctx, live.url, hostOf(live.url));
+        }
+        if (address === false) { error = 'target not allowed'; break; }
+        attempts++;
+        status = null;
+        error = null;
+        try {
+          const headers = {
+            'Content-Type': 'application/json', 'User-Agent': 'Mahlwerk-Webhook', 'X-Mahlwerk-Event': job.event,
+            'X-Mahlwerk-Delivery': String(deliveryId), 'X-Mahlwerk-Signature': await sign(live.secret!, body),
+          };
+          // one POST; redirects are not followed, environment proxies are not used; the connection goes to the address that was
+          // checked, Host and TLS keep the name of the URL
+          status = (await outgoing(this.ctx).fetch('webhook', { method: 'POST', url: live.url, headers, body, timeout: this.timeout, address, maxBytes: MAX_ANSWER })).status;
+        } catch {
+          error = 'delivery failed'; // one text for every network problem: it must not tell a closed port from a filtered one or a timeout
+        }
+        if (status !== null) {
+          if (status >= 200 && status < 300) break;
+          error = `HTTP ${status}`;
+          if (status < 500 && status !== 429) break; // the receiver said no; asking again will not help
+        }
+        await updateDelivery(db, deliveryId, attempts, status, error, false);
+        if (attempts < MAX_ATTEMPTS) {
+          // the wait before the next try gives the place to others; the next try then waits for this person's next turn
+          this.release();
+          const stop = await this.sleep(this.backoff[Math.min(attempts - 1, this.backoff.length - 1)]!);
+          await this.slot(job.user_id, true);
+          if (stop) break;
         }
       }
     } catch (e) {

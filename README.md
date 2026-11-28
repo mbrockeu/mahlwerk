@@ -208,6 +208,19 @@ user can send `Remote-Groups: admin` themselves and become an admin. nginx examp
   ```
 
   **Access keys pass the proxy's sign-in** (a request with `Authorization: Bearer mw_...` is not a sign-in at the proxy).
+  If the proxy lets such requests (or an API path) through without its login, that route must overwrite the three
+  headers as well, with empty values: on a route where the proxy authenticated nobody, Mahlwerk would otherwise trust
+  whatever `Remote-User`/`Remote-Groups` the client sent, because the request still comes from the trusted proxy.
+
+  ```nginx
+  location @mahlwerk_key {                           # requests with "Authorization: Bearer mw_..." only
+      proxy_set_header Remote-User   "";
+      proxy_set_header Remote-Name   "";
+      proxy_set_header Remote-Groups "";
+      proxy_pass http://127.0.0.1:8110;
+  }
+  ```
+
   When you remove someone at the proxy, also block them in the admin area (their keys stop and their name in the headers
   is answered `403`) or revoke their access keys there ("Revoke keys and sessions").
 
@@ -430,7 +443,7 @@ All settings are environment variables (see `.env.example`); both servers read t
 | `MAHLWERK_CATALOG_DB` | `catalog.db` next to `MAHLWERK_DB` | Local Open Food Facts catalogue (see above). Optional; a missing file is an empty catalogue. |
 | `MAHLWERK_CATALOG_BLS_DB` | `catalog-bls.db` next to the file above | Local basic foods catalogue from the BLS (see above). Optional; a missing file is empty. |
 | `MAHLWERK_CONTACT` | – | Contact address sent to Open Food Facts in the User-Agent. |
-| `MAHLWERK_AUTH` | `single` | `single`: no login, one local user. `proxy`: trust the user name a reverse proxy sends. `local`: own accounts with passwords. `oidc`: sign in through an OpenID Connect provider, see its `MAHLWERK_OIDC_*` variables there. See [Authentication](#authentication). |
+| `MAHLWERK_AUTH` | `single` (the Docker images: `local`) | `single`: no login, one local user; only for a server reachable from this computer alone. `proxy`: trust the user name a reverse proxy sends. `local`: own accounts with passwords. `oidc`: sign in through an OpenID Connect provider, see its `MAHLWERK_OIDC_*` variables there. See [Authentication](#authentication). |
 | `MAHLWERK_COOKIE_SECURE` | off | `1` gives the session cookie of `local` mode the `Secure` flag even though the app sees plain HTTP (TLS proxy in front). Also set automatically for HTTPS requests. |
 | `MAHLWERK_SINGLE_USER` | `me` | User name in `single` mode. |
 | `MAHLWERK_TRUSTED_PROXIES` | empty | Comma-separated IPs of the proxies allowed to set the user header (`proxy` mode). Only the TCP peer address counts, never `X-Forwarded-For`. With an empty list every request is refused. In `local` mode it only decides whose `X-Forwarded-Proto` / last `X-Forwarded-For` entry is believed. |

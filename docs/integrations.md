@@ -16,7 +16,8 @@ Authorization: Bearer mw_...
 - Never put it in a URL. Query parameters are ignored.
 - It works in every auth mode and from any address, also when a reverse proxy normally authenticates the users
   (let the proxy pass `/api/` requests that carry an `Authorization: Bearer mw_` header through, or serve the API
-  on a path the proxy does not protect).
+  on a path the proxy does not protect). Such a route must still overwrite `Remote-User`, `Remote-Name` and
+  `Remote-Groups` with empty values, otherwise a client could send them itself (see the README).
 - `read` allows GET and HEAD only; anything else answers 403.
 - A key acts as its owner but can never create keys or webhooks and is never an admin.
 - Revoke it in the profile; a revoked, expired or unknown key answers 401. An admin can switch keys off for the whole
