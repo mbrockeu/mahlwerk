@@ -8,6 +8,10 @@ A self-hosted nutrition diary with barcode scanning: log meals in seconds, keep 
 > **Status: young project (version 0.x).** It works for a household, but expect rough edges and breaking changes.
 > See [Status and limits](#status-and-limits).
 
+**On the iPhone:** a beta of the iOS app is open for testing via TestFlight:
+[join the beta](https://testflight.apple.com/join/xTjZNPqJ). It keeps the diary on the phone and needs no server;
+it can also connect to your own Mahlwerk server.
+
 ## Screenshots
 
 The interface is available in German and English; the screenshots show invented demo data.
