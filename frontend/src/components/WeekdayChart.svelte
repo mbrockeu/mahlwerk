@@ -12,8 +12,10 @@
   let width = $state(320);
   const H = $derived(width > 380 ? 232 : 176);
   const PT = 30, PB = 24;
-  const maxVal = $derived(Math.max(...data.map((d) => d.kcal), goal ? goal.kcal * 1.1 : 0, 100));
+  const maxVal = $derived(Math.max(...data.map((d) => d.kcal), ...data.map((d) => (d.goal_kcal ?? 0) * 1.1), goal ? goal.kcal * 1.1 : 0, 100));
   const y = (v: number) => PT + (H - PT - PB) * (1 - v / maxVal);
+  // with a weekday goal each weekday has its own goal line, else one line runs over the whole chart
+  const perDay = $derived(data.some((d) => d.goal_kcal != null));
   const step = $derived(width / 7);
   const bw = $derived(Math.min(step * 0.58, 34));
   const aria = $derived(t('weekdaysAria', { list: data.map((d, i) => `${longNames[i]} ${d.logged_days ? fmt(Math.round(d.kcal)) : '–'}`).join(', ') }));
@@ -22,9 +24,10 @@
 <div bind:clientWidth={width}>
   <svg {width} height={H} viewBox="0 0 {width} {H}" role="img" aria-label={aria}>
     <path d="M0 {y(0)}H{width}" stroke="var(--hairline)" stroke-width="2" />
-    {#if goal}<path d="M0 {y(goal.kcal)}H{width}" stroke="var(--text)" stroke-width="2" stroke-dasharray="7 4" />{/if}
+    {#if goal && !perDay}<path d="M0 {y(goal.kcal)}H{width}" stroke="var(--text)" stroke-width="2" stroke-dasharray="7 4" />{/if}
     {#each data as d, i (d.weekday)}
       {@const cx = step * (i + 0.5)}
+      {#if perDay && d.goal_kcal != null}<path d="M{cx - step * 0.46} {y(d.goal_kcal)}H{cx + step * 0.46}" stroke="var(--text)" stroke-width="2" stroke-dasharray="5 3" />{/if}
       {#if d.logged_days > 0}
         <path d="M{cx} {y(0)}V{y(d.kcal)}" stroke={i >= 5 ? 'var(--series-dark)' : 'var(--bar)'} stroke-width={bw} stroke-dasharray="4 2" />
       {/if}

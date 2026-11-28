@@ -15,19 +15,22 @@
   import Toggle from '../components/Toggle.svelte';
   import { api, ApiError } from '../lib/api';
   import {
-    DEFAULT_GLASSES, GLASS_LIMITS, KCAL_LIMITS, MACRO_LIMITS, PRESETS, STEPS_LIMITS, WATER_LIMITS, alignCarbs, clamp, macroGap, macroShares, matchingPreset, presetMacros,
+    DEFAULT_ALT_WEEKDAYS, DEFAULT_GLASSES, GLASS_LIMITS, KCAL_LIMITS, MACRO_LIMITS, PRESETS, STEPS_LIMITS, WATER_LIMITS, alignCarbs, clamp, macroGap, macroShares, matchingPreset,
+    maskToWeekdays, presetMacros, scaleMacros, toggleWeekday, weekdaysToMask,
     type MacroKey, type PresetId,
   } from '../lib/goals';
   import { MAX_WORKOUTS_WEEK } from '../lib/training';
-  import { GOAL_SINCE_START, type GoalChange, type ImportBatch, type ImportInfo } from '../lib/types';
+  import { GOAL_SINCE_START, type DaysGoal, type GoalChange, type ImportBatch, type ImportInfo } from '../lib/types';
   import { fromDay } from '../lib/date';
   import { fmt, fmtDate, lang, langPref, setLangPref, t, type LangPref } from '../lib/i18n';
   import { setThemePref, theme, type ThemePref } from '../lib/theme.svelte';
   import { guard, navigate, profileHref, router, type ProfileSection } from '../lib/router.svelte';
   import { auth, changed, loadMe, resetTour, switchDemo, toast, ui, viewingDemo } from '../lib/store.svelte';
 
-  interface Draft { kcal: number; protein: number; carbs: number; fat: number; water: number; steps: number }
-  const DEFAULTS: Draft = { kcal: 2000, protein: 100, carbs: 250, fat: 65, water: 2000, steps: 8000 };
+  // altOn (0/1), altDays (a mask, bit 0 = Monday) and the alt* values are the goal "on certain days"; numbers only, so that the draft is compared and kept as one
+  interface Draft { kcal: number; protein: number; carbs: number; fat: number; water: number; steps: number; altOn: number; altDays: number; altKcal: number; altProtein: number; altCarbs: number; altFat: number }
+  const DEFAULTS: Draft = { kcal: 2000, protein: 100, carbs: 250, fat: 65, water: 2000, steps: 8000, altOn: 0, altDays: weekdaysToMask([...DEFAULT_ALT_WEEKDAYS]), altKcal: 2000, altProtein: 100, altCarbs: 250, altFat: 65 };
+  const ALT_KEYS: (keyof Draft)[] = ['altDays', 'altKcal', 'altProtein', 'altCarbs', 'altFat'];
 
   let draft = $state<Draft>({ ...DEFAULTS });
   let saved = $state<Draft>({ ...DEFAULTS });
@@ -35,11 +38,17 @@
   let loaded = $state(false);
   let saving = $state(false);
   let error = $state('');
-  let fieldError = $state<'' | 'kcal' | MacroKey | 'water' | 'steps'>('');
+  let fieldError = $state<'' | 'kcal' | MacroKey | 'water' | 'steps' | 'altKcal' | 'altMacro'>('');
+  let altNote = $state<'' | 'min' | 'max'>('');
+  // the weekday goal got its values (from the server or from the normal goal when it was first switched on): they are not filled in again
+  let altFilled = false;
   let calcOpen = $state(false);
   let leaving = $state<string | null>(null);
 
-  const dirty = $derived((Object.keys(draft) as (keyof Draft)[]).some((k) => draft[k] !== saved[k]));
+  const dirty = $derived((Object.keys(draft) as (keyof Draft)[]).some((k) => !(ALT_KEYS.includes(k) && !draft.altOn && !saved.altOn) && draft[k] !== saved[k]));
+  const altMacros = $derived({ protein: draft.altProtein, carbs: draft.altCarbs, fat: draft.altFat });
+  const altShares = $derived(macroShares(altMacros));
+  const altWeekdays = $derived(maskToWeekdays(draft.altDays));
   const showBar = $derived(loaded && (dirty || !hasGoal));
   const macros = $derived({ protein: draft.protein, carbs: draft.carbs, fat: draft.fat });
   const shares = $derived(macroShares(macros));
@@ -83,6 +92,7 @@
       sessionStorage.removeItem(DRAFT_KEY);
       const back = JSON.parse(raw) as Partial<Draft>;
       for (const key of Object.keys(DEFAULTS) as (keyof Draft)[]) if (typeof back[key] === 'number') draft[key] = back[key] as number;
+      if (draft.altOn) altFilled = true;
     } catch { /* an unreadable draft is ignored */ }
   }
 
@@ -154,7 +164,13 @@
       await loadMe();
       const g = ui.me?.goal;
       hasGoal = !!g;
-      const base: Draft = g ? { kcal: g.kcal, protein: g.protein, carbs: g.carbs, fat: g.fat, water: g.water_ml ?? DEFAULTS.water, steps: g.steps ?? DEFAULTS.steps } : { ...DEFAULTS };
+      const a = g?.days_goal;
+      altFilled = !!a;
+      const base: Draft = g
+        ? { kcal: g.kcal, protein: g.protein, carbs: g.carbs, fat: g.fat, water: g.water_ml ?? DEFAULTS.water, steps: g.steps ?? DEFAULTS.steps,
+          altOn: a ? 1 : 0, altDays: a ? weekdaysToMask(a.weekdays) : DEFAULTS.altDays,
+          altKcal: a?.kcal ?? g.kcal, altProtein: a?.protein ?? g.protein, altCarbs: a?.carbs ?? g.carbs, altFat: a?.fat ?? g.fat }
+        : { ...DEFAULTS };
       draft = { ...base };
       saved = { ...base };
       restoreDraft();
@@ -171,10 +187,40 @@
   });
 
   // ---- goals ----
+  /** The calorie buttons (also those of the weekday goal): the big and the small step each way. */
+  const KCAL_STEPS = [-50, -10, 10, 50];
   const setKcal = (v: number) => { draft.kcal = clamp(Math.round(v), KCAL_LIMITS.min, KCAL_LIMITS.max); fieldError = ''; };
   const setMacro = (k: MacroKey, v: number) => { draft[k] = clamp(v, MACRO_LIMITS.min, MACRO_LIMITS.max); fieldError = ''; };
   const setSteps = (v: number) => { draft.steps = clamp(Math.round(v), STEPS_LIMITS.min, STEPS_LIMITS.max); fieldError = ''; };
   const setWater = (v: number) => { draft.water = clamp(Math.round(v), WATER_LIMITS.min, WATER_LIMITS.max); fieldError = ''; };
+  const setAltKcal = (v: number) => { draft.altKcal = clamp(Math.round(v), KCAL_LIMITS.min, KCAL_LIMITS.max); fieldError = ''; };
+  const setAltMacro = (k: MacroKey, v: number) => {
+    const key = k === 'protein' ? 'altProtein' : k === 'carbs' ? 'altCarbs' : 'altFat';
+    draft[key] = clamp(v, MACRO_LIMITS.min, MACRO_LIMITS.max);
+    fieldError = '';
+  };
+  /** The switch: the first time the alternative goal starts as the normal one (kcal as it is, the macros scaled to it). */
+  function toggleAlt() {
+    altNote = '';
+    if (draft.altOn) { draft.altOn = 0; return; }
+    if (!altFilled) {
+      const m = scaleMacros({ kcal: draft.kcal, ...macros }, draft.kcal);
+      Object.assign(draft, { altKcal: draft.kcal, altProtein: m.protein, altCarbs: m.carbs, altFat: m.fat, altDays: weekdaysToMask([...DEFAULT_ALT_WEEKDAYS]) });
+      altFilled = true;
+    }
+    draft.altOn = 1;
+  }
+  /** One to six weekdays: the last one cannot be taken away and the seventh not added (for all days the normal goal is the goal). */
+  function pickDay(w: number) {
+    const next = maskToWeekdays(toggleWeekday(draft.altDays, w));
+    if (next.length < 1) { altNote = 'min'; return; }
+    if (next.length > 6) { altNote = 'max'; return; }
+    altNote = '';
+    draft.altDays = weekdaysToMask(next);
+  }
+  const dayShort = (w: number) => new Intl.DateTimeFormat(lang, { weekday: 'short' }).format(new Date(2025, 0, 5 + w, 12)).replace('.', '').slice(0, 2); // 2025-01-06 is a Monday
+  const dayLong = (w: number) => new Intl.DateTimeFormat(lang, { weekday: 'long' }).format(new Date(2025, 0, 5 + w, 12));
+  const daysText = (g: DaysGoal) => g.weekdays.map(dayShort).join(' · ');
   const applyPreset = (id: PresetId) => { Object.assign(draft, presetMacros(draft.kcal, id)); fieldError = ''; };
   function useSuggestion(kcal: number) {
     const was = matchingPreset(draft.kcal, macros);
@@ -189,7 +235,9 @@
     saving = true;
     error = '';
     try {
-      const goal = await api.setGoal({ kcal: draft.kcal, protein: draft.protein, carbs: draft.carbs, fat: draft.fat, water_ml: draft.water, steps: draft.steps });
+      const days_goal: DaysGoal | null = draft.altOn
+        ? { weekdays: altWeekdays, kcal: draft.altKcal, protein: draft.altProtein, carbs: draft.altCarbs, fat: draft.altFat } : null;
+      const goal = await api.setGoal({ kcal: draft.kcal, protein: draft.protein, carbs: draft.carbs, fat: draft.fat, water_ml: draft.water, steps: draft.steps, days_goal });
       if (ui.me) ui.me.goal = goal;
       saved = { ...draft };
       hasGoal = true;
@@ -429,8 +477,10 @@
           {#if fieldError === 'kcal'}<p class="err" role="alert">{t('goalBad')}</p>{/if}
           <KcalScale value={draft.kcal} onset={setKcal} />
           <div class="steps">
-            <button type="button" class="step minus" onclick={() => setKcal(draft.kcal - 50)} aria-label={t('gpMinusAria', { n: 50 })}>{t('gpMinus', { n: 50 })}</button>
-            <button type="button" class="step plus" onclick={() => setKcal(draft.kcal + 50)} aria-label={t('gpPlusAria', { n: 50 })}>{t('gpPlus', { n: 50 })}</button>
+            {#each KCAL_STEPS as n (n)}
+              <button type="button" class="step" class:minus={n < 0} class:plus={n > 0} onclick={() => setKcal(draft.kcal + n)}
+                aria-label={n < 0 ? t('gpMinusAria', { n: -n }) : t('gpPlusAria', { n })}>{n < 0 ? t('gpMinus', { n: -n }) : t('gpPlus', { n })}</button>
+            {/each}
           </div>
           <p class="hint">{t('gpScaleHint')}</p>
           <p class="hint">{t('gpFromToday')}</p>
@@ -482,6 +532,53 @@
             {/each}
           </div>
           <p class="note">{t('gpPresetNote')}</p>
+        </section>
+
+        <!-- a different goal on chosen weekdays -->
+        <section class="water alt" aria-labelledby="gp-alt">
+          <Toggle checked={!!draft.altOn} label={t('gpAltTitle')} sub={draft.altOn ? t('playOn') : t('playOff')} onchange={toggleAlt} />
+          <p id="gp-alt" class="sr-only">{t('gpAltTitle')}</p>
+          {#if draft.altOn}
+            <div class="adays" role="group" aria-label={t('gpAltDaysAria')}>
+              {#each [1, 2, 3, 4, 5, 6, 7] as w (w)}
+                <button type="button" class="chip dchip" class:on={altWeekdays.includes(w)} aria-pressed={altWeekdays.includes(w)} aria-label={dayLong(w)} onclick={() => pickDay(w)}>{dayShort(w)}</button>
+              {/each}
+            </div>
+            {#if altNote}<p class="note warn" role="alert">{t(altNote === 'min' ? 'gpAltDaysMin' : 'gpAltDaysMax')}</p>{/if}
+            <div class="top">
+              <span class="micro lab">{t('gpAltKcalLabel')}</span>
+              <span class="amt">
+                <NumField class="wv" value={draft.altKcal} min={KCAL_LIMITS.min} max={KCAL_LIMITS.max} label={t('gpAltKcalAria')}
+                  onset={setAltKcal} onbad={() => (fieldError = 'altKcal')} /> {t('gpAltKcalUnit')}
+              </span>
+            </div>
+            {#if fieldError === 'altKcal'}<p class="note warn" role="alert">{t('goalBad')}</p>{/if}
+            <div class="btns four">
+              {#each KCAL_STEPS as n (n)}
+                <button type="button" class={n < 0 ? 'minus' : 'add'} onclick={() => setAltKcal(draft.altKcal + n)}
+                  aria-label={t(n < 0 ? 'gpAltMinusAria' : 'gpAltPlusAria', { n: Math.abs(n) })}>{n < 0 ? t('gpMinus', { n: -n }) : t('gpPlus', { n })}</button>
+              {/each}
+            </div>
+            <div class="tiles">
+              {#each tiles as tile}
+                <div class="tile" style="background:{tile.bg}; border-radius:{tile.radius}; --track:{tile.track}">
+                  <span class="tl">{tile.label()}</span>
+                  <div class="gr display">
+                    <NumField value={altMacros[tile.key]} min={MACRO_LIMITS.min} max={MACRO_LIMITS.max} digits={1}
+                      label={t('gpAltGrams', { name: tile.label() })} onset={(v) => setAltMacro(tile.key, v)} onbad={() => (fieldError = 'altMacro')} />
+                    <span class="mono unit">g</span>
+                  </div>
+                  <span class="mono pct">{t('gpShare', { n: altShares[tile.key] })}</span>
+                  <div class="pm">
+                    <button type="button" onclick={() => setAltMacro(tile.key, altMacros[tile.key] - 5)} aria-label={t('gpAltGramsLess', { name: tile.label() })}>−</button>
+                    <button type="button" onclick={() => setAltMacro(tile.key, altMacros[tile.key] + 5)} aria-label={t('gpAltGramsMore', { name: tile.label() })}>+</button>
+                  </div>
+                </div>
+              {/each}
+            </div>
+            {#if fieldError === 'altMacro'}<p class="note warn" role="alert">{t('goalBad')}</p>{/if}
+          {/if}
+          <p class="note">{t('gpAltText')}</p>
         </section>
 
         <!-- water -->
@@ -547,10 +644,11 @@
             <h3 id="gp-hist" class="micro quiet">{t('gpHistTitle')}</h3>
             <ul>
               {#each goalHistory as h, i (h.valid_from)}
-                <li aria-label={t('gpHistAria', { from: histFrom(h), kcal: fmt(h.kcal), p: fmt(h.protein), c: fmt(h.carbs), f: fmt(h.fat) })}>
+                <li aria-label={t('gpHistAria', { from: histFrom(h), kcal: fmt(h.kcal), p: fmt(h.protein), c: fmt(h.carbs), f: fmt(h.fat) }) + (h.days_goal ? `. ${t('gpHistAltAria', { days: h.days_goal.weekdays.map(dayLong).join(', '), kcal: fmt(h.days_goal.kcal) })}` : '')}>
                   <span class="when">{histFrom(h)}{#if i === 0 && goalHistory.length > 1}<small class="now">{t('gpHistNow')}</small>{/if}</span>
                   <span class="mono kc">{fmt(h.kcal)} kcal</span>
                   <span class="mono mac" aria-hidden="true">{fmt(h.protein)} · {fmt(h.carbs)} · {fmt(h.fat)} g</span>
+                  {#if h.days_goal}<span class="mono alt">{t('gpHistAlt', { days: daysText(h.days_goal), kcal: fmt(h.days_goal.kcal) })}</span>{/if}
                 </li>
               {/each}
             </ul>
@@ -830,8 +928,9 @@
   .bigrow :global(.big:focus-visible) { border-bottom-color: var(--lime); outline-offset: 6px; }
   .unit { font-size: 14px; font-weight: 500; color: var(--on-deep); }
   .err { color: #ffd9b0; font-size: 13px; }
-  .steps { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .step { min-height: 52px; border-radius: 26px 26px 26px 10px; font-family: var(--f-mono); font-weight: 600; font-size: 16px; }
+  .steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .step { min-height: 52px; padding: 0 2px; border-radius: 26px 26px 26px 10px; font-family: var(--f-mono); font-weight: 600; font-size: 16px; white-space: nowrap; }
+  @media (max-width: 299px) { .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .step.minus { background: var(--green-deep); color: #fff; border: 2px solid var(--green-tick); }
   .step.plus { background: var(--lime); color: var(--on-lime); }
   .step:active { transform: scale(0.97); }
@@ -877,6 +976,13 @@
   .btns button { min-height: 44px; border-radius: 22px 22px 22px 8px; font-weight: 600; font-size: 14px; white-space: nowrap; --focus: var(--focus-base); }
   @media (max-width: 299px) { .btns { flex-wrap: wrap; } .btns button { white-space: normal; padding-left: 10px; padding-right: 10px; } }
   .btns .add { flex: 1; background: var(--deep); color: var(--on-deep); }
+  /* the weekday goal: four calorie buttons side by side, as wide as they are */
+  .btns.four { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .btns.four button { padding: 0 2px; white-space: nowrap; font-family: var(--f-mono); font-size: 14px; }
+  @media (max-width: 299px) { .btns.four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .alt .adays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+  .alt .dchip { min-height: 44px; padding: 0 2px; justify-content: center; font-weight: 600; }
+  @media (max-width: 299px) { .alt .adays { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
   .btns .minus { padding: 0 18px; border: 2px solid var(--hairline); font-family: var(--f-mono); font-size: 13px; }
   .btns button:active { transform: scale(0.97); }
   .tg { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 2px solid var(--hairline); }
@@ -919,6 +1025,7 @@
   .hist .now { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 99px; background: var(--track); color: var(--text); }
   .hist .kc { text-align: right; font-weight: 600; }
   .hist .mac { grid-column: 1 / -1; font-size: 12.5px; color: var(--quiet); }
+  .hist .alt { grid-column: 1 / -1; font-size: 12.5px; color: var(--quiet); }
   .conn { display: flex; flex-direction: column; gap: 10px; }
   .ct { font-family: var(--f-display); font-weight: 800; font-size: 20px; letter-spacing: -0.02em; margin: 0; }
   .batch { display: flex; flex-direction: column; gap: 10px; }

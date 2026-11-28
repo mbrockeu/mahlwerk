@@ -1,6 +1,6 @@
 // API client. All paths are relative (`api/v1/...`) so the app works below any path prefix.
 import type {
-  Account, Combo, FoodPiece, ActivityDayOut, CookidooAccount, CookidooBulkPreview, CookidooBulkRun, CookidooBulkScope, CookidooPicturePreview, RecipeGroup, CookidooScope, YazioPreview, YazioRun, YazioState, AccessToken, AuthStatus, AccessTokenCreated, AdminOverview, AdminUser, DemoAccountState, Badges, CatalogItem, Connector, CookidooCollection, CookidooPlanDay, CookidooPreview, RefreshState, TokenScope, Webhook, WebhookCreated, WebhookDelivery, WebhookIn, FoodDetail, FoodList, FoodSort, Granularity, NutrientCurve, DemoResult, Day, Entry, Fast, Fasting, Food, FoodIn, Goal, GoalChange, HistoryDay, ImportBatch, ImportInfo, ImportMode, ImportPreview, ImportRemoved, ImportResult, Insights, LabelScan, Me, Meal, NutrientInfo, RecentFood, Recipe, RecipeIn, Review, Settings, SettingsPatch, SuggestFocus, Suggestions, Template, WebPreview, WebPreviewIn, WeightPoint, Workout, WorkoutIn, VisionMeal, VisionRecipe, VisionState, IngredientMatches,
+  Account, Combo, GoalSetting, FoodPiece, ActivityDayOut, CookidooAccount, CookidooBulkPreview, CookidooBulkRun, CookidooBulkScope, CookidooPicturePreview, RecipeGroup, CookidooScope, YazioPreview, YazioRun, YazioState, AccessToken, AuthStatus, AccessTokenCreated, AdminOverview, AdminUser, DemoAccountState, Badges, CatalogItem, Connector, CookidooCollection, CookidooPlanDay, CookidooPreview, RefreshState, TokenScope, Webhook, WebhookCreated, WebhookDelivery, WebhookIn, FoodDetail, FoodList, FoodSort, Granularity, NutrientCurve, DemoResult, Day, Entry, Fast, Fasting, Food, FoodIn, Goal, GoalChange, HistoryDay, ImportBatch, ImportInfo, ImportMode, ImportPreview, ImportRemoved, ImportResult, Insights, LabelScan, Me, Meal, NutrientInfo, RecentFood, Recipe, RecipeIn, Review, Settings, SettingsPatch, SuggestFocus, Suggestions, Template, WebPreview, WebPreviewIn, WeightPoint, Workout, WorkoutIn, VisionMeal, VisionRecipe, VisionState, IngredientMatches,
 } from './types';
 import { apiFetch } from './local';
 
@@ -93,7 +93,7 @@ export const api = {
   connectApp: (body: { challenge: string; challenge_method: 'S256'; device: string }) => request<{ redirect: string; expires_in: number }>('POST', 'connect/app', body),
   me: () => request<Me>('GET', 'me'),
   setDisplayName: (display_name: string | null) => request<Me>('PATCH', 'me', { display_name }),
-  setGoal: (goal: Goal) => request<Goal>('PUT', 'me/goal', goal),
+  setGoal: (goal: GoalSetting) => request<GoalSetting>('PUT', 'me/goal', goal),
   goalHistory: () => request<GoalChange[]>('GET', 'me/goal/history'),
   setSettings: (patch: SettingsPatch) => request<Settings>('PATCH', 'me/settings', patch),
   badges: () => request<Badges>('GET', 'badges'),

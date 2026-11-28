@@ -12,8 +12,9 @@ import { buildCookidoo } from './mockCookidoo';
 import { buildWebPages, interpretWeb, normaliseWeb, NO_RECIPE } from './mockWeb';
 import { rank as rankSuggestions } from './mockSuggest';
 import { mockMatch } from './mockIngredients';
-import type { DemoAccountState, ActivitySource, DayActivity, Workout, WorkoutIn, WorkoutKind, AccessToken, BadgeCode, Badges, Connector, RefreshState, Webhook, WebhookDelivery, WebhookIn, CatalogItem, Day, Entry, Extra, Food, FoodIn, Goal, GoalChange, ImportBatch, InsightFood, InsightDay, InsightMicro, Insights, NutrientCurve, Section, FoodStat, Meal, NutrientInfo, Per100, Recipe, RecipeGroup, RecipeIn, Review, SuggestFocus, Template, TopMetric } from './types';
+import type { GoalSetting, DemoAccountState, ActivitySource, DayActivity, Workout, WorkoutIn, WorkoutKind, AccessToken, BadgeCode, Badges, Connector, RefreshState, Webhook, WebhookDelivery, WebhookIn, CatalogItem, Day, Entry, Extra, Food, FoodIn, Goal, GoalChange, ImportBatch, InsightFood, InsightDay, InsightMicro, Insights, NutrientCurve, Section, FoodStat, Meal, NutrientInfo, Per100, Recipe, RecipeGroup, RecipeIn, Review, SuggestFocus, Template, TopMetric } from './types';
 import { GOAL_SINCE_START } from './types';
+import { goalForDay, goalFromHistory } from './goals';
 
 // the made-up foods follow the language of the interface: L(German, English)
 const L = (de: string, en: string) => (lang === 'en' ? en : de);
@@ -131,12 +132,16 @@ const basics: CatalogItem[] = [
 const adoptedBasics = new Map<string, number>();
 let catalogUpdatedAt = Math.floor(Date.now() / 1000) - 3 * 86400;
 
-let goal: Goal | null = new URLSearchParams(location.search).get('mock') === 'nogoal' ? null : { kcal: 2100, protein: 120, carbs: 230, fat: 70, water_ml: 2000, steps: 8000 };
+let goal: GoalSetting | null = new URLSearchParams(location.search).get('mock') === 'nogoal' ? null : { kcal: 2100, protein: 120, carbs: 230, fat: 70, water_ml: 2000, steps: 8000 };
 // the goal over time, newest first (like GET /me/goal/history): a change counts from its day on, earlier days keep theirs
 let goalHistory: GoalChange[] = goal ? [{ ...goal, valid_from: GOAL_SINCE_START, changed_at: null }] : [];
-/** Set the current goal and record it from today on (a second change on the same day overwrites that day). */
-function saveGoal(g: Goal) {
-  goal = g;
+/** Set the current goal and record it from today on (a second change on the same day overwrites that day). A weekday goal that is not
+ * sent stays, `null` removes it (like the server). */
+function saveGoal(g: GoalSetting) {
+  const { days_goal, ...plain } = g;
+  const kept = days_goal === undefined ? goal?.days_goal ?? null : days_goal;
+  goal = kept ? { ...plain, days_goal: kept } : plain;
+  g = goal;
   const day = today();
   goalHistory = [{ ...g, valid_from: day, changed_at: Math.floor(Date.now() / 1000) }, ...goalHistory.filter((h) => h.valid_from !== day)]
     .sort((a, b) => (a.valid_from < b.valid_from ? 1 : -1));
@@ -144,8 +149,7 @@ function saveGoal(g: Goal) {
 /** The goal that counted on day d: the latest change on or before it, before the first change the oldest. */
 function goalOn(d: string): Goal | null {
   if (!goal) return null;
-  const h = goalHistory.find((x) => x.valid_from <= d) ?? goalHistory[goalHistory.length - 1];
-  return h ? { kcal: h.kcal, protein: h.protein, carbs: h.carbs, fat: h.fat, water_ml: h.water_ml, steps: h.steps } : goal;
+  return goalFromHistory(goalHistory, d) ?? goalForDay(goal, d);
 }
 
 let nextEntryId = 1;
@@ -489,8 +493,11 @@ function baseInsights(from: string, to: string): Insights {
   averages.active_kcal = Math.round(mean(days.filter((d) => d.active_kcal != null).map((d) => d.active_kcal as number)));
   averages.workout_minutes = r1(days.reduce((a, d) => a + d.workout_minutes, 0) / Math.max(days.length, 1));
   const by_weekday = Array.from({ length: 7 }, (_, wd) => {
-    const xs = loggedDays.filter((d) => (fromDay(d).getDay() + 6) % 7 === wd).map((d) => totals.get(d)![ 'kcal' ]);
-    return { weekday: wd, logged_days: xs.length, kcal: r1(mean(xs)) };
+    const ds = loggedDays.filter((d) => (fromDay(d).getDay() + 6) % 7 === wd);
+    const xs = ds.map((d) => totals.get(d)![ 'kcal' ]);
+    // like the server: a goal line per weekday while the goal history holds a weekday goal
+    const own = goalHistory.some((h) => h.days_goal) && ds.length ? { goal_kcal: r1(mean(ds.map((d) => dayGoalKcal(d)!))) } : {};
+    return { weekday: wd, logged_days: xs.length, kcal: r1(mean(xs)), ...own };
   });
   const meals: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
   const mealSum = meals.reduce((s, m) => s + mealKcal[m], 0);
@@ -1465,7 +1472,7 @@ export async function mockRequest(method: string, path: string, body?: unknown, 
     if (existing) return clone(existing);
     return clone(addFood(item.name, item.brand, item.per_100, { extra: item.extra, code: item.code, source: 'openfoodfacts', unit: item.unit, quantity: item.quantity, serving_size: item.serving_size, serving_quantity: item.serving_quantity }));
   }
-  if (p === 'me/goal' && method === 'PUT') { saveGoal({ ...clone(body as Goal), water_ml: (body as Goal).water_ml ?? goal?.water_ml ?? 2000, steps: (body as Goal).steps ?? goal?.steps ?? 8000 }); return clone(goal); }
+  if (p === 'me/goal' && method === 'PUT') { saveGoal({ ...clone(body as GoalSetting), water_ml: (body as Goal).water_ml ?? goal?.water_ml ?? 2000, steps: (body as Goal).steps ?? goal?.steps ?? 8000 }); return clone(goal); }
   if (p === 'me/goal/history' && method === 'GET') return goal ? clone(goalHistory) : [];
   if ((r = m(/^activity\/(\d{4}-\d{2}-\d{2})$/)) && method === 'PUT') {
     const b = body as Partial<Pick<ActivityRow, 'steps' | 'active_kcal' | 'distance_m'>>;

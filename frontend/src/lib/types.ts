@@ -122,11 +122,26 @@ export interface Goal {
   steps: number;
 }
 
+/** The alternative goal of chosen weekdays ("an bestimmten Tagen anders"): kcal and macros only, water and steps stay the same. */
+export interface DaysGoal {
+  /** ISO weekdays, 1 = Monday ... 7 = Sunday, sorted, 1 to 6 of them. */
+  weekdays: number[];
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+/** The goal as the settings hold it: the normal goal and, when one is on, the alternative one (`days_goal`; the server leaves it out while off, a save sends `null` to remove it). */
+export interface GoalSetting extends Goal {
+  days_goal?: DaysGoal | null;
+}
+
 /** "Since the start": the goal that held before the history existed (or one an import brought). */
 export const GOAL_SINCE_START = '0001-01-01';
 
 /** One goal change (GET /me/goal/history, newest first): the goal from `valid_from` on until the next change. */
-export interface GoalChange extends Goal {
+export interface GoalChange extends GoalSetting {
   valid_from: string;
   /** Unix seconds; null for a goal saved before the history existed. */
   changed_at: number | null;
@@ -303,7 +318,7 @@ export interface Me {
   is_admin?: boolean;
   /** Member of the household (false: a guest, who changes only the foods, recipes and groups they made themself; absent: yes). */
   household?: boolean;
-  goal: Goal | null;
+  goal: GoalSetting | null;
   settings: Settings;
   demo: { available: boolean; entries: number; weights: number; water: number; activity?: number; workouts?: number };
   /** The built-in demo account: an admin may switch to it (`can_switch`); while switched, this answer is the demo account's (`viewing`). */
@@ -560,7 +575,8 @@ export interface Insights {
   previous?: { range: InsightRange; averages: Averages; adherence: Adherence | null; weight: InsightWeight | null; logged_days: number; series: Section[] } | null;
   deltas?: Record<DeltaKey, Delta | null> | null;
   averages: Averages;
-  by_weekday: { weekday: number; logged_days: number; kcal: number }[];
+  /** Mean kcal of the logged days of each weekday; `goal_kcal` (the mean calorie goal of those days) only while a weekday goal exists. */
+  by_weekday: { weekday: number; logged_days: number; kcal: number; goal_kcal?: number }[];
   by_meal: { meal: Meal; kcal: number; share: number }[];
   top_foods: Record<TopMetric, InsightFood[]>;
   weight: InsightWeight | null;

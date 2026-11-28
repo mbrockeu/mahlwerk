@@ -12,6 +12,10 @@ export const STEPS_LIMITS = { min: 1000, max: 50000, step: 500 } as const;
 export const SCALE = { min: 1200, max: 4000, step: 50 } as const;
 const KCAL_PER_G = { protein: 4, carbs: 4, fat: 9 } as const;
 
+/** The shape of the goals this file handles (types.ts cannot be imported: the tests run this file as it is). */
+export interface DaysGoalLike { weekdays: number[]; kcal: number; protein: number; carbs: number; fat: number }
+export interface GoalLike { kcal: number; protein: number; carbs: number; fat: number; water_ml: number; steps: number; days_goal?: DaysGoalLike | null }
+
 export type MacroKey = 'protein' | 'carbs' | 'fat';
 export interface Macros { protein: number; carbs: number; fat: number }
 
@@ -67,6 +71,43 @@ export function matchingPreset(kcal: number, m: Macros): PresetId | null {
     if (Math.abs(want.protein - m.protein) <= 2 && Math.abs(want.carbs - m.carbs) <= 2 && Math.abs(want.fat - m.fat) <= 2) return id;
   }
   return null;
+}
+
+// ---- a different goal on chosen weekdays ----
+
+/** ISO weekday of a "YYYY-MM-DD" day, 1 = Monday ... 7 = Sunday (no time zone involved). */
+export function isoWeekday(day: string): number {
+  const [y, m, d] = day.split('-').map(Number);
+  const dt = new Date(0);
+  dt.setUTCFullYear(y, m - 1, d);
+  return ((dt.getUTCDay() + 6) % 7) + 1;
+}
+
+/** The goal that counts on `day`: the alternative kcal and macros on the chosen weekdays, else the normal goal. Water and steps never differ. */
+export function goalForDay(goal: GoalLike, day: string) {
+  const { days_goal: alt, ...normal } = goal;
+  if (!alt || !alt.weekdays.includes(isoWeekday(day))) return normal;
+  return { ...normal, kcal: alt.kcal, protein: alt.protein, carbs: alt.carbs, fat: alt.fat };
+}
+
+/** The goal that counted on `day` from a history (newest first, each row from its `valid_from` on; before the oldest row the oldest counts). */
+export function goalFromHistory(history: (GoalLike & { valid_from: string })[], day: string) {
+  const row = history.find((h) => h.valid_from <= day) ?? history[history.length - 1];
+  return row ? goalForDay(row, day) : null;
+}
+
+/** Weekday chips <-> a bit mask (bit 0 = Monday ... bit 6 = Sunday), which the settings page keeps as a number. */
+export const weekdaysToMask = (weekdays: number[]) => weekdays.reduce((m, w) => m | (1 << (w - 1)), 0);
+export const maskToWeekdays = (mask: number) => [1, 2, 3, 4, 5, 6, 7].filter((w) => mask & (1 << (w - 1)));
+export const toggleWeekday = (mask: number, weekday: number) => mask ^ (1 << (weekday - 1));
+/** Preselected when the alternative goal is switched on the first time. */
+export const DEFAULT_ALT_WEEKDAYS: readonly number[] = [6, 7];
+
+/** The macros of a goal scaled to another calorie amount (proportionally, whole grams, within the limits). */
+export function scaleMacros(from: Macros & { kcal: number }, kcal: number): Macros {
+  const f = from.kcal > 0 ? kcal / from.kcal : 1;
+  const g = (v: number) => clamp(Math.round(v * f), MACRO_LIMITS.min, MACRO_LIMITS.max);
+  return { protein: g(from.protein), carbs: g(from.carbs), fat: g(from.fat) };
 }
 
 // ---- energy need ----
