@@ -29,7 +29,8 @@ const json = (a: { body: Uint8Array | null }) => JSON.parse(new TextDecoder().de
 const JSON_HEADERS = { 'content-type': 'application/json', 'x-mahlwerk-request': '1' };
 
 const v21Sql = readFileSync(new URL('../core/migrations/v21.sql', import.meta.url), 'utf8');
-const migrations = { 20: v21Sql };
+const v22Sql = readFileSync(new URL('../core/migrations/v22.sql', import.meta.url), 'utf8');
+const migrations = { 20: v21Sql, 21: v22Sql };
 /** The schema as sqlite_master holds it (tables, indexes, triggers in creation order) – what scripts/schema_sql.py writes. */
 const dump = (path: string): string => {
   const c = new DatabaseSync(path);
@@ -39,18 +40,20 @@ const dump = (path: string): string => {
   return rows.sort((a, b) => order[a.type]! - order[b.type]!).map((r) => `${r.sql};\n`).join('');
 };
 
-test('an empty database gets schema v21; v20 is migrated by the app, any other version is refused', async () => {
+test('an empty database gets schema v22; v20 and v21 are migrated by the app, any other version is refused', async () => {
   const native = fresh();
   const { ctx } = await openLocal({ bridge: native.bridge, schemaSql, migrations });
-  assert.equal((await ctx.db.get<any>('PRAGMA user_version'))!.user_version, 21);
+  assert.equal((await ctx.db.get<any>('PRAGMA user_version'))!.user_version, 22);
   await ctx.db.exec('PRAGMA user_version = 19');
   await assert.rejects(openLocal({ bridge: native.bridge, schemaSql, migrations }), SchemaMismatch);
   await ctx.db.exec('PRAGMA user_version = 20');
   await assert.rejects(openLocal({ bridge: native.bridge, schemaSql }), SchemaMismatch); // without the step (the server) v20 is refused
+  await ctx.db.exec('PRAGMA user_version = 23');
+  await assert.rejects(openLocal({ bridge: native.bridge, schemaSql, migrations }), SchemaMismatch); // a newer one too
   native.close();
 });
 
-test('a v20 database on the phone is migrated to exactly the schema of a new v21 one; rows and counts stay, every row gets its own uid', async () => {
+test('a v20 database on the phone is migrated to exactly the schema of a new v22 one; rows and counts stay, every row gets its own uid', async () => {
   const path = join(dir, 'v20.db');
   const c = new DatabaseSync(path);
   c.exec(`BEGIN; ${readFileSync(new URL('./fixtures/schema-v20.sql', import.meta.url), 'utf8')} PRAGMA user_version = 20; COMMIT;`);
@@ -70,11 +73,11 @@ test('a v20 database on the phone is migrated to exactly the schema of a new v21
   c.close();
   const native = nodeBridge({ main: path });
   const { ctx } = await openLocal({ bridge: native.bridge, schemaSql, migrations });
-  assert.equal((await ctx.db.get<any>('PRAGMA user_version'))!.user_version, 21);
+  assert.equal((await ctx.db.get<any>('PRAGMA user_version'))!.user_version, 22);
   native.close();
-  const freshPath = join(dir, 'v21.db');
+  const freshPath = join(dir, 'v22.db');
   const f = new DatabaseSync(freshPath);
-  f.exec(`BEGIN; ${schemaSql} PRAGMA user_version = 21; COMMIT;`);
+  f.exec(`BEGIN; ${schemaSql} PRAGMA user_version = 22; COMMIT;`);
   f.close();
   assert.equal(dump(path), dump(freshPath));
   const after = new DatabaseSync(path);
@@ -94,12 +97,35 @@ test('a v20 database on the phone is migrated to exactly the schema of a new v21
   b.exec(`BEGIN; ${readFileSync(new URL('./fixtures/schema-v20.sql', import.meta.url), 'utf8')} PRAGMA user_version = 20; COMMIT;`);
   b.close();
   const nb = nodeBridge({ main: broken });
-  await assert.rejects(openLocal({ bridge: nb.bridge, schemaSql, migrations: { 20: v21Sql + ' SELECT no_such_function();' } }));
+  await assert.rejects(openLocal({ bridge: nb.bridge, schemaSql, migrations: { 20: v21Sql + ' SELECT no_such_function();', 21: v22Sql } }));
   nb.close();
   const b2 = new DatabaseSync(broken);
   assert.equal((b2.prepare('PRAGMA user_version').get() as any).user_version, 20);
   assert.ok(!(b2.prepare('PRAGMA table_info(food)').all() as any[]).some((col) => col.name === 'uid'));
   b2.close();
+});
+
+test('a v21 database (goals without weekday goals) is migrated to exactly the schema of a new v22 one and its goals read as having no weekday goal', async () => {
+  const path = join(dir, 'v21.db');
+  const c = new DatabaseSync(path);
+  c.exec(`BEGIN; ${readFileSync(new URL('./fixtures/schema-v20.sql', import.meta.url), 'utf8')} ${v21Sql} PRAGMA user_version = 21; COMMIT;`);
+  c.exec(`INSERT INTO user (id, username, display_name, created_at) VALUES (1, 'me', 'Me', 1);
+    INSERT INTO goal (user_id, kcal, protein, carbs, fat, water_ml, steps) VALUES (1, 2000, 100, 250, 70, 2500, 9000);
+    INSERT INTO goal_history (user_id, valid_from, kcal, protein, carbs, fat, water_ml, steps, changed_at) VALUES (1, '0001-01-01', 1800, 90, 200, 60, 2000, 8000, NULL), (1, '2026-01-05', 2000, 100, 250, 70, 2500, 9000, 5);`);
+  c.close();
+  const native = nodeBridge({ main: path });
+  const { ctx } = await openLocal({ bridge: native.bridge, schemaSql, migrations });
+  assert.equal((await ctx.db.get<any>('PRAGMA user_version'))!.user_version, 22);
+  native.close();
+  const freshPath = join(dir, 'v22b.db');
+  const f = new DatabaseSync(freshPath);
+  f.exec(`BEGIN; ${schemaSql} PRAGMA user_version = 22; COMMIT;`);
+  f.close();
+  assert.equal(dump(path), dump(freshPath));
+  const after = new DatabaseSync(path);
+  assert.deepEqual(after.prepare('SELECT kcal, alt_days, alt_kcal, alt_protein, alt_carbs, alt_fat FROM goal').all().map((r) => ({ ...r })), [{ kcal: 2000, alt_days: 0, alt_kcal: null, alt_protein: null, alt_carbs: null, alt_fat: null }]);
+  assert.deepEqual(after.prepare('SELECT valid_from, kcal, alt_days FROM goal_history ORDER BY valid_from').all().map((r) => ({ ...r })), [{ valid_from: '0001-01-01', kcal: 1800, alt_days: 0 }, { valid_from: '2026-01-05', kcal: 2000, alt_days: 0 }]);
+  after.close();
 });
 
 test('a transaction holds back the statements of other callers and rolls back on error', async () => {

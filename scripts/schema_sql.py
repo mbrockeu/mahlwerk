@@ -19,11 +19,27 @@ def dump(path: str) -> str:
     return "".join(sql + ";\n" for _, sql in sorted(rows, key=lambda r: ORDER[r[0]]))
 
 
-def fresh() -> str:
+def ts_steps() -> list[Path]:
+    """The migrations only the TS side has (v22 on): the Python server stops at schema 21, the TS server goes on from there."""
+    steps = [p for p in (ROOT / "ts" / "core" / "migrations").glob("v*.sql") if int(p.stem[1:]) > 21]
+    return sorted(steps, key=lambda p: int(p.stem[1:]))
+
+
+def fresh(with_ts_steps: bool = True) -> str:
+    """The schema of a new database: the Python one, with the TS-only steps applied unless `with_ts_steps` is False."""
     from mahlwerk.db import Store
     with tempfile.TemporaryDirectory() as d:
-        Store(str(Path(d) / "fresh.db"))
-        return dump(str(Path(d) / "fresh.db"))
+        path = str(Path(d) / "fresh.db")
+        Store(path)
+        if with_ts_steps:
+            con = sqlite3.connect(path)
+            try:
+                for step in ts_steps():
+                    con.executescript(step.read_text())
+                con.commit()
+            finally:
+                con.close()
+        return dump(path)
 
 
 if __name__ == "__main__":

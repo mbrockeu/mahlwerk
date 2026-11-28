@@ -262,6 +262,7 @@ def _schema_sql():
 
 
 def test_the_ts_schema_is_the_schema_of_a_fresh_database():
+    # a fresh Python database plus the steps only the TS side has (ts/core/migrations/v22.sql: the weekday goals)
     assert (ROOT / "ts" / "core" / "schema.sql").read_text() == _schema_sql().fresh()
 
 
@@ -293,7 +294,7 @@ def test_version_20_database_gets_stable_ids_and_keeps_its_rows(tmp_path):
     Store(path)
     con = sqlite3.connect(path)
     assert con.execute("PRAGMA user_version").fetchone()[0] == 21
-    assert _schema_sql().dump(path) == _schema_sql().fresh()  # exactly the schema of a new database
+    assert _schema_sql().dump(path) == _schema_sql().fresh(with_ts_steps=False)  # exactly the schema of a new (Python) database
     for table in UID_TABLES:
         uids = [r[0] for r in con.execute(f"SELECT uid FROM {table}")]
         assert len(uids) == before[table] and all(re.fullmatch(r"[0-9a-f]{32}", u) for u in uids), table

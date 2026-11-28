@@ -1,6 +1,6 @@
 # Porting the backend to TypeScript – rules for every package
 
-Goal: the TS server answers `/api/v1` exactly like the Python server (src/mahlwerk) on the same SQLite file (schema v21).
+Goal: the TS server answers `/api/v1` exactly like the Python server (src/mahlwerk) on the same SQLite file (schema v22 here: `core/migrations/v22.sql`, the weekday goals, exists only on the TS side; the Python server stays at v21 and does not read a v22 file).
 The frontend and the iOS app must not notice which server answers. Since 0.4.0 the TS server is the main server; the Python server stays as a fallback
 on the same database and the same API, and its tests are the contract (a change to a route goes into both).
 

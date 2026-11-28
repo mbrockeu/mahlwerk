@@ -1,4 +1,4 @@
-// The server's schema step: a new file, v20 migrated to v21, older versions refused with a hint.
+// The server's schema step: a new file, v20 and v21 migrated to v22, older versions refused with a hint.
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -21,22 +21,23 @@ const makeDb = (name: string, v: number) => {
   return p;
 };
 
-test('a new file gets schema 21', async () => {
+test('a new file gets schema 22', async () => {
   const p = join(dir, 'new.db');
   await openServerSchema(openSqlite(p));
-  assert.equal(version(p), 21);
+  assert.equal(version(p), 22);
 });
 
-test('a v20 file is migrated to v21: uid columns exist and rows keep their data', async () => {
+test('a v20 file is migrated to v22: uid and weekday goal columns exist and rows keep their data', async () => {
   const p = makeDb('v20.db', 20);
   const c = new DatabaseSync(p);
   c.exec("INSERT INTO user (id, username, display_name, created_at) VALUES (1, 'me', 'Me', 1); INSERT INTO fast (id, user_id, started_at, target_hours) VALUES (1, 1, 1, 16);");
   c.close();
   await openServerSchema(openSqlite(p));
-  assert.equal(version(p), 21);
+  assert.equal(version(p), 22);
   const d = new DatabaseSync(p);
   const cols = (d.prepare("PRAGMA table_info('fast')").all() as any[]).map((r) => r.name);
   assert.ok(cols.includes('uid'));
+  for (const t of ['goal', 'goal_history']) assert.ok(['alt_days', 'alt_kcal', 'alt_protein', 'alt_carbs', 'alt_fat'].every((c) => (d.prepare(`PRAGMA table_info('${t}')`).all() as any[]).some((r) => r.name === c)), t);
   const row = d.prepare('SELECT uid, target_hours FROM fast').get() as any;
   assert.equal(row.target_hours, 16);
   assert.ok(typeof row.uid === 'string' && row.uid.length > 0);

@@ -1,0 +1,10 @@
+ALTER TABLE goal ADD COLUMN alt_days INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE goal ADD COLUMN alt_kcal REAL;
+ALTER TABLE goal ADD COLUMN alt_protein REAL;
+ALTER TABLE goal ADD COLUMN alt_carbs REAL;
+ALTER TABLE goal ADD COLUMN alt_fat REAL;
+ALTER TABLE goal_history ADD COLUMN alt_days INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE goal_history ADD COLUMN alt_kcal REAL;
+ALTER TABLE goal_history ADD COLUMN alt_protein REAL;
+ALTER TABLE goal_history ADD COLUMN alt_carbs REAL;
+ALTER TABLE goal_history ADD COLUMN alt_fat REAL;

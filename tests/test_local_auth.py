@@ -1,5 +1,6 @@
 """MAHLWERK_AUTH=local: own accounts, password sign-in, session cookie, brake, CSRF header, security headers."""
 
+import os
 import sqlite3
 import threading
 
@@ -392,7 +393,7 @@ def test_account_management_is_for_admins_only(browser, admin):
 
 def test_admin_overview_in_local_mode(admin):
     body = admin.get("/api/v1/admin/overview").json()
-    assert body["auth_mode"] == "local" and body["users"] == 1 and body["schema_version"] == 21
+    assert body["auth_mode"] == "local" and body["users"] == 1 and body["schema_version"] == (22 if os.environ.get("MAHLWERK_TS") else 21)  # the TS server is at 22 (weekday goals, ts/core/migrations/v22.sql)
 
 
 def test_create_user_checks(browser, admin):

@@ -16,14 +16,14 @@ export interface Db {
   close?(): void;
 }
 
-export const SCHEMA_VERSION = 21;
+export const SCHEMA_VERSION = 22;
 
 export class SchemaMismatch extends Error {}
 
 /** A new database gets the current schema; a database of that version is used as it is. Every other version is refused: migrations
  * stay with the Python server, so that a switch back and forth never meets a schema the other side does not know. The one exception is
  * `migrations` (only the app passes it: the database on the phone has no Python server): the SQL that takes version N to N + 1, keyed
- * by N; such steps run in one transaction each (core/migrations/v21.sql is the same text as db.py's V21_TABLES). */
+ * by N; such steps run in one transaction each (core/migrations/v21.sql is the same text as db.py's V21_TABLES; v22.sql, the weekday goals, exists only here). */
 export async function openSchema(db: Db, schemaSql: string, migrations: Record<number, string> = {}): Promise<void> {
   await db.exec('PRAGMA foreign_keys = OFF');
   let { user_version: version } = (await db.get<{ user_version: number }>('PRAGMA user_version'))!;

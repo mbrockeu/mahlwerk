@@ -33,7 +33,7 @@ CREATE TABLE goal (
     protein  REAL NOT NULL,
     carbs    REAL NOT NULL,
     fat      REAL NOT NULL
-, water_ml INTEGER, import_id INTEGER, steps INTEGER);
+, water_ml INTEGER, import_id INTEGER, steps INTEGER, alt_days INTEGER NOT NULL DEFAULT 0, alt_kcal REAL, alt_protein REAL, alt_carbs REAL, alt_fat REAL);
 CREATE TABLE weight (
     user_id  INTEGER NOT NULL REFERENCES user(id),
     day      TEXT NOT NULL,
@@ -226,7 +226,7 @@ CREATE TABLE goal_history (
     fat         REAL NOT NULL,
     water_ml    INTEGER,
     steps       INTEGER,
-    changed_at  INTEGER,
+    changed_at  INTEGER, alt_days INTEGER NOT NULL DEFAULT 0, alt_kcal REAL, alt_protein REAL, alt_carbs REAL, alt_fat REAL,
     PRIMARY KEY (user_id, valid_from)
 );
 CREATE TABLE sleep_day (
