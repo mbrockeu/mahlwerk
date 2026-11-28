@@ -22,6 +22,9 @@ const SMALL_BODY = 64 * 1024; // an unread body up to this size (by Content-Leng
 // At most MAX_UPLOADS are read at the same time on the server; one more gets a 429.
 const UPLOAD = 1024 * 1024;
 const MAX_UPLOADS = 2;
+// A body that stops arriving for this long is given up (408), so a client that sends slowly cannot keep a slot until Node's
+// five-minute request timeout; one person holds at most one of the slots.
+const BODY_IDLE_SECONDS = 20;
 
 class Refused extends Error {
   status: number;
@@ -73,6 +76,8 @@ export function makeApp(ctx: Ctx, routes: Route[] = ROUTES) {
   }
 
   let uploads = 0; // large bodies being read now (see MAX_UPLOADS)
+  const uploaders = new Set<number>(); // the people whose large body is being read (one each)
+  const idleSeconds = Number(ctx.env.MAHLWERK_BODY_IDLE_SECONDS) > 0 ? Number(ctx.env.MAHLWERK_BODY_IDLE_SECONDS) : BODY_IDLE_SECONDS;
 
   return async function handle(nreq: IncomingMessage, nres: ServerResponse, peer?: string, scheme?: string): Promise<void> {
     let res: Res;
@@ -81,6 +86,7 @@ export function makeApp(ctx: Ctx, routes: Route[] = ROUTES) {
     let checked = false; // a write under /api/: its body is read only for a request that reaches its handler
     let declared: number | null = null; // the Content-Length, if sent
     let bodyRead = false;
+    let gaveUp = false; // reading the body failed (408, cut off): the connection ends with the answer
     try {
       await ready;
       // the request target as sent, like uvicorn: no WHATWG parsing (it reads `//x/api/…` as host x and path /api/…, and folds
@@ -105,9 +111,12 @@ export function makeApp(ctx: Ctx, routes: Route[] = ROUTES) {
       // CSRF header, 401/403, no such route) never makes the server hold its body. A large one also needs one of MAX_UPLOADS slots.
       const load = async () => {
         const large = limit > UPLOAD && !(declared !== null && declared <= UPLOAD);
-        if (large && uploads >= MAX_UPLOADS) throw new HttpError(429, 'too many uploads at the same time, try again in a moment', { 'Retry-After': '5' });
-        if (large) uploads++;
-        try { req.raw = await readBody(nreq, limit); } finally { if (large) uploads--; }
+        const who = req.user?.id ?? null;
+        if (large && (uploads >= MAX_UPLOADS || (who !== null && uploaders.has(who)))) {
+          throw new HttpError(429, 'too many uploads at the same time, try again in a moment', { 'Retry-After': '5' });
+        }
+        if (large) { uploads++; if (who !== null) uploaders.add(who); }
+        try { req.raw = await readBody(nreq, limit, idleSeconds); } catch (e) { gaveUp = true; throw e; } finally { if (large) { uploads--; if (who !== null) uploaders.delete(who); } }
         bodyRead = true;
       };
       res = await dispatch(req, () => bodyOf(req.raw ?? EMPTY, type)(), checked ? load : undefined);
@@ -119,7 +128,7 @@ export function makeApp(ctx: Ctx, routes: Route[] = ROUTES) {
     }
     if (!plain) res = { ...res, headers: withSecurityHeaders(res.headers, path, await csp) };
     // a body that was not read and may be large is not waited for: the connection ends with the answer (a small one is drained)
-    const unread = checked && !bodyRead && !plain && !(declared !== null && declared <= SMALL_BODY);
+    const unread = checked && !bodyRead && !plain && (gaveUp || !(declared !== null && declared <= SMALL_BODY));
     if (unread) res = { ...res, headers: { ...res.headers, connection: 'close' } };
     try {
       write(nres, res, nreq.method === 'HEAD');
@@ -148,11 +157,21 @@ function checkDeclared(declared: string | undefined, limit: number): number | nu
 
 /** Reads the body, counting the bytes of a streamed body as they arrive (413 as soon as the limit is passed). Settles when the client
  * goes away in the middle, so an aborted upload never keeps its slot. */
-function readBody(req: IncomingMessage, limit: number): Promise<Buffer> {
+function readBody(req: IncomingMessage, limit: number, idleSeconds: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const parts: Buffer[] = [];
     let seen = 0;
+    let idle: NodeJS.Timeout | undefined;
+    const quiet = () => {
+      clearTimeout(idle);
+      idle = setTimeout(() => { req.removeAllListeners('data'); reject(new HttpError(408, 'the request body stopped arriving')); }, idleSeconds * 1000);
+    };
+    quiet();
+    const settle = <T>(f: (v: T) => void) => (v: T) => { clearTimeout(idle); f(v); };
+    resolve = settle(resolve);
+    reject = settle(reject);
     req.on('data', (c: Buffer) => {
+      quiet();
       seen += c.length;
       if (seen > limit) { req.removeAllListeners('data'); reject(new Refused(413, limit)); return; }
       parts.push(c);

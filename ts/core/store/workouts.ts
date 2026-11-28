@@ -210,7 +210,8 @@ export async function healthSync(db: Db, userId: number, days: SyncDay[], overwr
       'ON CONFLICT(user_id, day) DO UPDATE SET minutes = excluded.minutes, source = excluded.source, demo = excluded.demo');
     const workoutCols = ['day', 'started_at', 'kind', 'name', 'minutes', 'kcal', 'distance_m'];
     // new ones first in the order of the call (their ids follow that order, as with one insert each), then the updates
-    const order = [...newWorkouts, ...[...dirty.workout].filter((x) => !newWorkouts.includes(x))];
+    const fresh = new Set(newWorkouts); // a Set: a first sync can bring 20,000 workouts, includes() would be quadratic
+    const order = [...newWorkouts, ...[...dirty.workout].filter((x) => !fresh.has(x))];
     await insertMany(con, `INSERT INTO workout (user_id, external_id, ${workoutCols.join(', ')}, source, created_at)`, `(?, ?, ${workoutCols.map(() => '?').join(', ')}, 'health', ?)`,
       order.map((x) => { const r = workoutRows.get(x)!; return [userId, x, ...workoutCols.map((c) => r[c]), now]; }),
       `ON CONFLICT(user_id, external_id) WHERE external_id IS NOT NULL DO UPDATE SET ${workoutCols.map((c) => `${c} = excluded.${c}`).join(', ')}, source = 'health', import_id = NULL, demo = 0`);

@@ -46,7 +46,7 @@ test('at most two large uploads are read at the same time; an aborted one frees 
   const first = start(w, big, 1024, 'ann');
   const second = start(w, big, 1024, 'ben');
   await new Promise((r) => setTimeout(r, 300)); // both are past the sign-in and reading their bodies
-  const third = start(w, big, 1024, 'ann');
+  const third = start(w, big, 1024, 'cara'); // somebody else: both slots are taken
   const head = await within(third.answer, 3000);
   third.socket.destroy();
   assert.match(String(head), /^HTTP\/1\.1 429 /);
@@ -59,4 +59,25 @@ test('at most two large uploads are read at the same time; an aborted one frees 
   await new Promise((r) => setTimeout(r, 300));
   const res = await fetch(`http://127.0.0.1:${w.port}${PREVIEW}`, { method: 'POST', body: new Uint8Array(big), headers: { 'remote-user': 'ann', 'x-mahlwerk-request': '1', 'content-type': 'application/octet-stream' } });
   assert.equal(res.status, 422); // read in full and refused by the import (no export), not 429
+});
+
+test('one person holds at most one upload slot, and a body that stops arriving gives its slot up', async () => {
+  const w = await makeWorld({ on: false, env: { MAHLWERK_BODY_IDLE_SECONDS: '1' } });
+  worlds.push(w);
+  const big = 2 * 1024 * 1024;
+  const first = start(w, big, 1024, 'ann');
+  await new Promise((r) => setTimeout(r, 300));
+  const again = start(w, big, 1024, 'ann'); // the same person a second time: refused, the other slot stays free for others
+  assert.match(String(await within(again.answer, 3000)), /^HTTP\/1\.1 429 /);
+  again.socket.destroy();
+  const other = start(w, big, 1024, 'ben');
+  await new Promise((r) => setTimeout(r, 300));
+  // both now stop sending: after the idle time each gets 408 and its slot is free again
+  const [a, b] = await Promise.all([within(first.answer, 4000), within(other.answer, 4000)]);
+  assert.match(String(a), /^HTTP\/1\.1 408 /);
+  assert.match(String(b), /^HTTP\/1\.1 408 /);
+  first.socket.destroy();
+  other.socket.destroy();
+  const res = await fetch(`http://127.0.0.1:${w.port}${PREVIEW}`, { method: 'POST', body: new Uint8Array(big), headers: { 'remote-user': 'ann', 'x-mahlwerk-request': '1', 'content-type': 'application/octet-stream' } });
+  assert.equal(res.status, 422);
 });

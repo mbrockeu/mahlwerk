@@ -456,6 +456,7 @@ All settings are environment variables (see `.env.example`); both servers read t
 | `MAHLWERK_COOKIDOO` | off | `on` / `off` fixes the Cookidoo connector switch (the admin area shows it as fixed). Without it the admin decides; default off. |
 | `MAHLWERK_COOKIDOO_IMAGES` | off | `on` / `off` fixes the switch "Store recipe pictures" of the Cookidoo connector. Without it the admin decides; default off. |
 | `MAHLWERK_WEB_RECIPES_IMAGES` | off | The same for recipes from web pages. |
+| `MAHLWERK_BODY_IDLE_SECONDS` | `20` | A request body that stops arriving for this long is given up with 408, so a slow sender cannot hold one of the two upload places. Each person holds at most one of them. |
 | `MAHLWERK_IMAGES_MAX_MB` | `1024` | Upper limit for the recipe pictures folder (`<database>.images` next to the database), in MB. A picture that would not fit is refused with a clear message. |
 | `MAHLWERK_COOKIDOO_PERSONAL` | on | `off` forbids people to add an own Cookidoo account in their profile (fixed, the admin area shows it as such). |
 | `MAHLWERK_COOKIDOO_EMAIL`, `MAHLWERK_COOKIDOO_PASSWORD` | – | The shared household Cookidoo account. If set they win over an account stored in the admin area, which then shows "set by the environment" and cannot be changed there. Never shown anywhere. |

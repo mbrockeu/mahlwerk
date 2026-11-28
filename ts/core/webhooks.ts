@@ -21,6 +21,10 @@ const TIMEOUT = 5.0;
 const MAX_ATTEMPTS = 3;
 const BACKOFF = [2.0, 10.0]; // seconds to wait before the second and the third try
 const POOL = 4;
+/** Deliveries of one person that may wait for a free place; beyond that new ones are dropped (a backlog that a slow receiver
+ * cannot work off in reasonable time anyway). The places are handed out in turns between people, so one person's backlog never
+ * holds up the others. */
+export const MAX_WAITING_PER_PERSON = 500;
 const MAX_URL = 500;
 const MAX_ANSWER = 64 * 1024; // the receiver's answer is not used (only its status); a longer one counts as a failed try
 
@@ -77,7 +81,9 @@ export class Dispatcher {
   private idle: (() => void)[] = [];
   private chain: Promise<void> = Promise.resolve();
   private running = 0;
-  private waiting: (() => void)[] = [];
+  private waiting = new Map<number, (() => void)[]>(); // per person, in order
+  private turns: number[] = []; // people with waiting deliveries, in the order they get the next free place
+  private dropped = new Map<number, number>(); // per person since the last log line
   private wake: (() => void)[] = [];
 
   constructor(ctx: Ctx) { this.ctx = ctx; }
@@ -127,19 +133,42 @@ export class Dispatcher {
       hooks = hook && (await getWebhook(db, job.user_id, hook.id)) ? [hook] : [];
     } else hooks = await hooksForEvent(db, job.user_id, job.event);
     for (const hook of hooks) {
+      if ((this.waiting.get(job.user_id)?.length ?? 0) >= MAX_WAITING_PER_PERSON) { this.drop(job.user_id); continue; }
       const deliveryId = await startDelivery(db, hook.id, job.event);
       this.begin();
-      void this.slot().then(() => this.deliver(hook, deliveryId, job)).finally(() => { this.release(); this.done(); });
+      void this.slot(job.user_id).then(() => this.deliver(hook, deliveryId, job)).finally(() => { this.release(); this.done(); });
     }
   }
 
-  private async slot(): Promise<void> {
+  /** Deliveries waiting for a place, per person (for tests and the drop rule). */
+  waitingFor(userId: number): number { return this.waiting.get(userId)?.length ?? 0; }
+
+  private drop(userId: number): void {
+    const n = (this.dropped.get(userId) ?? 0) + 1;
+    this.dropped.set(userId, n);
+    if (n === 1) setTimeout(() => {
+      console.warn(`webhooks: ${this.dropped.get(userId)} deliveries of user ${userId} dropped, too many were waiting`);
+      this.dropped.delete(userId);
+    }, 60_000).unref?.();
+  }
+
+  /** A place for one of this person's deliveries; a retry (`first`) goes to the front of the person's own queue, so its backoff
+   * stays what it says even when the person has a backlog. */
+  private async slot(userId: number, first = false): Promise<void> {
     if (this.running < POOL) { this.running++; return; }
-    await new Promise<void>((r) => this.waiting.push(r)); // the releasing delivery hands its place over
+    await new Promise<void>((r) => { // the releasing delivery hands its place over
+      const queue = this.waiting.get(userId);
+      if (queue) { if (first) queue.unshift(r); else queue.push(r); }
+      else { this.waiting.set(userId, [r]); this.turns.push(userId); }
+    });
   }
   private release(): void {
-    const next = this.waiting.shift();
-    if (next) next(); else this.running--;
+    const userId = this.turns.shift();
+    if (userId === undefined) { this.running--; return; }
+    const queue = this.waiting.get(userId)!;
+    const next = queue.shift()!;
+    if (queue.length) this.turns.push(userId); else this.waiting.delete(userId);
+    next();
   }
 
   private sleep(seconds: number): Promise<boolean> {
@@ -186,7 +215,13 @@ export class Dispatcher {
             if (status < 500 && status !== 429) break; // the receiver said no; asking again will not help
           }
           await updateDelivery(db, deliveryId, attempts, status, error, false);
-          if (attempts < MAX_ATTEMPTS && (await this.sleep(this.backoff[Math.min(attempts - 1, this.backoff.length - 1)]!))) break;
+          if (attempts < MAX_ATTEMPTS) {
+            // the wait before the next try gives the place to others; the next try then waits for this person's next turn
+            this.release();
+            const stop = await this.sleep(this.backoff[Math.min(attempts - 1, this.backoff.length - 1)]!);
+            await this.slot(job.user_id, true);
+            if (stop) break;
+          }
         }
       }
     } catch (e) {
