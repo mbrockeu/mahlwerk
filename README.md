@@ -81,8 +81,9 @@ proxy with a valid certificate. Append `?engine=wasm` to the URL to force the bu
 ### The TypeScript server (main server since 0.4.0)
 
 `ts/` holds a second implementation of the whole `/api/v1` in TypeScript. It answers like the Python server on the same SQLite
-file (schema version 21) and is the main server from 0.4.0 on. **The Python server stays as a fallback**: same API, same database
-file, same `MAHLWERK_*` settings, so you can stop one and start the other on the same data. The Docker image and Compose file run the
+file and is the main server from 0.4.0 on. **The Python server stays as a fallback**: same API, same database
+file, same `MAHLWERK_*` settings, so you can stop one and start the other on the same data. Since schema version 22 (goals on
+chosen weekdays, TS only) the Python server ignores the weekday goal; after saving a goal there, save it once more in the TS server. The Docker image and Compose file run the
 TypeScript server; the Python server and the command-line tools are in `Dockerfile.python` (Compose service `tools`).
 
 Requirements: Node 22.6 or newer (it uses the built-in `node:sqlite` and runs the TypeScript sources directly, no build step) and the
@@ -97,7 +98,7 @@ npm start                                           # listens on 127.0.0.1:8120
 
 - `MAHLWERK_PORT` (default `8120`) and `MAHLWERK_HOST` (default `127.0.0.1`) set where it listens; every other variable of
   [Configuration](#configuration) is read the same way, including `MAHLWERK_DB` and `MAHLWERK_WEB_DIR`.
-- It migrates a database of schema version 20 to 21 itself (in one transaction) and refuses older ones: start the Python server
+- It migrates a database of schema version 20 or 21 to 22 itself (one transaction per step) and refuses older ones: start the Python server
   once on such a file (in Docker: the `tools` service) to bring it up to date.
 - Docker: `docker compose up -d` runs it (`Dockerfile`: `node:22-slim`, port 8110, user 10001, data in `/data`); the Python tools are the
   `tools` service (see Quick start).

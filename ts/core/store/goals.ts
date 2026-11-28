@@ -19,7 +19,7 @@ export type GoalSetting = GoalValues & { days_goal?: DaysGoal };
 /** The weekday schedule of a `goal` or `goal_history` row (null when off or incomplete). */
 export function scheduleOf(row: Row): DaySchedule | null {
   const days = Number(row.alt_days ?? 0) & 0x7f;
-  if (!days || row.alt_kcal == null || row.alt_protein == null || row.alt_carbs == null || row.alt_fat == null) return null;
+  if (!days || days === 0x7f || row.alt_kcal == null || row.alt_protein == null || row.alt_carbs == null || row.alt_fat == null) return null;
   return { days, kcal: row.alt_kcal, protein: row.alt_protein, carbs: row.alt_carbs, fat: row.alt_fat };
 }
 export const daysGoalOf = (s: DaySchedule | null): DaysGoal | null =>
