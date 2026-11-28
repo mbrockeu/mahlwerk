@@ -6,7 +6,7 @@ import { generate } from '../demo.ts';
 import { HttpError, parse, queryObject, route, type Req, type Route } from '../http.ts';
 import { demoIn, goalIn, weightIn } from '../models/body.ts';
 import { pyInt } from '../models/common.ts';
-import { DEFAULT_WATER_GOAL, getGoal, goalHistory, setGoal } from '../store/goals.ts';
+import { DEFAULT_WATER_GOAL, getGoal, getGoalSetting, goalHistory, scheduleFrom, setGoal } from '../store/goals.ts';
 import { removeDemo } from '../store/demo.ts';
 import { deleteWeight, putWeight, weightsBetween } from '../store/weights.ts';
 import { emit } from '../webhooks.ts';
@@ -50,9 +50,12 @@ export const routes: Route[] = [
       steps: goal.steps !== undefined ? goal.steps : saved?.steps ?? DEFAULT_STEPS_GOAL,
     };
     const validFrom = today(); // a change counts from today on; earlier days keep the goal they had
-    await setGoal(req.ctx.db, uid, data, validFrom, Math.floor(Date.now() / 1000));
-    emit(req, req.user!, 'goal.changed', { ...data, valid_from: validFrom });
-    return data;
+    // days_goal: left out keeps the saved weekday goal (older apps know nothing of it), null removes it, an object sets it
+    await setGoal(req.ctx.db, uid, data, validFrom, Math.floor(Date.now() / 1000), goal.days_goal === undefined ? undefined : scheduleFrom(goal.days_goal));
+    const days_goal = (await getGoalSetting(req.ctx.db, uid))?.days_goal;
+    const out = days_goal ? { ...data, days_goal } : data;
+    emit(req, req.user!, 'goal.changed', { ...out, valid_from: validFrom });
+    return out;
   }),
 
   // Every goal change, newest first; `valid_from` 0001-01-01 means "since the start". Empty without a goal.

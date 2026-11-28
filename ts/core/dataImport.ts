@@ -20,6 +20,7 @@ import { CODES as BADGE_CODES } from './badges.ts';
 import { dayToDate, today } from './dates.ts';
 import { toJson, type Db, type Row } from './db.ts';
 import { SINCE_START } from './goals.ts';
+import { daysGoalIn } from './models/body.ts';
 import type { User } from './http.ts';
 import { MEALS } from './models/common.ts';
 import * as nutrients from './nutrients.ts';
@@ -28,7 +29,7 @@ import { recipeFood, validGtin } from './nutrition.ts';
 import { pyLen } from './text.ts';
 import { canEdit } from './ownership.ts';
 import { SETTINGS, SETTING_KEYS } from './routes/profile.ts';
-import { goalOf } from './store/goals.ts';
+import { goalOf, scheduleFrom, scheduleOf } from './store/goals.ts';
 import { MAX_GROUPS } from './models/recipe.ts';
 import { StageError, structure, unzip } from './yazioStage.ts';
 import { tokenUrlsafe } from './crypto.ts';
@@ -97,8 +98,8 @@ const fileSchema = z.object({
   app_version: z.string().max(40).nullable().optional(),
   range: z.object({ from: day.nullable().optional(), to: day.nullable().optional() }).nullable().optional(),
   account: z.object({ username: text(200).nullable().optional(), display_name: text(200).nullable().optional() }).nullable().optional(),
-  goal: z.object({ kcal: num(0, 50000), protein: num(0, 5000), carbs: num(0, 5000), fat: num(0, 5000), water_ml: num(0, 100000).nullable().optional(), steps: num(0, 1e6).nullable().optional() }).nullable().optional(),
-  goal_history: z.array(z.object({ valid_from: day, kcal: num(0, 50000), protein: num(0, 5000), carbs: num(0, 5000), fat: num(0, 5000), water_ml: num(0, 100000).nullable().optional(), steps: num(0, 1e6).nullable().optional(), changed_at: iso.nullable().optional() })).max(5000).default([]),
+  goal: z.object({ kcal: num(0, 50000), protein: num(0, 5000), carbs: num(0, 5000), fat: num(0, 5000), water_ml: num(0, 100000).nullable().optional(), steps: num(0, 1e6).nullable().optional(), days_goal: daysGoalIn.nullable().optional() }).nullable().optional(),
+  goal_history: z.array(z.object({ valid_from: day, kcal: num(0, 50000), protein: num(0, 5000), carbs: num(0, 5000), fat: num(0, 5000), water_ml: num(0, 100000).nullable().optional(), steps: num(0, 1e6).nullable().optional(), days_goal: daysGoalIn.nullable().optional(), changed_at: iso.nullable().optional() })).max(5000).default([]),
   settings: z.record(text(60), z.unknown()).nullable().optional().refine((v) => storable(v ?? {}, 1_000_000), 'not storable'),
   diary: z.array(z.object({
     uid: uid.optional(), day, meal: z.enum(MEALS), name: text(NAME), brand: text(NAME).nullable().optional(), amount: num(0, 1e6), unit: z.enum(['g', 'ml']),
@@ -712,56 +713,60 @@ async function importFasts(r: Run): Promise<void> {
 }
 
 const GOAL_KEYS = ['kcal', 'protein', 'carbs', 'fat', 'water_ml', 'steps'] as const;
-const goalKeys = (g: Record<string, unknown>) => Object.fromEntries(GOAL_KEYS.map((k) => [k, g[k]]));
+/** A goal with its weekday schedule (`alt`, null when off) in one comparable shape; `source` is a database row or a goal of the file
+ * (files without `days_goal`, e.g. from before weekday goals, read as off). */
+const goalWith = (source: Row | { days_goal?: Parameters<typeof scheduleFrom>[0] }, fromFile: boolean) => ({
+  ...goalOf(source as Row), alt: fromFile ? scheduleFrom((source as { days_goal?: Parameters<typeof scheduleFrom>[0] }).days_goal) : scheduleOf(source as Row),
+});
+type GoalWith = ReturnType<typeof goalWith>;
+const goalKeys = (g: GoalWith): Record<string, unknown> => ({ ...Object.fromEntries(GOAL_KEYS.map((k) => [k, g[k]])), alt: g.alt });
+const altParams = (g: GoalWith) => [g.alt?.days ?? 0, g.alt?.kcal ?? null, g.alt?.protein ?? null, g.alt?.carbs ?? null, g.alt?.fat ?? null];
+const HISTORY_SQL = 'INSERT INTO goal_history (user_id, valid_from, kcal, protein, carbs, fat, water_ml, steps, changed_at, alt_days, alt_kcal, alt_protein, alt_carbs, alt_fat) '
+  + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) '
+  + 'ON CONFLICT(user_id, valid_from) DO UPDATE SET kcal = excluded.kcal, protein = excluded.protein, carbs = excluded.carbs, fat = excluded.fat, '
+  + 'water_ml = excluded.water_ml, steps = excluded.steps, changed_at = excluded.changed_at, alt_days = excluded.alt_days, alt_kcal = excluded.alt_kcal, '
+  + 'alt_protein = excluded.alt_protein, alt_carbs = excluded.alt_carbs, alt_fat = excluded.alt_fat';
 
 /** The goal history by `valid_from` (the file wins on the same day, rows only here stay). The goal is the file's: when a change here is
- * newer than the file's newest, the file's goal is recorded as a change from today on, which keeps "the newest history row is the goal". */
+ * newer than the file's newest, the file's goal is recorded as a change from today on, which keeps "the newest history row is the goal".
+ * The weekday goal travels with each goal (a file from before it has none: the goal it brings is the one without a schedule). */
 async function importGoal(r: Run): Promise<void> {
   const { db, f, user } = r;
   const hist = r.mode === 'replace' ? [] : await db.all('SELECT * FROM goal_history WHERE user_id = ?', [user.id]);
   const local = r.mode === 'replace' ? undefined : await db.get('SELECT * FROM goal WHERE user_id = ?', [user.id]);
-  const merged = new Map(hist.map((h) => [h.valid_from as string, { ...goalOf(h), changed_at: h.changed_at as number | null }]));
+  const merged = new Map(hist.map((h) => [h.valid_from as string, { ...goalWith(h, false), changed_at: h.changed_at as number | null }]));
   const rows = f.goal_history.length || !f.goal ? f.goal_history : [{ valid_from: SINCE_START, ...f.goal, changed_at: null }];
   for (const h of rows) {
-    const want = { ...goalOf(h), changed_at: past(h.changed_at) };
+    const want = { ...goalWith(h, true), changed_at: past(h.changed_at) };
     const have = merged.get(h.valid_from);
     merged.set(h.valid_from, want);
     if (have && same(have, want)) { count(r, 'goal_history', 'unchanged'); continue; }
     count(r, 'goal_history', have ? 'changed' : 'new');
-    if (r.write) {
-      await db.run('INSERT INTO goal_history (user_id, valid_from, kcal, protein, carbs, fat, water_ml, steps, changed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) '
-        + 'ON CONFLICT(user_id, valid_from) DO UPDATE SET kcal = excluded.kcal, protein = excluded.protein, carbs = excluded.carbs, fat = excluded.fat, '
-        + 'water_ml = excluded.water_ml, steps = excluded.steps, changed_at = excluded.changed_at',
-      [user.id, h.valid_from, ...GOAL_KEYS.map((k) => want[k]), want.changed_at]);
-    }
+    if (r.write) await db.run(HISTORY_SQL, [user.id, h.valid_from, ...GOAL_KEYS.map((k) => want[k]), want.changed_at, ...altParams(want)]);
   }
   if (!rows.length) return;
   let newest = merged.get([...merged.keys()].sort().at(-1)!)!;
-  if (f.goal && !same(goalKeys(newest), goalKeys(goalOf(f.goal)))) {
+  if (f.goal && !same(goalKeys(newest), goalKeys(goalWith(f.goal, true)))) {
     // a later change here than in the file: the file's goal still wins, as a change from today on (like PUT /me/goal), so that earlier
     // days keep their goal and the newest history row stays the goal
     const day = today();
-    const want = { ...goalOf(f.goal), changed_at: r.now };
+    const want = { ...goalWith(f.goal, true), changed_at: r.now };
     count(r, 'goal_history', merged.has(day) ? 'changed' : 'new');
     for (const later of [...merged.keys()].filter((k) => k > day)) merged.delete(later); // like PUT /me/goal: a later row would win again
     if (r.write) await db.run('DELETE FROM goal_history WHERE user_id = ? AND valid_from > ?', [user.id, day]);
     merged.set(day, want);
     newest = want;
     warn(r, 'goal_from_today');
-    if (r.write) {
-      await db.run('INSERT INTO goal_history (user_id, valid_from, kcal, protein, carbs, fat, water_ml, steps, changed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) '
-        + 'ON CONFLICT(user_id, valid_from) DO UPDATE SET kcal = excluded.kcal, protein = excluded.protein, carbs = excluded.carbs, fat = excluded.fat, '
-        + 'water_ml = excluded.water_ml, steps = excluded.steps, changed_at = excluded.changed_at',
-      [user.id, day, ...GOAL_KEYS.map((k) => want[k]), want.changed_at]);
-    }
+    if (r.write) await db.run(HISTORY_SQL, [user.id, day, ...GOAL_KEYS.map((k) => want[k]), want.changed_at, ...altParams(want)]);
   }
   const goal = goalKeys(newest);
-  if (local && same(goalOf(local), goal)) { count(r, 'goal', 'unchanged'); return; }
+  if (local && same(goalKeys(goalWith(local, false)), goal)) { count(r, 'goal', 'unchanged'); return; }
   count(r, 'goal', local ? 'changed' : 'new');
   if (r.write) {
-    await db.run('INSERT INTO goal (user_id, kcal, protein, carbs, fat, water_ml, steps) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET '
-      + 'kcal = excluded.kcal, protein = excluded.protein, carbs = excluded.carbs, fat = excluded.fat, water_ml = excluded.water_ml, steps = excluded.steps, import_id = NULL',
-    [user.id, ...GOAL_KEYS.map((k) => goal[k] as number)]);
+    await db.run('INSERT INTO goal (user_id, kcal, protein, carbs, fat, water_ml, steps, alt_days, alt_kcal, alt_protein, alt_carbs, alt_fat) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET '
+      + 'kcal = excluded.kcal, protein = excluded.protein, carbs = excluded.carbs, fat = excluded.fat, water_ml = excluded.water_ml, steps = excluded.steps, '
+      + 'alt_days = excluded.alt_days, alt_kcal = excluded.alt_kcal, alt_protein = excluded.alt_protein, alt_carbs = excluded.alt_carbs, alt_fat = excluded.alt_fat, import_id = NULL',
+    [user.id, ...GOAL_KEYS.map((k) => goal[k] as number), ...altParams(newest)]);
   }
 }
 

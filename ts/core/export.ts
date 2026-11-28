@@ -8,7 +8,7 @@ import * as nutrients from './nutrients.ts';
 import { PER_100_KEYS, scale } from './nutrition.ts';
 import { roundHalfEven } from './num.ts';
 import { exportAccount, exportActivity, exportBadges, exportDiary, exportFasts, exportFoods, exportRecipeGroups, exportRecipes, exportSleep, exportTemplates, exportWater, exportWebhooks, exportWeights, exportWorkouts } from './store/export.ts';
-import { goalHistory, getGoal } from './store/goals.ts';
+import { goalHistory, getGoalSetting } from './store/goals.ts';
 import { getSettings } from './store/settings.ts';
 import { VERSION } from './version.ts';
 import { buildZip } from './zip.ts';
@@ -175,7 +175,7 @@ export async function exportData(db: Db, user: { id: number; username: string; d
     app_version: VERSION,
     range: { from: first, to: last },
     account: { username: user.username, display_name: user.display_name, created_at: isoLocal(account.created_at) },
-    goal: await getGoal(db, uid),
+    goal: await getGoalSetting(db, uid),
     goal_history: history,
     settings: await getSettings(db, uid),
     diary: diaryData,

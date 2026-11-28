@@ -141,6 +141,11 @@ FoodIn   { name (required), brand, quantity, serving_size, serving_quantity, uni
 Goal     { kcal:int, protein:number, carbs:number, fat:number, water_ml:int, steps:int }   water_ml optional, 500-6000, default 2000
            (goals saved before it existed read 2000; a PUT without it keeps the saved value); steps optional, 1000-50000,
            default 8000, kept the same way
+DaysGoal { weekdays:[int] (ISO 1 = Monday ... 7 = Sunday, sorted, 1 to 6 distinct), kcal:int (500-10000), protein, carbs, fat (0-1000) }   a different calorie and macro goal on the chosen weekdays; water and steps stay the same
+           `Goal.days_goal` (on `GET /me`, the `PUT /me/goal` answer, `GoalChange`, the export) is present only while one is set (absent = off);
+           `PUT /me/goal` takes `days_goal` too: left out keeps the saved one (older apps), `null` removes it, an object sets it (**422** when invalid).
+           Everywhere a goal counts for one day (`Day.goal`, `kcal_goal`, insights, badges, review, suggestions) the day's own goal is used: the
+           alternative values when that day's weekday is chosen, with the schedule that held on that day
 GoalChange { valid_from:"YYYY-MM-DD", changed_at:int|null, ...Goal }   the goal from `valid_from` on (until the next change);
            `0001-01-01` = since the start; `changed_at` unix seconds, null for a goal saved before the history existed
 Water    { ml:int, goal_ml:int, drinks_ml:int }  the glasses logged (total of the day) and the goal, in ml; `drinks_ml` is the water in the day's drinks, computed on read, not part of `ml`
@@ -536,7 +541,7 @@ Insights {
                                                        mean over days WITH entries, never over empty days;
                                                        water_ml, steps, active_kcal: mean over days with a value (0 without any);
                                                        workout_minutes: total minutes / days of the range
-  by_weekday: [{ weekday:0..6 (Monday = 0), logged_days, kcal }]      always seven items; mean kcal of logged days
+  by_weekday: [{ weekday:0..6 (Monday = 0), logged_days, kcal, goal_kcal? }]   always seven items; mean kcal of logged days; `goal_kcal` (mean calorie goal of those days) only while the goal history holds a weekday goal and the weekday has logged days
   by_meal:    [{ meal, kcal, share }]                  always four items (breakfast, lunch, dinner, snack);
                                                        kcal = mean per logged day, share = part of the four-meal sum (0..1)
   top_foods:  { kcal:[Item], sugars:[Item], salt:[Item], protein:[Item] }

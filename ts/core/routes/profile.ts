@@ -7,7 +7,7 @@ import { HttpError, parse, pathInt, route, type Req, type Route, type User } fro
 import { nullish, pyBool, pyFloat, pyInt } from '../models/common.ts';
 import { demoAccountReady, demoCounts } from '../store/demo.ts';
 import { listImports, removeImport } from '../store/imports.ts';
-import { getGoal } from '../store/goals.ts';
+import { getGoalSetting } from '../store/goals.ts';
 import { getSettings, setSetting } from '../store/settings.ts';
 import { setOwnName } from '../store/users.ts';
 
@@ -102,7 +102,7 @@ async function me(req: Req, user: User) {
     provider_name: providerName(user),
     is_admin: user.is_admin,
     household: Boolean(user.household ?? true),
-    goal: await getGoal(ctx.db, user.id),
+    goal: await getGoalSetting(ctx.db, user.id),
     settings: await userSettings(req, user.id),
     // the demo account has no test-data switch of its own and no connectors (demoAccount.ts closes them)
     demo: { available: Boolean(ctx.services.demoDataOn) && !isDemo, ...(await demoCounts(ctx.db, user.id)) },

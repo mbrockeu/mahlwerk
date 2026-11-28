@@ -7,10 +7,19 @@ import { nullish, pyFloat, pyInt } from './common.ts';
 const ranged = (min: number, max: number) => pyFloat().pipe(z.number().min(min).max(max));
 const rangedInt = (min: number, max: number) => pyInt().pipe(z.number().min(min).max(max));
 
-/** The goal; `water_ml` and `steps` stay undefined when they were not sent (a PUT without them keeps the saved value). */
+/** The alternative goal of chosen weekdays (ISO 1 = Monday ... 7 = Sunday, one to six distinct ones; kcal and macros like the normal goal). */
+export const daysGoalIn = z.object({
+  weekdays: z.array(rangedInt(1, 7)).min(1).max(6).refine((w) => new Set(w).size === w.length, { message: 'weekdays must be distinct' })
+    .transform((w) => [...w].sort((a, b) => a - b)),
+  kcal: rangedInt(500, 10000), protein: ranged(0, 1000), carbs: ranged(0, 1000), fat: ranged(0, 1000),
+});
+
+/** The goal; `water_ml`, `steps` and `days_goal` stay undefined when they were not sent (a PUT without them keeps the saved value;
+ * `days_goal: null` switches the weekday goal off). */
 export const goalIn = z.object({
   kcal: rangedInt(500, 10000), protein: ranged(0, 1000), carbs: ranged(0, 1000), fat: ranged(0, 1000),
   water_ml: rangedInt(500, 6000).optional(), steps: rangedInt(STEPS_GOAL_RANGE[0], STEPS_GOAL_RANGE[1]).optional(),
+  days_goal: daysGoalIn.nullable().optional(),
 });
 
 /** Body fat in percent: 0 < v < 1 is a fraction (x 100), then 2 to 75 % counts; rounded to 0.1 %. */

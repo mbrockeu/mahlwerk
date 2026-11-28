@@ -9,7 +9,8 @@ import { PER_100_KEYS, parseServing } from './nutrition.ts';
 import { pySum, roundHalfEven } from './num.ts';
 import { PyRandom } from './pyrandom.ts';
 import { plausible } from './nutrients.ts';
-import { getGoal, setGoal } from './store/goals.ts';
+import { getGoal, goalTimeline, setGoal } from './store/goals.ts';
+import { goalOn } from './goals.ts';
 import { activityDays, addDemo, diaryDays, waterDays, weightDays, type DemoRows } from './store/demo.ts';
 import { sleepBetween } from './store/workouts.ts';
 
@@ -201,6 +202,7 @@ export async function generate(db: Db, userId: number, today: string, days: numb
   const saved = await getGoal(db, userId);
   const goalSet = saved === null;
   const goal = saved ?? DEFAULT_GOAL;
+  const timeline = await goalTimeline(db, userId); // a day's own goal (weekday goals), null without a goal
 
   const rows: DemoRows = { entries: [], weights: [], water: [], activity: [], workouts: [], sleep: [] };
   const startKg = 74 + ((userId * 7) % 12);
@@ -213,7 +215,7 @@ export async function generate(db: Db, userId: number, today: string, days: numb
       const rng = await rngFor(userId, iso, 'diary');
       if (isToday || rng.random() >= 1 / 12) { // about every twelfth day stays empty
         const [low, high] = weekday(iso) >= 5 ? [-0.08, 0.15] : [-0.15, 0.10];
-        let target = goal.kcal * (1 + rng.uniform(low, high));
+        let target = (timeline ? goalOn(timeline, iso).kcal : goal.kcal) * (1 + rng.uniform(low, high));
         if (slept < 360) target *= 1.12; // after a short night people tend to eat more
         const made = habitBreakfast(await rngFor(userId, iso, 'habit'), dayEntries(rng, target, isToday));
         rows.entries.push(...made.map((e) => ({ day: iso, ...e })));

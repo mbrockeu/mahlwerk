@@ -105,8 +105,12 @@ export function compute(
 
   const byWeekday = [];
   for (let wd = 0; wd < 7; wd++) {
-    const vals = loggedDays.filter((d) => weekday(d) === wd).map((d) => totals[d].kcal);
-    byWeekday.push({ weekday: wd, logged_days: vals.length, kcal: r(mean(vals)) });
+    const days = loggedDays.filter((d) => weekday(d) === wd);
+    const vals = days.map((d) => totals[d].kcal);
+    const item: { weekday: number; logged_days: number; kcal: number; goal_kcal?: number } = { weekday: wd, logged_days: vals.length, kcal: r(mean(vals)) };
+    // with a weekday goal in the timeline each weekday has its own goal line (the mean goal of its logged days); otherwise one line serves all
+    if (tl?.schedules?.some(Boolean) && days.length) item.goal_kcal = r(mean(days.map((d) => kcalOn(tl, bonus, d)!)));
+    byWeekday.push(item);
   }
 
   const mealMean: Record<string, number> = Object.fromEntries(MEALS.map((m) => [m, nLogged ? mealKcal[m] / nLogged : 0.0]));
